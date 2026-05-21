@@ -5,15 +5,26 @@ import gspread
 from google.oauth2.service_account import Credentials
 from flask import current_app
 
+import json
 
 SCOPE = ["https://www.googleapis.com/auth/spreadsheets"]
 
 
 def _get_client():
-    credentials = Credentials.from_service_account_file(
-        current_app.config["GOOGLE_SERVICE_ACCOUNT_JSON"],
-        scopes=SCOPE,
-    )
+    json_text = current_app.config.get("GOOGLE_SERVICE_ACCOUNT_JSON_TEXT")
+
+    if json_text:
+        service_account_info = json.loads(json_text)
+        credentials = Credentials.from_service_account_info(
+            service_account_info,
+            scopes=SCOPE,
+        )
+    else:
+        credentials = Credentials.from_service_account_file(
+            current_app.config["GOOGLE_SERVICE_ACCOUNT_JSON"],
+            scopes=SCOPE,
+        )
+
     return gspread.authorize(credentials)
 
 

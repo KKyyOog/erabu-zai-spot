@@ -11,4 +11,5 @@ class Config:
     LIFF_ID = os.getenv("LIFF_ID", "")
     GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
     GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "service_account.json")
+    GOOGLE_SERVICE_ACCOUNT_JSON_TEXT = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON_TEXT", "")
     ADMIN_LINE_USER_ID = os.getenv("ADMIN_LINE_USER_ID", "")
