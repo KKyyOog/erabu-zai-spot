@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+  <h2>ユーザー情報を登録する</h2>
+
+  <form method="post" action="{{ url_for('users.submit') }}">
+    <p class="hint">投稿主もしくは需要者として、ユーザー情報を登録してください。</p>
+
+    <label>名前 *</label>
+    <input type="text" name="display_name" required placeholder="例：山田太郎">
+
+    <label>拠点住所 *</label>
+    <input type="text" name="address" required placeholder="例：知名町、和泊町、現場名など">
+
+    <label>運搬情報 *</label>
+    <textarea name="transport_info" rows="4" required placeholder="軽トラで搬送可能、4トンダンプで搬送可能など"></textarea>
+
+    <button type="submit">登録する</button>
+  </form>
+</section>
+
+<script src="{{ url_for('static', filename='js/liff.js') }}"></script>
+{% endblock %}

@@ -98,6 +98,50 @@ def append_matching_history(data):
     return match_id
 
 
+def append_user(data):
+    sheet = _get_sheet("ユーザー情報")
+    user_id = f"user_{uuid4().hex[:10]}"
+
+    row = [
+        user_id,
+        data.get("display_name", ""),
+        data.get("address", ""),
+        data.get("transport_info", ""),
+        _now(),
+    ]
+    sheet.append_row(row)
+    return user_id
+
+
+def get_user_by_id(user_id):
+    try:
+        sheet = _get_sheet("ユーザー情報")
+        records = sheet.get_all_records()
+        for record in records:
+            if record.get("user_id") == user_id:
+                return record
+    except Exception:
+        pass
+    return None
+
+
+def update_user(user_id, data):
+    try:
+        sheet = _get_sheet("ユーザー情報")
+        records = sheet.get_all_records()
+        
+        for idx, record in enumerate(records, start=2):  # start=2 because row 1 is header
+            if record.get("user_id") == user_id:
+                row_idx = idx
+                sheet.update_cell(row_idx, 2, data.get("display_name", ""))
+                sheet.update_cell(row_idx, 3, data.get("address", ""))
+                sheet.update_cell(row_idx, 4, data.get("transport_info", ""))
+                return user_id
+        return None
+    except Exception:
+        return None
+
+
 def upsert_user(data):
     sheet = _get_sheet("ユーザー情報")
     records = sheet.get_all_records()

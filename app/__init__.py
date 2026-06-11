@@ -1,6 +1,7 @@
 from flask import Flask
 
 from app.routes.materials import materials_bp
+from app.routes.users import users_bp
 from app.routes.link import link_bp
 from app.routes.callback import callback_bp
 from app.routes.admin import admin_bp
@@ -12,6 +13,7 @@ def create_app():
     app.config.from_object(Config)
 
     app.register_blueprint(materials_bp)
+    app.register_blueprint(users_bp)
     app.register_blueprint(link_bp)
     app.register_blueprint(callback_bp)
     app.register_blueprint(admin_bp)

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+  <h2>ユーザー情報を編集する</h2>
+
+  <form method="post" action="{{ url_for('users.update', user_id=user.user_id) }}">
+    <label>名前 *</label>
+    <input type="text" name="display_name" value="{{ user.display_name }}" required placeholder="例：山田太郎">
+
+    <label>拠点住所 *</label>
+    <input type="text" name="address" value="{{ user.address }}" required placeholder="例：知名町、和泊町、現場名など">
+
+    <label>運搬情報 *</label>
+    <textarea name="transport_info" rows="4" required placeholder="軽トラで搬送可能、4トンダンプで搬送可能など">{{ user.transport_info }}</textarea>
+
+    <button type="submit">更新する</button>
+  </form>
+</section>
+{% endblock %}

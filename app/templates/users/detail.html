@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+  <h2>ユーザー情報</h2>
+
+  <div class="user-detail">
+    <p><strong>ユーザーID:</strong> {{ user.user_id }}</p>
+    <p><strong>名前:</strong> {{ user.display_name }}</p>
+    <p><strong>拠点住所:</strong> {{ user.address }}</p>
+    <p><strong>運搬情報:</strong></p>
+    <p>{{ user.transport_info }}</p>
+    <p><strong>登録日時:</strong> {{ user.created_at }}</p>
+  </div>
+
+  <div class="button-group">
+    <a href="{{ url_for('users.edit', user_id=user.user_id) }}" class="btn-link">編集する</a>
+    <a href="{{ url_for('materials.list_materials') }}" class="btn-link">材一覧に戻る</a>
+  </div>
+</section>
+{% endblock %}
