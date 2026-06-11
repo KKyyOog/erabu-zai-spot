@@ -5,15 +5,18 @@ async function initializeLiff() {
   // Flaskテンプレート外で使う場合に備えて、LIFF ID未設定でもフォーム確認は可能にする
   if (!window.liff || !liffId || liffId.includes("{{")) {
     console.warn("LIFF is not configured or not available.");
+    await logToServer("LIFF is not configured or not available.");
     return;
   }
 
   try {
     await liff.init({ liffId });
     console.log("LIFF initialized successfully.");
+    await logToServer("LIFF initialized successfully.");
 
     if (!liff.isLoggedIn()) {
       console.log("Not logged in. Redirecting to login...");
+      await logToServer("Not logged in. Redirecting to login...");
       liff.login();
       return;
     }
@@ -21,6 +24,7 @@ async function initializeLiff() {
     console.log("User is logged in. Getting profile...");
     const profile = await liff.getProfile();
     console.log("Profile retrieved:", profile);
+    await logToServer("Profile retrieved: userId=" + profile.userId + ", displayName=" + profile.displayName);
 
     const lineUserIdInput = document.getElementById("line_user_id");
     const displayNameInput = document.getElementById("display_name");
@@ -31,6 +35,7 @@ async function initializeLiff() {
       console.log("line_user_id set to:", profile.userId);
     } else {
       console.warn("line_user_id input not found");
+      await logToServer("WARNING: line_user_id input not found");
     }
 
     if (displayNameInput) {
@@ -38,6 +43,7 @@ async function initializeLiff() {
       console.log("display_name set to:", profile.displayName);
     } else {
       console.warn("display_name input not found");
+      await logToServer("WARNING: display_name input not found");
     }
 
     await fetch("/link/liff", {
@@ -52,11 +58,31 @@ async function initializeLiff() {
       }),
     });
     console.log("LIFF link endpoint called successfully.");
+    await logToServer("LIFF link endpoint called successfully. userId=" + profile.userId);
   } catch (error) {
     console.error("LIFF initialization error:", error);
+    await logToServer("LIFF initialization error: " + error.message);
+  }
+}
+
+async function logToServer(message) {
+  try {
+    await fetch("/link/liff-debug", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: message,
+        timestamp: new Date().toISOString(),
+      }),
+    });
+  } catch (e) {
+    console.error("Failed to send debug log:", e);
   }
 }
 
 initializeLiff().catch((error) => {
   console.error("LIFF initialization failed:", error);
+  logToServer("LIFF initialization failed: " + error.message);
 });

@@ -41,10 +41,15 @@ def _now():
 def append_material(data):
     sheet = _get_sheet("材登録")
     material_id = f"mat_{uuid4().hex[:10]}"
+    
+    # line_user_id が空の場合、一意のIDを生成
+    line_user_id = data.get("line_user_id", "").strip()
+    if not line_user_id:
+        line_user_id = f"anon_{uuid4().hex[:10]}"
 
     row = [
         material_id,
-        data.get("line_user_id", ""),
+        line_user_id,
         data.get("display_name", ""),
         data.get("title", ""),
         data.get("material_type", ""),
@@ -101,7 +106,11 @@ def append_matching_history(data):
 def append_user(data):
     """ユーザー情報を追加。line_user_id が既に存在する場合は更新。"""
     sheet = _get_sheet("ユーザー情報")
-    line_user_id = data.get("line_user_id", "")
+    line_user_id = data.get("line_user_id", "").strip()
+    
+    # line_user_id が空の場合、一意のIDを生成
+    if not line_user_id:
+        line_user_id = f"anon_{uuid4().hex[:10]}"
     
     records = sheet.get_all_records()
     
