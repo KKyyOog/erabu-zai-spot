@@ -4,7 +4,7 @@
 <section class="card">
   <h2>材を登録する</h2>
 
-  <form method="post" action="{{ url_for('materials.submit') }}">
+  <form method="post" action="{{ url_for('materials.submit') }}" enctype="multipart/form-data">
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="display_name" id="display_name">
     <p class="hint">LINE内で開くと自動的にユーザー情報が設定されます。通常のブラウザからは匿名登録として保存されます。</p>
@@ -48,8 +48,11 @@
     <label>引取期限</label>
     <input type="date" name="pickup_deadline">
 
-    <label>写真URL</label>
-    <input type="url" name="image_url" placeholder="Google Drive等の画像URL">
+    <label>写真（ファイルまたはカメラ）</label>
+    <input type="file" name="image_file" accept="image/*" capture="environment">
+
+    <label>写真URL（任意）</label>
+    <input type="url" name="image_url" placeholder="Google Drive等の画像URL（ファイルを選ばない場合）">
 
     <button type="submit">登録する</button>
   </form>

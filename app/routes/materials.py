@@ -1,4 +1,8 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+import os
+from uuid import uuid4
+
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from werkzeug.utils import secure_filename
 
 from app.services.sheets_service import (
     append_material,
@@ -19,6 +23,7 @@ def register():
 @materials_bp.route("/submit", methods=["POST"])
 def submit():
     form = request.form.to_dict()
+    image_file = request.files.get("image_file")
 
     required_fields = ["title", "material_type", "location"]
     missing = [field for field in required_fields if not form.get(field)]
@@ -26,6 +31,20 @@ def submit():
     if missing:
         flash("必須項目が入力されていません。")
         return redirect(url_for("materials.register"))
+
+    if image_file and image_file.filename:
+        allowed_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+        ext = os.path.splitext(image_file.filename)[1].lower()
+        if ext not in allowed_extensions:
+            flash("画像は png, jpg, jpeg, gif, webp 形式のみアップロードできます。")
+            return redirect(url_for("materials.register"))
+
+        filename = secure_filename(f"{uuid4().hex}{ext}")
+        save_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
+        image_file.save(save_path)
+        form["image_url"] = url_for(
+            "static", filename=f"uploads/{filename}", _external=True
+        )
 
     if not form.get("line_user_id"):
         form["line_user_id"] = ""

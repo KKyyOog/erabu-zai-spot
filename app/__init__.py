@@ -1,3 +1,5 @@
+import os
+
 from flask import Flask
 
 from app.routes.materials import materials_bp
@@ -11,6 +13,8 @@ from app.config import Config
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "static", "uploads")
+    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
     app.register_blueprint(materials_bp)
     app.register_blueprint(users_bp)
