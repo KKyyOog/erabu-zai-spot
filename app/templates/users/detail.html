@@ -5,22 +5,15 @@
   <h2>ユーザー情報</h2>
 
   {% if user_exists %}
-    <div class="user-detail">
-      <p><strong>LINE User ID:</strong> {{ user.line_user_id }}</p>
-      <p><strong>名前:</strong> {{ user.display_name }}</p>
-      <p><strong>拠点住所:</strong> {{ user.address }}</p>
-      <p><strong>運搬情報:</strong></p>
-      <p>{{ user.transport_info }}</p>
-      <p><strong>登録日時:</strong> {{ user.created_at }}</p>
-    </div>
+    <p>登録済みの情報を確認・更新できます。</p>
   {% else %}
     <p>必要な情報を入力してください。</p>
   {% endif %}
 
   <form method="post" action="{{ url_for('users.update_profile', line_user_id=user.line_user_id) }}">
-    <input type="hidden" name="line_user_id" value="{{ user.line_user_id }}">
+    <input type="hidden" name="line_user_id" id="line_user_id" value="{{ user.line_user_id }}">
     <label>名前 *</label>
-    <input type="text" name="display_name" value="{{ user.display_name }}" required>
+    <input type="text" name="display_name" id="display_name" value="{{ user.display_name }}" required>
 
     <label>拠点住所 *</label>
     <input type="text" name="address" value="{{ user.address }}" required>
@@ -71,4 +64,9 @@
     <p>まだマッチング履歴はありません。</p>
   {% endif %}
 </section>
+
+<script>
+  window.LIFF_ID = {{ LIFF_ID|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/liff.js') }}"></script>
 {% endblock %}

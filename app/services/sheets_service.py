@@ -163,7 +163,10 @@ def get_user_by_line_user_id(line_user_id):
         sheet = _get_sheet("ユーザー情報")
         records = sheet.get_all_records()
         for record in records:
-            if record.get("line_user_id") == line_user_id:
+            if (
+                record.get("line_user_id") == line_user_id
+                or record.get("user_id") == line_user_id
+            ):
                 return record
     except Exception:
         pass
@@ -195,23 +198,29 @@ def update_user(line_user_id, data):
 def upsert_user(data):
     sheet = _get_sheet("ユーザー情報")
     records = sheet.get_all_records()
-    user_id = data.get("user_id")
+    line_user_id = data.get("line_user_id") or data.get("user_id")
+
+    if not line_user_id:
+        return
 
     for index, record in enumerate(records, start=2):
-        if record.get("user_id") == user_id:
+        if (
+            record.get("line_user_id") == line_user_id
+            or record.get("user_id") == line_user_id
+        ):
             sheet.update(f"A{index}:E{index}", [[
-                user_id,
-                data.get("display_name", ""),
-                data.get("picture_url", ""),
-                record.get("role", ""),
+                line_user_id,
+                data.get("display_name", record.get("display_name", "")),
+                record.get("address", ""),
+                record.get("transport_info", ""),
                 _now(),
             ]])
             return
 
     sheet.append_row([
-        user_id,
+        line_user_id,
         data.get("display_name", ""),
-        data.get("picture_url", ""),
+        "",
         "",
         _now(),
     ])

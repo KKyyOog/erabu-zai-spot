@@ -22,6 +22,7 @@ def liff_link():
 
     upsert_user(
         {
+            "line_user_id": user_id,
             "user_id": user_id,
             "display_name": display_name,
             "picture_url": picture_url,
