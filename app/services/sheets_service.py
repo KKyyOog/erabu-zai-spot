@@ -23,6 +23,7 @@ def _find_user_row(records, line_user_id):
         if (
             record.get("line_user_id") == line_user_id
             or record.get("user_id") == line_user_id
+            or record.get("userid") == line_user_id
         ):
             return idx, record
     return None, None
@@ -187,7 +188,7 @@ def get_user_by_id(user_id):
 
 
 def update_user(line_user_id, data):
-    """ユーザー情報を更新"""
+    """ユーザー情報を更新。見つからない場合は新規追記する。"""
     try:
         sheet = _get_sheet("ユーザー情報")
         records = sheet.get_all_records()
@@ -198,7 +199,15 @@ def update_user(line_user_id, data):
             sheet.update_cell(idx, 3, data.get("address", record.get("address", "")))
             sheet.update_cell(idx, 4, data.get("transport_info", record.get("transport_info", "")))
             return line_user_id
-        return None
+
+        sheet.append_row([
+            line_user_id,
+            data.get("display_name", ""),
+            data.get("address", ""),
+            data.get("transport_info", ""),
+            _now(),
+        ])
+        return line_user_id
     except Exception:
         return None
 

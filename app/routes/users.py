@@ -105,12 +105,8 @@ def update_profile(line_user_id):
         flash("必須項目が入力されていません。")
         return redirect(url_for("users.detail", line_user_id=resolved_user_id))
 
-    if get_user_by_line_user_id(resolved_user_id):
-        result = update_user(resolved_user_id, form)
-        flash_message = "ユーザー情報を更新しました。"
-    else:
-        result = append_user(form)
-        flash_message = "ユーザー情報を登録しました。"
+    result = update_user(resolved_user_id, form)
+    flash_message = "ユーザー情報を更新しました。"
 
     if result:
         flash(flash_message)
