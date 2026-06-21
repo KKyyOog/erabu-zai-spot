@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+  <h2 id="form-title">ユーザー情報</h2>
+  <div id="status">LINE プロフィールを取得しています...</div>
+
+  <div id="user-form-container"></div>
+</section>
+
+<script>
+  async function renderForm(user) {
+    const container = document.getElementById('user-form-container');
+    const exists = !!user;
+    const userId = exists ? (user.line_user_id || user.user_id || user.userid || '') : '';
+    document.getElementById('form-title').textContent = exists ? 'ユーザー情報（更新）' : 'ユーザー情報（新規登録）';
+
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.enctype = 'application/x-www-form-urlencoded';
+    form.innerHTML = `
+      <input type="hidden" name="line_user_id" id="line_user_id_input" value="${userId}">
+      <input type="hidden" name="user_id" value="${userId}">
+      <input type="hidden" name="userid" value="${userId}">
+      <label>名前 *</label>
+      <input type="text" name="display_name" id="display_name_input" value="${exists ? (user.display_name||'') : ''}" required>
+      <label>拠点住所 *</label>
+      <input type="text" name="address" id="address_input" value="${exists ? (user.address||'') : ''}" required>
+      <label>運搬情報 *</label>
+      <textarea name="transport_info" id="transport_info_input" rows="4" required>${exists ? (user.transport_info||'') : ''}</textarea>
+      <button type="submit">${exists ? '更新する' : '登録する'}</button>
+    `;
+
+    // Set form action based on existence
+    if (exists) {
+      form.action = `/users/${encodeURIComponent(userId)}/update`;
+    } else {
+      form.action = `/users/submit`;
+    }
+
+    container.innerHTML = '';
+    container.appendChild(form);
+
+    document.getElementById('status').textContent = '';
+  }
+
+  async function initMeFlow() {
+    const status = document.getElementById('status');
+    if (!window.LIFF_ID || window.LIFF_ID.includes('{{') ) {
+      status.textContent = 'LIFF が設定されていません。手動で情報を入力してください。';
+      renderForm(null);
+      return;
+    }
+
+    try {
+      await liff.init({ liffId: window.LIFF_ID });
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
+      }
+      const profile = await liff.getProfile();
+      status.textContent = `取得した userId: ${profile.userId}`;
+
+      const resp = await fetch('/users/me/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: profile.userId }),
+      });
+      const body = await resp.json();
+      if (body.ok && body.exists) {
+        renderForm(body.user);
+      } else {
+        renderForm(null);
+      }
+    } catch (e) {
+      console.error(e);
+      status.textContent = 'ユーザー情報の取得に失敗しました。手動で入力してください。';
+      renderForm(null);
+    }
+  }
+
+  initMeFlow();
+</script>
+
+{% endblock %}

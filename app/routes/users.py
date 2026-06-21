@@ -110,6 +110,27 @@ def update_profile(line_user_id):
         flash("必須項目が入力されていません。")
         return redirect(url_for("users.detail", line_user_id=resolved_user_id))
 
+
+@users_bp.route("/me", methods=["GET"])
+def me():
+    # Render a page that will obtain LINE profile and then request server-side
+    # whether a record exists; the page will render the form inline.
+    return render_template("users/me.html")
+
+
+@users_bp.route("/me/data", methods=["POST"])
+def me_data():
+    data = request.get_json(silent=True) or {}
+    user_id = (data.get("userId") or data.get("line_user_id") or "").strip()
+    if not user_id:
+        return jsonify({"ok": False, "message": "userId is required"}), 400
+
+    user = get_user_by_line_user_id(user_id)
+    if user:
+        return jsonify({"ok": True, "exists": True, "user": user})
+    else:
+        return jsonify({"ok": True, "exists": False})
+
     result = update_user(resolved_user_id, form)
     flash_message = "ユーザー情報を更新しました。"
 

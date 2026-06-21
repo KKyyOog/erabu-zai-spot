@@ -53,6 +53,12 @@ def _get_sheet(sheet_name):
     return spreadsheet.worksheet(sheet_name)
 
 
+def _get_header_map(sheet):
+    """Return mapping header_name -> 1-based column index."""
+    headers = sheet.row_values(1)
+    return {h: i + 1 for i, h in enumerate(headers)}
+
+
 def _now():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -148,23 +154,44 @@ def append_user(data):
     """ユーザー情報を追加。line_user_id が既に存在する場合は更新。"""
     sheet = _get_sheet("ユーザー情報")
     line_user_id = _normalize_user_id(data)
-    records = sheet.get_all_records()
+    current_app.logger.info(f"append_user: resolved user_id={line_user_id}")
 
+    # Try to find existing row
+    records = sheet.get_all_records()
     idx, record = _find_user_row(records, line_user_id)
+    header_map = _get_header_map(sheet)
+
     if idx:
-        sheet.update_cell(idx, 1, line_user_id)
-        sheet.update_cell(idx, 2, data.get("display_name", record.get("display_name", "")))
-        sheet.update_cell(idx, 3, data.get("address", record.get("address", "")))
-        sheet.update_cell(idx, 4, data.get("transport_info", record.get("transport_info", "")))
+        current_app.logger.info(f"append_user: found existing row {idx}, updating")
+        # Update by header positions when available
+        if header_map.get("line_user_id"):
+            sheet.update_cell(idx, header_map["line_user_id"], line_user_id)
+        if header_map.get("display_name"):
+            sheet.update_cell(idx, header_map["display_name"], data.get("display_name", record.get("display_name", "")))
+        if header_map.get("address"):
+            sheet.update_cell(idx, header_map["address"], data.get("address", record.get("address", "")))
+        if header_map.get("transport_info"):
+            sheet.update_cell(idx, header_map["transport_info"], data.get("transport_info", record.get("transport_info", "")))
         return line_user_id
 
-    row = [
-        line_user_id,
-        data.get("display_name", ""),
-        data.get("address", ""),
-        data.get("transport_info", ""),
-        _now(),
-    ]
+    # Build a row aligned to existing headers to avoid column order issues
+    headers = sheet.row_values(1)
+    row = ["" for _ in headers]
+    def set_by_header(name, value):
+        if name in header_map:
+            row[header_map[name] - 1] = value
+
+    set_by_header("line_user_id", line_user_id)
+    set_by_header("display_name", data.get("display_name", ""))
+    set_by_header("address", data.get("address", ""))
+    set_by_header("transport_info", data.get("transport_info", ""))
+    # set created_at/updated
+    if "created_at" in header_map:
+        row[header_map["created_at"] - 1] = _now()
+    elif "createdAt" in header_map:
+        row[header_map["createdAt"] - 1] = _now()
+
+    current_app.logger.info(f"append_user: appending new row for {line_user_id}")
     sheet.append_row(row)
     return line_user_id
 
@@ -178,6 +205,7 @@ def get_user_by_line_user_id(line_user_id):
             if (
                 record.get("line_user_id") == line_user_id
                 or record.get("user_id") == line_user_id
+                or record.get("userid") == line_user_id
                 or record.get("userid") == line_user_id
             ):
                 return record
@@ -197,20 +225,42 @@ def update_user(line_user_id, data):
         sheet = _get_sheet("ユーザー情報")
         records = sheet.get_all_records()
         idx, record = _find_user_row(records, line_user_id)
+        header_map = _get_header_map(sheet)
         if idx:
-            sheet.update_cell(idx, 1, line_user_id)
-            sheet.update_cell(idx, 2, data.get("display_name", record.get("display_name", "")))
-            sheet.update_cell(idx, 3, data.get("address", record.get("address", "")))
-            sheet.update_cell(idx, 4, data.get("transport_info", record.get("transport_info", "")))
+            current_app.logger.info(f"update_user: updating row {idx} for {line_user_id}")
+            if header_map.get("line_user_id"):
+                sheet.update_cell(idx, header_map["line_user_id"], line_user_id)
+            if header_map.get("display_name"):
+                sheet.update_cell(idx, header_map["display_name"], data.get("display_name", record.get("display_name", "")))
+            if header_map.get("address"):
+                sheet.update_cell(idx, header_map["address"], data.get("address", record.get("address", "")))
+            if header_map.get("transport_info"):
+                sheet.update_cell(idx, header_map["transport_info"], data.get("transport_info", record.get("transport_info", "")))
+            # update updated/modified time if present
+            if header_map.get("updated_at"):
+                sheet.update_cell(idx, header_map["updated_at"], _now())
+            if header_map.get("updatedAt"):
+                sheet.update_cell(idx, header_map["updatedAt"], _now())
             return line_user_id
 
-        sheet.append_row([
-            line_user_id,
-            data.get("display_name", ""),
-            data.get("address", ""),
-            data.get("transport_info", ""),
-            _now(),
-        ])
+        # not found -> append new row aligned to headers
+        headers = sheet.row_values(1)
+        row = ["" for _ in headers]
+        def set_by_header(name, value):
+            if name in header_map:
+                row[header_map[name] - 1] = value
+
+        set_by_header("line_user_id", line_user_id)
+        set_by_header("display_name", data.get("display_name", ""))
+        set_by_header("address", data.get("address", ""))
+        set_by_header("transport_info", data.get("transport_info", ""))
+        if "created_at" in header_map:
+            row[header_map["created_at"] - 1] = _now()
+        elif "createdAt" in header_map:
+            row[header_map["createdAt"] - 1] = _now()
+
+        current_app.logger.info(f"update_user: no existing row, appending for {line_user_id}")
+        sheet.append_row(row)
         return line_user_id
     except Exception:
         return None
