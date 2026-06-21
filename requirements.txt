@@ -4,3 +4,4 @@ gspread==6.1.4
 google-auth==2.35.0
 line-bot-sdk==3.14.2
 gunicorn==23.0.0
+cloudinary==1.44.1
