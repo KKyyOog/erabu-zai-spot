@@ -24,8 +24,65 @@
   </form>
 </section>
 
+<section class="card">
+  <h3>自分の材登録履歴</h3>
+  <div id="materials-container"><p>読み込み中...</p></div>
+</section>
+
+<section class="card">
+  <h3>マッチング履歴</h3>
+  <div id="matching-history-container"><p>読み込み中...</p></div>
+</section>
+
 <script>
   window.LIFF_ID = {{ LIFF_ID|tojson }};
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function renderMaterials(materials, userId) {
+    const container = document.getElementById('materials-container');
+    if (!materials || materials.length === 0) {
+      container.innerHTML = '<p>まだ材登録がありません。</p>';
+      return;
+    }
+
+    container.innerHTML = materials.map((material) => `
+      <div class="material-history-item">
+        <p><strong>${escapeHtml(material.title)}</strong>（${escapeHtml(material.material_type)}）</p>
+        <p>場所: ${escapeHtml(material.location)} / 状態: ${escapeHtml(material.status)}</p>
+        <p>登録日: ${escapeHtml(material.created_at)}</p>
+        <form method="post" action="/materials/${encodeURIComponent(material.material_id)}/delete">
+          <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
+          <button type="submit">削除する</button>
+        </form>
+      </div>
+    `).join('');
+  }
+
+  function renderMatchingHistory(history) {
+    const container = document.getElementById('matching-history-container');
+    if (!history || history.length === 0) {
+      container.innerHTML = '<p>まだマッチング履歴はありません。</p>';
+      return;
+    }
+
+    container.innerHTML = history.map((match) => `
+      <div class="matching-history-item">
+        <p><strong>材ID:</strong> ${escapeHtml(match.material_id)}</p>
+        <p><strong>操作:</strong> ${escapeHtml(match.action)}</p>
+        <p><strong>状態:</strong> ${escapeHtml(match.status)}</p>
+        <p><strong>メッセージ:</strong> ${escapeHtml(match.message)}</p>
+        <p><strong>日時:</strong> ${escapeHtml(match.created_at)}</p>
+      </div>
+    `).join('');
+  }
 
   async function initMeFlow() {
     const status = document.getElementById('status');
@@ -52,6 +109,8 @@
         body: JSON.stringify({ userId: profile.userId }),
       });
       const body = await resp.json();
+      renderMaterials(body.materials || [], profile.userId);
+      renderMatchingHistory(body.matching_history || []);
       if (body.ok && body.exists) {
         document.getElementById('form-title').textContent = 'ユーザー情報（更新）';
         document.getElementById('display_name').value = body.user.display_name || '';

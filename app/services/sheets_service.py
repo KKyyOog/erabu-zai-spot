@@ -59,6 +59,18 @@ def _get_header_map(sheet):
     return {h: i + 1 for i, h in enumerate(headers)}
 
 
+def _build_row_for_headers(sheet, values_by_header):
+    headers = sheet.row_values(1)
+    header_map = {h: i + 1 for i, h in enumerate(headers)}
+    row = ["" for _ in headers]
+
+    for key, value in values_by_header.items():
+        if key in header_map:
+            row[header_map[key] - 1] = value
+
+    return row, header_map
+
+
 def _now():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -66,28 +78,36 @@ def _now():
 def append_material(data):
     sheet = _get_sheet("材登録")
     material_id = f"mat_{uuid4().hex[:10]}"
-    
+
     # line_user_id が空の場合、一意のIDを生成
     line_user_id = data.get("line_user_id", "").strip()
     if not line_user_id:
         line_user_id = f"anon_{uuid4().hex[:10]}"
 
-    row = [
-        material_id,
-        line_user_id,
-        data.get("display_name", ""),
-        data.get("title", ""),
-        data.get("material_type", ""),
-        data.get("description", ""),
-        data.get("size", ""),
-        data.get("quantity", ""),
-        data.get("condition", ""),
-        data.get("location", ""),
-        data.get("pickup_deadline", ""),
-        data.get("image_url", ""),
-        "募集中",
-        _now(),
-    ]
+    row, header_map = _build_row_for_headers(
+        sheet,
+        {
+            "material_id": material_id,
+            "line_user_id": line_user_id,
+            "display_name": data.get("display_name", ""),
+            "title": data.get("title", ""),
+            "material_type": data.get("material_type", ""),
+            "description": data.get("description", ""),
+            "size": data.get("size", ""),
+            "quantity": data.get("quantity", ""),
+            "condition": data.get("condition", ""),
+            "location": data.get("location", ""),
+            "pickup_deadline": data.get("pickup_deadline", ""),
+            "image_url": data.get("image_url", ""),
+            "status": "募集中",
+            "created_at": _now(),
+        },
+    )
+
+    # Fallback for any sheets whose headers use camelCase
+    if "createdAt" in header_map and "created_at" not in header_map:
+        row[header_map["createdAt"] - 1] = _now()
+
     sheet.append_row(row)
     return material_id
 

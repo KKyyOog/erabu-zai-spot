@@ -135,10 +135,23 @@ def me_data():
         return jsonify({"ok": False, "message": "userId is required"}), 400
 
     user = get_user_by_line_user_id(user_id)
+    materials = get_materials_by_line_user_id(user_id)
+    matching_history = get_matching_history_by_user(user_id)
     if user:
-        return jsonify({"ok": True, "exists": True, "user": user})
+        return jsonify({
+            "ok": True,
+            "exists": True,
+            "user": user,
+            "materials": materials,
+            "matching_history": matching_history,
+        })
     else:
-        return jsonify({"ok": True, "exists": False})
+        return jsonify({
+            "ok": True,
+            "exists": False,
+            "materials": materials,
+            "matching_history": matching_history,
+        })
 
 
 @users_bp.route("/me/save", methods=["POST"])
