@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+  <h2>登録する情報を選ぶ</h2>
+  <p class="hint">材そのものを登録するか、これから解体される物件の情報を登録するかを選んでください。</p>
+
+  <div class="choice-grid">
+    <a class="choice-card" href="{{ url_for('materials.register_demolition') }}">
+      <span class="choice-title">解体物件を登録</span>
+      <span class="choice-text">物件名、所在地、解体予定日、見学期間、建物写真などを登録します。</span>
+    </a>
+
+    <a class="choice-card" href="{{ url_for('materials.register_material') }}">
+      <span class="choice-title">材を登録</span>
+      <span class="choice-text">取り出し済み、または提供できる材の種類、寸法、数量、写真などを登録します。</span>
+    </a>
+  </div>
+</section>
+{% endblock %}

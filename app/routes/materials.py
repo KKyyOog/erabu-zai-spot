@@ -1,13 +1,12 @@
 import os
-from uuid import uuid4
 
 import cloudinary
 import cloudinary.uploader
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
-from werkzeug.utils import secure_filename
 
 from app.services.sheets_service import (
     append_material,
+    append_demolition_property,
     get_materials,
     get_material_by_id,
     append_matching_history,
@@ -26,9 +25,39 @@ cloudinary.config(
 )
 
 
+def _upload_image(image_file):
+    allowed_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+    ext = os.path.splitext(image_file.filename)[1].lower()
+    if ext not in allowed_extensions:
+        raise ValueError("画像は png, jpg, jpeg, gif, webp 形式のみアップロードできます。")
+
+    current_app.logger.info(
+        "[materials] uploading image filename=%s content_type=%s",
+        image_file.filename,
+        getattr(image_file, "content_type", ""),
+    )
+
+    upload_result = cloudinary.uploader.upload(
+        image_file,
+        folder="erabu-zai-spot/uploads",
+        resource_type="image",
+    )
+    return upload_result.get("secure_url", "")
+
+
 @materials_bp.route("/register", methods=["GET"])
 def register():
+    return render_template("materials/register_select.html")
+
+
+@materials_bp.route("/register/material", methods=["GET"])
+def register_material():
     return render_template("materials/register.html")
+
+
+@materials_bp.route("/register/demolition", methods=["GET"])
+def register_demolition():
+    return render_template("materials/demolition_register.html")
 
 
 @materials_bp.route("/submit", methods=["POST"])
@@ -42,37 +71,19 @@ def submit():
 
     if missing:
         flash("必須項目が入力されていません。")
-        return redirect(url_for("materials.register"))
+        return redirect(url_for("materials.register_material"))
 
     if image_file and image_file.filename:
-        allowed_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-        ext = os.path.splitext(image_file.filename)[1].lower()
-        if ext not in allowed_extensions:
-            flash("画像は png, jpg, jpeg, gif, webp 形式のみアップロードできます。")
-            return redirect(url_for("materials.register"))
-
-        current_app.logger.info(
-            "[materials.submit] uploading image filename=%s content_type=%s",
-            image_file.filename,
-            getattr(image_file, "content_type", ""),
-        )
-
         try:
-            upload_result = cloudinary.uploader.upload(
-                image_file,
-                folder="erabu-zai-spot/uploads",
-                resource_type="image",
-            )
-            final_image_url = upload_result.get("secure_url", "")
-            current_app.logger.info(
-                "[materials.submit] cloudinary upload success secure_url=%s public_id=%s",
-                final_image_url,
-                upload_result.get("public_id", ""),
-            )
+            final_image_url = _upload_image(image_file)
+            current_app.logger.info("[materials.submit] cloudinary upload success secure_url=%s", final_image_url)
+        except ValueError as exc:
+            flash(str(exc))
+            return redirect(url_for("materials.register_material"))
         except Exception:
             current_app.logger.exception("[materials.submit] cloudinary upload failed")
             flash("画像のアップロードに失敗しました。画像なしで登録するか、再度お試しください。")
-            return redirect(url_for("materials.register"))
+            return redirect(url_for("materials.register_material"))
 
     if not form.get("line_user_id"):
         form["line_user_id"] = ""
@@ -88,6 +99,41 @@ def submit():
 
     append_material(form)
     flash("材を登録しました。")
+    return redirect(url_for("materials.list_materials"))
+
+
+@materials_bp.route("/demolitions/submit", methods=["POST"])
+def submit_demolition():
+    form = request.form.to_dict()
+    image_file = request.files.get("building_image_file")
+    final_image_url = form.get("building_photo_url", "")
+
+    required_fields = ["property_name", "location", "registrant_type"]
+    missing = [field for field in required_fields if not form.get(field)]
+
+    if missing:
+        flash("必須項目が入力されていません。")
+        return redirect(url_for("materials.register_demolition"))
+
+    if image_file and image_file.filename:
+        try:
+            final_image_url = _upload_image(image_file)
+            current_app.logger.info("[demolitions.submit] cloudinary upload success secure_url=%s", final_image_url)
+        except ValueError as exc:
+            flash(str(exc))
+            return redirect(url_for("materials.register_demolition"))
+        except Exception:
+            current_app.logger.exception("[demolitions.submit] cloudinary upload failed")
+            flash("画像のアップロードに失敗しました。画像なしで登録するか、再度お試しください。")
+            return redirect(url_for("materials.register_demolition"))
+
+    if not form.get("line_user_id"):
+        form["line_user_id"] = ""
+        form["display_name"] = ""
+
+    form["building_photo_url"] = final_image_url
+    append_demolition_property(form)
+    flash("解体物件を登録しました。")
     return redirect(url_for("materials.list_materials"))
 
 

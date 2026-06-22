@@ -41,6 +41,40 @@ body {
   gap: 16px;
 }
 
+.choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.choice-card {
+  display: block;
+  padding: 18px;
+  border: 1px solid #d8d0bd;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+  background: #fffdf7;
+}
+
+.choice-card:hover {
+  border-color: #466642;
+}
+
+.choice-title {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  color: #466642;
+}
+
+.choice-text {
+  display: block;
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
 label {
   display: block;
   margin-top: 16px;

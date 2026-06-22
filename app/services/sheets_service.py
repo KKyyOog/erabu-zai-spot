@@ -2,6 +2,7 @@ from datetime import datetime
 from uuid import uuid4
 
 import gspread
+from gspread.exceptions import WorksheetNotFound
 from google.oauth2.service_account import Credentials
 from flask import current_app
 
@@ -51,6 +52,27 @@ def _get_sheet(sheet_name):
     client = _get_client()
     spreadsheet = client.open_by_key(current_app.config["GOOGLE_SHEET_ID"])
     return spreadsheet.worksheet(sheet_name)
+
+
+def _get_or_create_sheet(sheet_name, headers):
+    client = _get_client()
+    spreadsheet = client.open_by_key(current_app.config["GOOGLE_SHEET_ID"])
+
+    try:
+        sheet = spreadsheet.worksheet(sheet_name)
+    except WorksheetNotFound:
+        sheet = spreadsheet.add_worksheet(
+            title=sheet_name,
+            rows=1000,
+            cols=max(len(headers), 1),
+        )
+        sheet.append_row(headers)
+
+    existing_headers = sheet.row_values(1)
+    if not existing_headers:
+        sheet.append_row(headers)
+
+    return sheet
 
 
 def _get_header_map(sheet):
@@ -110,6 +132,64 @@ def append_material(data):
 
     sheet.append_row(row)
     return material_id
+
+
+def append_demolition_property(data):
+    headers = [
+        "property_id",
+        "line_user_id",
+        "display_name",
+        "registrant_type",
+        "property_name",
+        "location",
+        "owner_name",
+        "demolition_date",
+        "demolition_contractor",
+        "viewing_period",
+        "building_use",
+        "structure",
+        "floors",
+        "building_age",
+        "building_photo_url",
+        "condition_evaluation",
+        "notes",
+        "status",
+        "created_at",
+    ]
+    sheet = _get_or_create_sheet("解体物件登録", headers)
+    property_id = f"demo_{uuid4().hex[:10]}"
+    line_user_id = _normalize_user_id(data)
+
+    row, header_map = _build_row_for_headers(
+        sheet,
+        {
+            "property_id": property_id,
+            "line_user_id": line_user_id,
+            "display_name": data.get("display_name", ""),
+            "registrant_type": data.get("registrant_type", ""),
+            "property_name": data.get("property_name", ""),
+            "location": data.get("location", ""),
+            "owner_name": data.get("owner_name", ""),
+            "demolition_date": data.get("demolition_date", ""),
+            "demolition_contractor": data.get("demolition_contractor", ""),
+            "viewing_period": data.get("viewing_period", ""),
+            "building_use": data.get("building_use", ""),
+            "structure": data.get("structure", ""),
+            "floors": data.get("floors", ""),
+            "building_age": data.get("building_age", ""),
+            "building_photo_url": data.get("building_photo_url", ""),
+            "condition_evaluation": data.get("condition_evaluation", ""),
+            "notes": data.get("notes", ""),
+            "status": "登録済み",
+            "created_at": _now(),
+        },
+    )
+
+    if "createdAt" in header_map and "created_at" not in header_map:
+        row[header_map["createdAt"] - 1] = _now()
+
+    sheet.append_row(row)
+    return property_id
 
 
 def get_materials(include_all=False):
