@@ -75,6 +75,45 @@ body {
   line-height: 1.6;
 }
 
+.filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.filter-tabs a {
+  display: inline-block;
+  padding: 10px 14px;
+  border: 1px solid #d8d0bd;
+  border-radius: 999px;
+  color: #2f2a23;
+  text-decoration: none;
+  background: white;
+}
+
+.filter-tabs a.active {
+  background: #466642;
+  border-color: #466642;
+  color: white;
+}
+
+.entry-badge {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e7f0dc;
+  color: #466642;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.entry-badge.demolition {
+  background: #e1f0f5;
+  color: #2f6575;
+}
+
 label {
   display: block;
   margin-top: 16px;

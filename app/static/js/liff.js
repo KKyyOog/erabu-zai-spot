@@ -31,6 +31,12 @@ async function initializeLiff() {
     const useridInput = document.getElementById("userid");
     const displayNameInput = document.getElementById("display_name");
 
+    const setAllInputsByName = (name, value) => {
+      document.querySelectorAll(`input[name="${name}"]`).forEach((input) => {
+        input.value = value;
+      });
+    };
+
     console.log("Setting form values...");
     if (lineUserIdInput) {
       lineUserIdInput.value = profile.userId;
@@ -47,6 +53,10 @@ async function initializeLiff() {
     if (useridInput) {
       useridInput.value = profile.userId;
     }
+
+    setAllInputsByName("line_user_id", profile.userId);
+    setAllInputsByName("user_id", profile.userId);
+    setAllInputsByName("userid", profile.userId);
 
     if (displayNameInput) {
       if (window.FILL_DISPLAY_NAME_FROM_LIFF === true && !displayNameInput.value.trim()) {

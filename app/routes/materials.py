@@ -9,6 +9,8 @@ from app.services.sheets_service import (
     append_demolition_property,
     get_materials,
     get_material_by_id,
+    get_demolition_properties,
+    get_demolition_property_by_id,
     append_matching_history,
     delete_material,
 )
@@ -43,6 +45,60 @@ def _upload_image(image_file):
         resource_type="image",
     )
     return upload_result.get("secure_url", "")
+
+
+def _sort_key_created_at(item):
+    value = item.get("created_at", "")
+    if not value:
+        return "9999-12-31 23:59:59"
+    return str(value)
+
+
+def _build_listing_items(display_filter):
+    items = []
+
+    if display_filter in ("all", "materials"):
+        for material in get_materials():
+            items.append(
+                {
+                    "entry_type": "material",
+                    "id": material.get("material_id", ""),
+                    "title": material.get("title", ""),
+                    "image_url": material.get("image_url", ""),
+                    "location": material.get("location", ""),
+                    "status": material.get("status", ""),
+                    "created_at": material.get("created_at", ""),
+                    "material_type": material.get("material_type", ""),
+                    "size": material.get("size", ""),
+                    "quantity": material.get("quantity", ""),
+                    "condition": material.get("condition", ""),
+                }
+            )
+
+    if display_filter in ("all", "demolitions"):
+        for property_record in get_demolition_properties():
+            items.append(
+                {
+                    "entry_type": "demolition",
+                    "id": property_record.get("property_id", ""),
+                    "title": property_record.get("property_name", ""),
+                    "image_url": property_record.get("building_photo_url", ""),
+                    "location": property_record.get("location", ""),
+                    "status": property_record.get("status", ""),
+                    "created_at": property_record.get("created_at", ""),
+                    "registrant_type": property_record.get("registrant_type", ""),
+                    "demolition_date": property_record.get("demolition_date", ""),
+                    "demolition_contractor": property_record.get("demolition_contractor", ""),
+                    "viewing_period": property_record.get("viewing_period", ""),
+                    "building_use": property_record.get("building_use", ""),
+                    "structure": property_record.get("structure", ""),
+                    "floors": property_record.get("floors", ""),
+                    "building_age": property_record.get("building_age", ""),
+                    "condition_evaluation": property_record.get("condition_evaluation", ""),
+                }
+            )
+
+    return sorted(items, key=_sort_key_created_at)
 
 
 @materials_bp.route("/register", methods=["GET"])
@@ -139,8 +195,16 @@ def submit_demolition():
 
 @materials_bp.route("/list", methods=["GET"])
 def list_materials():
-    materials = get_materials()
-    return render_template("materials/list.html", materials=materials)
+    display_filter = request.args.get("type", "all")
+    if display_filter not in ("all", "materials", "demolitions"):
+        display_filter = "all"
+
+    items = _build_listing_items(display_filter)
+    return render_template(
+        "materials/list.html",
+        items=items,
+        display_filter=display_filter,
+    )
 
 
 @materials_bp.route("/<material_id>", methods=["GET"])
@@ -194,3 +258,37 @@ def interest():
 
     flash("欲しい通知を送信しました。")
     return redirect(url_for("materials.list_materials"))
+
+
+@materials_bp.route("/demolitions/visit-interest", methods=["POST"])
+def visit_interest():
+    property_id = request.form.get("property_id")
+    requester_line_user_id = request.form.get("line_user_id")
+
+    property_record = get_demolition_property_by_id(property_id)
+    if not property_record:
+        return "指定された解体物件が見つかりません。", 404
+
+    append_matching_history(
+        {
+            "material_id": property_id,
+            "provider_user_id": property_record.get("line_user_id", ""),
+            "requester_user_id": requester_line_user_id,
+            "action": "見学したい",
+            "message": f"解体物件「{property_record.get('property_name', '')}」の見学希望",
+            "status": "未対応",
+        }
+    )
+
+    provider_line_user_id = property_record.get("line_user_id", "")
+    if provider_line_user_id and not provider_line_user_id.startswith("anon_"):
+        try:
+            send_line_message(
+                provider_line_user_id,
+                f"【えらぶ材すぽっと】\n解体物件「{property_record.get('property_name', '')}」に見学希望が届きました。",
+            )
+        except Exception:
+            current_app.logger.exception("[demolitions.visit_interest] LINE notification failed")
+
+    flash("見学希望を送信しました。")
+    return redirect(url_for("materials.list_materials", type=request.form.get("return_type", "all")))

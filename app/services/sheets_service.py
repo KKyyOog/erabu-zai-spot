@@ -192,6 +192,45 @@ def append_demolition_property(data):
     return property_id
 
 
+def get_demolition_properties(include_all=False):
+    headers = [
+        "property_id",
+        "line_user_id",
+        "display_name",
+        "registrant_type",
+        "property_name",
+        "location",
+        "owner_name",
+        "demolition_date",
+        "demolition_contractor",
+        "viewing_period",
+        "building_use",
+        "structure",
+        "floors",
+        "building_age",
+        "building_photo_url",
+        "condition_evaluation",
+        "notes",
+        "status",
+        "created_at",
+    ]
+    sheet = _get_or_create_sheet("解体物件登録", headers)
+    records = sheet.get_all_records()
+
+    if include_all:
+        return records
+
+    return [record for record in records if record.get("status") != "削除済み"]
+
+
+def get_demolition_property_by_id(property_id):
+    properties = get_demolition_properties(include_all=True)
+    for property_record in properties:
+        if property_record.get("property_id") == property_id:
+            return property_record
+    return None
+
+
 def get_materials(include_all=False):
     sheet = _get_sheet("材登録")
     records = sheet.get_all_records()
