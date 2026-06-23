@@ -1,3 +1,57 @@
+const LIFF_RETURN_URL_KEY = "erabu_zai_spot_liff_return_url";
+
+function saveLiffReturnUrl() {
+  try {
+    window.localStorage.setItem(LIFF_RETURN_URL_KEY, window.location.href);
+  } catch (error) {
+    console.warn("Failed to save LIFF return URL:", error);
+  }
+}
+
+function restoreLiffReturnUrlIfNeeded() {
+  let returnUrl = "";
+
+  try {
+    returnUrl = window.localStorage.getItem(LIFF_RETURN_URL_KEY) || "";
+  } catch (error) {
+    console.warn("Failed to read LIFF return URL:", error);
+    return false;
+  }
+
+  if (!returnUrl) {
+    return false;
+  }
+
+  let targetUrl;
+  let currentUrl;
+
+  try {
+    targetUrl = new URL(returnUrl, window.location.origin);
+    currentUrl = new URL(window.location.href);
+  } catch (error) {
+    console.warn("Invalid LIFF return URL:", error);
+    window.localStorage.removeItem(LIFF_RETURN_URL_KEY);
+    return false;
+  }
+
+  const targetPath = targetUrl.pathname + targetUrl.search + targetUrl.hash;
+  const currentPath = currentUrl.pathname + currentUrl.search + currentUrl.hash;
+
+  if (targetUrl.origin !== currentUrl.origin) {
+    window.localStorage.removeItem(LIFF_RETURN_URL_KEY);
+    return false;
+  }
+
+  if (targetPath === currentPath) {
+    window.localStorage.removeItem(LIFF_RETURN_URL_KEY);
+    return false;
+  }
+
+  window.localStorage.removeItem(LIFF_RETURN_URL_KEY);
+  window.location.replace(targetUrl.href);
+  return true;
+}
+
 async function initializeLiff() {
   const liffId = window.LIFF_ID || "";
   console.log("LIFF initialization started. LIFF ID:", liffId);
@@ -21,9 +75,14 @@ async function initializeLiff() {
       if (window.REQUIRE_LIFF_LOGIN === true) {
         console.log("Redirecting to LIFF login...");
         await logToServer("Redirecting to LIFF login...");
+        saveLiffReturnUrl();
         liff.login();
       }
 
+      return;
+    }
+
+    if (restoreLiffReturnUrlIfNeeded()) {
       return;
     }
 
