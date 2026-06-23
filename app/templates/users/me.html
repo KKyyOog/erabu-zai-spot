@@ -96,6 +96,20 @@
     `).join('');
   }
 
+  function fillUserForm(user) {
+    document.getElementById('display_name').value = user.display_name || '';
+    document.getElementById('address').value = user.address || '';
+    document.getElementById('transport_info').value = user.transport_info || '';
+  }
+
+  function clearUserForm() {
+    fillUserForm({
+      display_name: '',
+      address: '',
+      transport_info: '',
+    });
+  }
+
   async function initMeFlow() {
     const status = document.getElementById('status');
     if (!window.LIFF_ID) {
@@ -122,16 +136,24 @@
         body: JSON.stringify({ userId: profile.userId }),
       });
       const body = await resp.json();
+      if (!resp.ok || !body.ok) {
+        clearUserForm();
+        renderMaterials([], profile.userId);
+        renderMatchingHistory([]);
+        document.getElementById('form-title').textContent = 'ユーザー情報（新規登録）';
+        document.getElementById('submit-button').textContent = '登録する';
+        status.textContent = 'ユーザー情報を読み込めませんでした。新規登録として入力してください。';
+        return;
+      }
       renderMaterials(body.materials || [], profile.userId);
       renderMatchingHistory(body.matching_history || []);
       if (body.ok && body.exists) {
         document.getElementById('form-title').textContent = 'ユーザー情報（更新）';
-        document.getElementById('display_name').value = body.user.display_name || '';
-        document.getElementById('address').value = body.user.address || '';
-        document.getElementById('transport_info').value = body.user.transport_info || '';
+        fillUserForm(body.user || {});
         document.getElementById('submit-button').textContent = '更新する';
         status.textContent = '登録済みの情報を読み込みました。';
       } else {
+        clearUserForm();
         document.getElementById('form-title').textContent = 'ユーザー情報（新規登録）';
         document.getElementById('submit-button').textContent = '登録する';
         status.textContent = '新規登録用の空フォームです。';
