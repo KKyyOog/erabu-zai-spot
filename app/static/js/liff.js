@@ -1,55 +1,13 @@
-const LIFF_RETURN_URL_KEY = "erabu_zai_spot_liff_return_url";
-
-function saveLiffReturnUrl() {
-  try {
-    window.localStorage.setItem(LIFF_RETURN_URL_KEY, window.location.href);
-  } catch (error) {
-    console.warn("Failed to save LIFF return URL:", error);
-  }
+function getCurrentPageLoginRedirectUri() {
+  return window.location.origin + window.location.pathname;
 }
 
-function restoreLiffReturnUrlIfNeeded() {
-  let returnUrl = "";
-
+function clearLegacyLiffReturnUrl() {
   try {
-    returnUrl = window.localStorage.getItem(LIFF_RETURN_URL_KEY) || "";
+    window.localStorage.removeItem("erabu_zai_spot_liff_return_url");
   } catch (error) {
-    console.warn("Failed to read LIFF return URL:", error);
-    return false;
+    console.warn("Failed to clear legacy LIFF return URL:", error);
   }
-
-  if (!returnUrl) {
-    return false;
-  }
-
-  let targetUrl;
-  let currentUrl;
-
-  try {
-    targetUrl = new URL(returnUrl, window.location.origin);
-    currentUrl = new URL(window.location.href);
-  } catch (error) {
-    console.warn("Invalid LIFF return URL:", error);
-    window.localStorage.removeItem(LIFF_RETURN_URL_KEY);
-    return false;
-  }
-
-  const targetPath = targetUrl.pathname + targetUrl.search + targetUrl.hash;
-  const currentPath = currentUrl.pathname + currentUrl.search + currentUrl.hash;
-
-  if (targetUrl.origin !== currentUrl.origin) {
-    window.localStorage.removeItem(LIFF_RETURN_URL_KEY);
-    return false;
-  }
-
-  if (targetPath === currentPath) {
-    window.localStorage.removeItem(LIFF_RETURN_URL_KEY);
-    return false;
-  }
-
-  window.localStorage.removeItem(LIFF_RETURN_URL_KEY);
-  window.location.replace(targetUrl.href);
-  return true;
 }
 
 async function initializeLiff() {
@@ -67,6 +25,7 @@ async function initializeLiff() {
     await liff.init({ liffId });
     console.log("LIFF initialized successfully.");
     await logToServer("LIFF initialized successfully.");
+    clearLegacyLiffReturnUrl();
 
     if (!liff.isLoggedIn()) {
       console.log("Not logged in.");
@@ -75,14 +34,9 @@ async function initializeLiff() {
       if (window.REQUIRE_LIFF_LOGIN === true) {
         console.log("Redirecting to LIFF login...");
         await logToServer("Redirecting to LIFF login...");
-        saveLiffReturnUrl();
-        liff.login();
+        liff.login({ redirectUri: getCurrentPageLoginRedirectUri() });
       }
 
-      return;
-    }
-
-    if (restoreLiffReturnUrlIfNeeded()) {
       return;
     }
 
