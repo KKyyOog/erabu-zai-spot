@@ -15,9 +15,15 @@ async function initializeLiff() {
     await logToServer("LIFF initialized successfully.");
 
     if (!liff.isLoggedIn()) {
-      console.log("Not logged in. Redirecting to login...");
-      await logToServer("Not logged in. Redirecting to login...");
-      liff.login();
+      console.log("Not logged in.");
+      await logToServer("Not logged in.");
+
+      if (window.REQUIRE_LIFF_LOGIN === true) {
+        console.log("Redirecting to LIFF login...");
+        await logToServer("Redirecting to LIFF login...");
+        liff.login({ redirectUri: window.location.href });
+      }
+
       return;
     }
 
