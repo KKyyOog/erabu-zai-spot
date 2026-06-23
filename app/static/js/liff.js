@@ -21,7 +21,7 @@ async function initializeLiff() {
       if (window.REQUIRE_LIFF_LOGIN === true) {
         console.log("Redirecting to LIFF login...");
         await logToServer("Redirecting to LIFF login...");
-        liff.login({ redirectUri: window.location.href });
+        liff.login();
       }
 
       return;

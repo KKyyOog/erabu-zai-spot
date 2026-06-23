@@ -94,7 +94,7 @@
     try {
       await liff.init({ liffId: window.LIFF_ID });
       if (!liff.isLoggedIn()) {
-        liff.login({ redirectUri: window.location.href });
+        liff.login();
         return;
       }
       const profile = await liff.getProfile();
