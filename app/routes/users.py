@@ -25,7 +25,7 @@ def _resolve_user_id(form, route_user_id=""):
 
 @users_bp.route("/register", methods=["GET"])
 def register():
-    return render_template("users/register.html")
+    return redirect(url_for("users.me"))
 
 
 @users_bp.route("/submit", methods=["POST"])
@@ -149,6 +149,12 @@ def me_data():
         return jsonify({
             "ok": True,
             "exists": False,
+            "user": {
+                "line_user_id": user_id,
+                "display_name": "",
+                "address": "",
+                "transport_info": "",
+            },
             "materials": materials,
             "matching_history": matching_history,
         })
