@@ -1,13 +1,22 @@
-function getCurrentPageLoginRedirectUri() {
-  return window.location.origin + window.location.pathname;
-}
-
 function clearLegacyLiffReturnUrl() {
   try {
     window.localStorage.removeItem("erabu_zai_spot_liff_return_url");
   } catch (error) {
     console.warn("Failed to clear legacy LIFF return URL:", error);
   }
+}
+
+function getLiffDebugContext() {
+  return {
+    href: window.location.href,
+    origin: window.location.origin,
+    pathname: window.location.pathname,
+    search: window.location.search,
+    requireLogin: window.REQUIRE_LIFF_LOGIN === true,
+    hasLiff: Boolean(window.liff),
+    inClient: Boolean(window.liff && liff.isInClient && liff.isInClient()),
+    userAgent: navigator.userAgent,
+  };
 }
 
 async function initializeLiff() {
@@ -33,8 +42,8 @@ async function initializeLiff() {
 
       if (window.REQUIRE_LIFF_LOGIN === true) {
         console.log("Redirecting to LIFF login...");
-        await logToServer("Redirecting to LIFF login...");
-        liff.login({ redirectUri: getCurrentPageLoginRedirectUri() });
+        await logToServer("Redirecting to LIFF login without redirectUri.", getLiffDebugContext());
+        liff.login();
       }
 
       return;
@@ -109,7 +118,7 @@ async function initializeLiff() {
   }
 }
 
-async function logToServer(message) {
+async function logToServer(message, details = {}) {
   try {
     await fetch("/link/liff-debug", {
       method: "POST",
@@ -118,6 +127,7 @@ async function logToServer(message) {
       },
       body: JSON.stringify({
         message: message,
+        details: details,
         timestamp: new Date().toISOString(),
       }),
     });

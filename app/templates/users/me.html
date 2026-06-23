@@ -37,15 +37,39 @@
 <script>
   window.LIFF_ID = {{ LIFF_ID|tojson }};
 
-  function getCurrentPageLoginRedirectUri() {
-    return window.location.origin + window.location.pathname;
-  }
-
   function clearLegacyLiffReturnUrl() {
     try {
       window.localStorage.removeItem('erabu_zai_spot_liff_return_url');
     } catch (error) {
       console.warn('Failed to clear legacy LIFF return URL:', error);
+    }
+  }
+
+  function getLiffDebugContext() {
+    return {
+      href: window.location.href,
+      origin: window.location.origin,
+      pathname: window.location.pathname,
+      search: window.location.search,
+      hasLiff: Boolean(window.liff),
+      inClient: Boolean(window.liff && liff.isInClient && liff.isInClient()),
+      userAgent: navigator.userAgent,
+    };
+  }
+
+  async function logLiffDebug(message, details = {}) {
+    try {
+      await fetch('/link/liff-debug', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: message,
+          details: details,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+    } catch (error) {
+      console.warn('Failed to send LIFF debug log:', error);
     }
   }
 
@@ -121,9 +145,11 @@
       await liff.init({ liffId: window.LIFF_ID });
       clearLegacyLiffReturnUrl();
       if (!liff.isLoggedIn()) {
-        liff.login({ redirectUri: getCurrentPageLoginRedirectUri() });
+        await logLiffDebug('users/me redirecting to LIFF login without redirectUri.', getLiffDebugContext());
+        liff.login();
         return;
       }
+      await logLiffDebug('users/me LIFF login confirmed.', getLiffDebugContext());
       const profile = await liff.getProfile();
       document.getElementById('line_user_id').value = profile.userId;
       document.getElementById('user_id').value = profile.userId;
@@ -160,6 +186,7 @@
       }
     } catch (e) {
       console.error(e);
+      await logLiffDebug('users/me LIFF error: ' + e.message, getLiffDebugContext());
       status.textContent = 'ユーザー情報の取得に失敗しました。手動で入力してください。';
     }
   }

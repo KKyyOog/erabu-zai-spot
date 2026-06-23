@@ -1,6 +1,7 @@
 import os
+import logging
 
-from flask import Flask
+from flask import Flask, request
 
 from app.routes.materials import materials_bp
 from app.routes.users import users_bp
@@ -11,6 +12,8 @@ from app.config import Config
 
 
 def create_app():
+    logging.basicConfig(level=logging.INFO)
+
     app = Flask(__name__)
     app.config.from_object(Config)
     app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "static", "uploads")
@@ -25,6 +28,19 @@ def create_app():
     @app.context_processor
     def inject_liff_id():
         return {"LIFF_ID": app.config["LIFF_ID"]}
+
+    @app.before_request
+    def log_debug_request():
+        if request.path.startswith(("/link", "/users/me", "/callback")):
+            app.logger.info(
+                "[REQUEST DEBUG] method=%s path=%s query=%s remote_addr=%s referer=%s user_agent=%s",
+                request.method,
+                request.path,
+                request.query_string.decode("utf-8", errors="ignore"),
+                request.headers.get("X-Forwarded-For", request.remote_addr),
+                request.headers.get("Referer", ""),
+                request.headers.get("User-Agent", ""),
+            )
 
     @app.route("/")
     def index():
