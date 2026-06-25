@@ -14,7 +14,7 @@ def send_line_message(user_id, text):
 
     token = current_app.config["LINE_CHANNEL_ACCESS_TOKEN"]
     if not token:
-        print("LINE_CHANNEL_ACCESS_TOKEN is not set.")
+        current_app.logger.warning("LINE_CHANNEL_ACCESS_TOKEN is not set.")
         return False
 
     configuration = Configuration(access_token=token)

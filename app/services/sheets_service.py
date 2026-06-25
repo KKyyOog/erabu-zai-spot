@@ -10,6 +10,30 @@ import json
 
 SCOPE = ["https://www.googleapis.com/auth/spreadsheets"]
 
+DEMOLITION_HEADERS = [
+    "property_id",
+    "line_user_id",
+    "display_name",
+    "registrant_type",
+    "property_name",
+    "location",
+    "owner_name",
+    "demolition_date",
+    "demolition_contractor",
+    "viewing_period",
+    "building_use",
+    "structure",
+    "floors",
+    "building_age",
+    "building_photo_url",
+    "condition_evaluation",
+    "notes",
+    "status",
+    "created_at",
+]
+
+USER_FIELDS = ("display_name", "address", "transport_info")
+
 
 def _normalize_user_id(data=None, fallback=""):
     data = data or {}
@@ -93,6 +117,40 @@ def _build_row_for_headers(sheet, values_by_header):
     return row, header_map
 
 
+def _set_row_value(row, header_map, name, value):
+    if name in header_map:
+        row[header_map[name] - 1] = value
+
+
+def _build_user_row(headers, header_map, line_user_id, data):
+    row = ["" for _ in headers]
+    _set_row_value(row, header_map, "line_user_id", line_user_id)
+    for field in USER_FIELDS:
+        _set_row_value(row, header_map, field, data.get(field, ""))
+
+    if "created_at" in header_map:
+        _set_row_value(row, header_map, "created_at", _now())
+    elif "createdAt" in header_map:
+        _set_row_value(row, header_map, "createdAt", _now())
+
+    return row
+
+
+def _update_user_row(sheet, idx, header_map, line_user_id, data, record, update_timestamp=False):
+    if header_map.get("line_user_id"):
+        sheet.update_cell(idx, header_map["line_user_id"], line_user_id)
+
+    for field in USER_FIELDS:
+        if header_map.get(field):
+            sheet.update_cell(idx, header_map[field], data.get(field, record.get(field, "")))
+
+    if update_timestamp:
+        if header_map.get("updated_at"):
+            sheet.update_cell(idx, header_map["updated_at"], _now())
+        if header_map.get("updatedAt"):
+            sheet.update_cell(idx, header_map["updatedAt"], _now())
+
+
 def _now():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -135,28 +193,7 @@ def append_material(data):
 
 
 def append_demolition_property(data):
-    headers = [
-        "property_id",
-        "line_user_id",
-        "display_name",
-        "registrant_type",
-        "property_name",
-        "location",
-        "owner_name",
-        "demolition_date",
-        "demolition_contractor",
-        "viewing_period",
-        "building_use",
-        "structure",
-        "floors",
-        "building_age",
-        "building_photo_url",
-        "condition_evaluation",
-        "notes",
-        "status",
-        "created_at",
-    ]
-    sheet = _get_or_create_sheet("解体物件登録", headers)
+    sheet = _get_or_create_sheet("解体物件登録", DEMOLITION_HEADERS)
     property_id = f"demo_{uuid4().hex[:10]}"
     line_user_id = _normalize_user_id(data)
 
@@ -193,28 +230,7 @@ def append_demolition_property(data):
 
 
 def get_demolition_properties(include_all=False):
-    headers = [
-        "property_id",
-        "line_user_id",
-        "display_name",
-        "registrant_type",
-        "property_name",
-        "location",
-        "owner_name",
-        "demolition_date",
-        "demolition_contractor",
-        "viewing_period",
-        "building_use",
-        "structure",
-        "floors",
-        "building_age",
-        "building_photo_url",
-        "condition_evaluation",
-        "notes",
-        "status",
-        "created_at",
-    ]
-    sheet = _get_or_create_sheet("解体物件登録", headers)
+    sheet = _get_or_create_sheet("解体物件登録", DEMOLITION_HEADERS)
     records = sheet.get_all_records()
 
     if include_all:
@@ -302,33 +318,12 @@ def append_user(data):
 
     if idx:
         current_app.logger.info(f"append_user: found existing row {idx}, updating")
-        # Update by header positions when available
-        if header_map.get("line_user_id"):
-            sheet.update_cell(idx, header_map["line_user_id"], line_user_id)
-        if header_map.get("display_name"):
-            sheet.update_cell(idx, header_map["display_name"], data.get("display_name", record.get("display_name", "")))
-        if header_map.get("address"):
-            sheet.update_cell(idx, header_map["address"], data.get("address", record.get("address", "")))
-        if header_map.get("transport_info"):
-            sheet.update_cell(idx, header_map["transport_info"], data.get("transport_info", record.get("transport_info", "")))
+        _update_user_row(sheet, idx, header_map, line_user_id, data, record)
         return line_user_id
 
     # Build a row aligned to existing headers to avoid column order issues
     headers = sheet.row_values(1)
-    row = ["" for _ in headers]
-    def set_by_header(name, value):
-        if name in header_map:
-            row[header_map[name] - 1] = value
-
-    set_by_header("line_user_id", line_user_id)
-    set_by_header("display_name", data.get("display_name", ""))
-    set_by_header("address", data.get("address", ""))
-    set_by_header("transport_info", data.get("transport_info", ""))
-    # set created_at/updated
-    if "created_at" in header_map:
-        row[header_map["created_at"] - 1] = _now()
-    elif "createdAt" in header_map:
-        row[header_map["createdAt"] - 1] = _now()
+    row = _build_user_row(headers, header_map, line_user_id, data)
 
     current_app.logger.info(f"append_user: appending new row for {line_user_id}")
     sheet.append_row(row)
@@ -344,7 +339,6 @@ def get_user_by_line_user_id(line_user_id):
             if (
                 record.get("line_user_id") == line_user_id
                 or record.get("user_id") == line_user_id
-                or record.get("userid") == line_user_id
                 or record.get("userid") == line_user_id
             ):
                 return record
@@ -367,70 +361,18 @@ def update_user(line_user_id, data):
         header_map = _get_header_map(sheet)
         if idx:
             current_app.logger.info(f"update_user: updating row {idx} for {line_user_id}")
-            if header_map.get("line_user_id"):
-                sheet.update_cell(idx, header_map["line_user_id"], line_user_id)
-            if header_map.get("display_name"):
-                sheet.update_cell(idx, header_map["display_name"], data.get("display_name", record.get("display_name", "")))
-            if header_map.get("address"):
-                sheet.update_cell(idx, header_map["address"], data.get("address", record.get("address", "")))
-            if header_map.get("transport_info"):
-                sheet.update_cell(idx, header_map["transport_info"], data.get("transport_info", record.get("transport_info", "")))
-            # update updated/modified time if present
-            if header_map.get("updated_at"):
-                sheet.update_cell(idx, header_map["updated_at"], _now())
-            if header_map.get("updatedAt"):
-                sheet.update_cell(idx, header_map["updatedAt"], _now())
+            _update_user_row(sheet, idx, header_map, line_user_id, data, record, update_timestamp=True)
             return line_user_id
 
         # not found -> append new row aligned to headers
         headers = sheet.row_values(1)
-        row = ["" for _ in headers]
-        def set_by_header(name, value):
-            if name in header_map:
-                row[header_map[name] - 1] = value
-
-        set_by_header("line_user_id", line_user_id)
-        set_by_header("display_name", data.get("display_name", ""))
-        set_by_header("address", data.get("address", ""))
-        set_by_header("transport_info", data.get("transport_info", ""))
-        if "created_at" in header_map:
-            row[header_map["created_at"] - 1] = _now()
-        elif "createdAt" in header_map:
-            row[header_map["createdAt"] - 1] = _now()
+        row = _build_user_row(headers, header_map, line_user_id, data)
 
         current_app.logger.info(f"update_user: no existing row, appending for {line_user_id}")
         sheet.append_row(row)
         return line_user_id
     except Exception:
         return None
-
-
-def upsert_user(data):
-    sheet = _get_sheet("ユーザー情報")
-    records = sheet.get_all_records()
-    line_user_id = _normalize_user_id(data)
-
-    index, record = _find_user_row(records, line_user_id)
-    if index:
-        sheet.update(
-            f"A{index}:E{index}",
-            [[
-                line_user_id,
-                data.get("display_name", record.get("display_name", "")),
-                data.get("address", record.get("address", "")),
-                data.get("transport_info", record.get("transport_info", "")),
-                _now(),
-            ]],
-        )
-        return
-
-    sheet.append_row([
-        line_user_id,
-        data.get("display_name", ""),
-        "",
-        "",
-        _now(),
-    ])
 
 
 def update_material_status(material_id, status):

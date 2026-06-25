@@ -18,6 +18,7 @@
 
   <form method="post" action="{{ url_for('materials.interest') }}">
     <input type="hidden" name="material_id" value="{{ material.material_id }}">
+    <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="user_id" id="user_id">
 
     <label>メッセージ</label>
@@ -27,5 +28,8 @@
   </form>
 </article>
 
+<script>
+  window.LIFF_ID = {{ LIFF_ID|tojson }};
+</script>
 <script src="{{ url_for('static', filename='js/liff.js') }}"></script>
 {% endblock %}

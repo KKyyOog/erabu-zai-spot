@@ -101,6 +101,28 @@ def _build_listing_items(display_filter):
     return sorted(items, key=_sort_key_created_at)
 
 
+def _resolve_line_user_id(form):
+    for field_name in ("line_user_id", "user_id", "userid"):
+        value = (form.get(field_name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _send_provider_notification(provider_line_user_id, message, log_context):
+    if not provider_line_user_id or provider_line_user_id.startswith("anon_"):
+        return False
+
+    try:
+        sent = send_line_message(provider_line_user_id, message)
+        if not sent:
+            current_app.logger.warning("[%s] LINE notification was not sent", log_context)
+        return sent
+    except Exception:
+        current_app.logger.exception("[%s] LINE notification failed", log_context)
+        return False
+
+
 @materials_bp.route("/register", methods=["GET"])
 def register():
     return render_template("materials/register_select.html")
@@ -231,7 +253,7 @@ def delete(material_id):
 @materials_bp.route("/interest", methods=["POST"])
 def interest():
     material_id = request.form.get("material_id")
-    requester_line_user_id = request.form.get("line_user_id")
+    requester_line_user_id = _resolve_line_user_id(request.form)
     message = request.form.get("message", "")
 
     material = get_material_by_id(material_id)
@@ -250,11 +272,11 @@ def interest():
     )
 
     provider_line_user_id = material.get("line_user_id", "")
-    if provider_line_user_id:
-        send_line_message(
-            provider_line_user_id,
-            f"【えらぶ材すぽっと】\n登録した材「{material.get('title', '')}」に欲しい通知が届きました。\nメッセージ：{message or 'なし'}",
-        )
+    _send_provider_notification(
+        provider_line_user_id,
+        f"【えらぶ材すぽっと】\n登録した材「{material.get('title', '')}」に欲しい通知が届きました。\nメッセージ：{message or 'なし'}",
+        "materials.interest",
+    )
 
     flash("欲しい通知を送信しました。")
     return redirect(url_for("materials.list_materials"))
@@ -263,7 +285,7 @@ def interest():
 @materials_bp.route("/demolitions/visit-interest", methods=["POST"])
 def visit_interest():
     property_id = request.form.get("property_id")
-    requester_line_user_id = request.form.get("line_user_id")
+    requester_line_user_id = _resolve_line_user_id(request.form)
 
     property_record = get_demolition_property_by_id(property_id)
     if not property_record:
@@ -281,14 +303,11 @@ def visit_interest():
     )
 
     provider_line_user_id = property_record.get("line_user_id", "")
-    if provider_line_user_id and not provider_line_user_id.startswith("anon_"):
-        try:
-            send_line_message(
-                provider_line_user_id,
-                f"【えらぶ材すぽっと】\n解体物件「{property_record.get('property_name', '')}」に見学希望が届きました。",
-            )
-        except Exception:
-            current_app.logger.exception("[demolitions.visit_interest] LINE notification failed")
+    _send_provider_notification(
+        provider_line_user_id,
+        f"【えらぶ材すぽっと】\n解体物件「{property_record.get('property_name', '')}」に見学希望が届きました。",
+        "demolitions.visit_interest",
+    )
 
     flash("見学希望を送信しました。")
     return redirect(url_for("materials.list_materials", type=request.form.get("return_type", "all")))
