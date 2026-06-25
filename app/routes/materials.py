@@ -13,6 +13,7 @@ from app.services.sheets_service import (
     get_demolition_property_by_id,
     append_matching_history,
     delete_material,
+    get_user_by_line_user_id,
 )
 from app.services.line_service import send_line_message
 
@@ -121,6 +122,19 @@ def _send_provider_notification(provider_line_user_id, message, log_context):
     except Exception:
         current_app.logger.exception("[%s] LINE notification failed", log_context)
         return False
+
+
+def _public_user_summary(line_user_id):
+    user = get_user_by_line_user_id(line_user_id)
+    if not user:
+        return "登録情報: 未登録"
+
+    return "\n".join(
+        [
+            f"名前: {user.get('display_name', '未登録')}",
+            f"拠点住所: {user.get('address', '未登録')}",
+        ]
+    )
 
 
 @materials_bp.route("/register", methods=["GET"])
@@ -260,7 +274,7 @@ def interest():
     if not material:
         return "指定された材が見つかりません。", 404
 
-    append_matching_history(
+    match_id = append_matching_history(
         {
             "material_id": material_id,
             "provider_user_id": material.get("line_user_id", ""),
@@ -268,13 +282,26 @@ def interest():
             "action": "欲しい",
             "message": message,
             "status": "未対応",
-        }
+        },
+        match_type="material",
     )
 
     provider_line_user_id = material.get("line_user_id", "")
     _send_provider_notification(
         provider_line_user_id,
-        f"【えらぶ材すぽっと】\n登録した材「{material.get('title', '')}」に欲しい通知が届きました。\nメッセージ：{message or 'なし'}",
+        "\n".join(
+            [
+                "【えらぶ材すぽっと】",
+                f"登録した材「{material.get('title', '')}」に欲しい通知が届きました。",
+                "",
+                _public_user_summary(requester_line_user_id),
+                f"メッセージ: {message or 'なし'}",
+                "",
+                "連絡先を共有する場合は、マイページのマッチング履歴から共有してください。",
+                url_for("users.me", _external=True),
+                f"match_id: {match_id}",
+            ]
+        ),
         "materials.interest",
     )
 
@@ -291,21 +318,33 @@ def visit_interest():
     if not property_record:
         return "指定された解体物件が見つかりません。", 404
 
-    append_matching_history(
+    match_id = append_matching_history(
         {
-            "material_id": property_id,
+            "property_id": property_id,
             "provider_user_id": property_record.get("line_user_id", ""),
             "requester_user_id": requester_line_user_id,
             "action": "見学したい",
             "message": f"解体物件「{property_record.get('property_name', '')}」の見学希望",
             "status": "未対応",
-        }
+        },
+        match_type="viewing",
     )
 
     provider_line_user_id = property_record.get("line_user_id", "")
     _send_provider_notification(
         provider_line_user_id,
-        f"【えらぶ材すぽっと】\n解体物件「{property_record.get('property_name', '')}」に見学希望が届きました。",
+        "\n".join(
+            [
+                "【えらぶ材すぽっと】",
+                f"解体物件「{property_record.get('property_name', '')}」に見学希望が届きました。",
+                "",
+                _public_user_summary(requester_line_user_id),
+                "",
+                "連絡先を共有する場合は、マイページのマッチング履歴から共有してください。",
+                url_for("users.me", _external=True),
+                f"match_id: {match_id}",
+            ]
+        ),
         "demolitions.visit_interest",
     )
 

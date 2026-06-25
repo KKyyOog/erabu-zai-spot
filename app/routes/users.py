@@ -5,8 +5,12 @@ from app.services.sheets_service import (
     get_user_by_line_user_id,
     get_materials_by_line_user_id,
     get_matching_history_by_user,
+    get_contact_card_by_user,
+    record_contact_share,
+    upsert_contact_card,
     update_user,
 )
+from app.services.line_service import send_line_message
 
 users_bp = Blueprint("users", __name__, url_prefix="/users")
 
@@ -21,6 +25,41 @@ def _resolve_user_id(form, route_user_id=""):
         if candidate and candidate.strip() and candidate.strip().lower() != "me":
             return candidate.strip()
     return route_user_id.strip()
+
+
+def _save_contact_card_if_present(line_user_id, form):
+    card_fields = (
+        "contact_display_name",
+        "contact_method",
+        "contact_value",
+        "contact_available_time",
+        "contact_area",
+        "contact_message",
+    )
+    if any(form.get(field) for field in card_fields):
+        return upsert_contact_card(line_user_id, form)
+    return None
+
+
+def _format_contact_share_message(share_result):
+    card = share_result["card"]
+    match = share_result["match"]
+    entry_label = "材" if match.get("match_type") == "material" else "見学"
+    lines = [
+        "【えらぶ材すぽっと】",
+        f"{entry_label}のマッチ相手が連絡先カードを共有しました。",
+        "",
+        f"表示名: {card.get('display_name', '')}",
+        f"連絡方法: {card.get('contact_method', '')}",
+        f"連絡先: {card.get('contact_value', '')}",
+    ]
+    if card.get("available_time"):
+        lines.append(f"連絡しやすい時間: {card.get('available_time')}")
+    if card.get("contact_area"):
+        lines.append(f"対応エリア: {card.get('contact_area')}")
+    if card.get("message"):
+        lines.extend(["", card.get("message")])
+    return "\n".join(lines)
 
 
 @users_bp.route("/register", methods=["GET"])
@@ -48,6 +87,7 @@ def submit():
         return redirect(url_for("users.register"))
 
     line_user_id = append_user(form)
+    _save_contact_card_if_present(line_user_id, form)
     flash("ユーザー情報を登録しました。")
     return redirect(url_for("users.detail", line_user_id=line_user_id))
 
@@ -74,6 +114,7 @@ def detail(line_user_id):
 
     materials = get_materials_by_line_user_id(line_user_id)
     matching_history = get_matching_history_by_user(line_user_id)
+    contact_card = get_contact_card_by_user(line_user_id) or {}
 
     return render_template(
         "users/detail.html",
@@ -81,6 +122,7 @@ def detail(line_user_id):
         user_exists=user_exists,
         materials=materials,
         matching_history=matching_history,
+        contact_card=contact_card,
     )
 
 
@@ -89,7 +131,8 @@ def edit(line_user_id):
     user = get_user_by_line_user_id(line_user_id)
     if not user:
         return "指定されたユーザーが見つかりません。", 404
-    return render_template("users/edit.html", user=user)
+    contact_card = get_contact_card_by_user(line_user_id) or {}
+    return render_template("users/edit.html", user=user, contact_card=contact_card)
 
 
 @users_bp.route("/<line_user_id>/update", methods=["POST"])
@@ -113,6 +156,8 @@ def update_profile(line_user_id):
 
     exists = get_user_by_line_user_id(resolved_user_id) is not None
     result = update_user(resolved_user_id, form)
+    if result:
+        _save_contact_card_if_present(resolved_user_id, form)
     flash("ユーザー情報を更新しました。" if exists else "ユーザー情報を登録しました。")
 
     if result:
@@ -137,11 +182,13 @@ def me_data():
     user = get_user_by_line_user_id(user_id)
     materials = get_materials_by_line_user_id(user_id)
     matching_history = get_matching_history_by_user(user_id)
+    contact_card = get_contact_card_by_user(user_id) or {}
     if user:
         return jsonify({
             "ok": True,
             "exists": True,
             "user": user,
+            "contact_card": contact_card,
             "materials": materials,
             "matching_history": matching_history,
         })
@@ -155,6 +202,7 @@ def me_data():
                 "address": "",
                 "transport_info": "",
             },
+            "contact_card": contact_card,
             "materials": materials,
             "matching_history": matching_history,
         })
@@ -182,10 +230,45 @@ def me_save():
 
     exists = get_user_by_line_user_id(resolved_user_id) is not None
     result = update_user(resolved_user_id, form)
+    if result:
+        _save_contact_card_if_present(resolved_user_id, form)
 
     if result:
         flash("ユーザー情報を更新しました。" if exists else "ユーザー情報を登録しました。")
     else:
         flash("ユーザー情報の保存に失敗しました。")
 
+    return redirect(url_for("users.me"))
+
+
+@users_bp.route("/matches/<match_type>/<match_id>/share-contact", methods=["POST"])
+def share_contact(match_type, match_id):
+    if match_type not in ("material", "viewing"):
+        flash("マッチ種別が不正です。")
+        return redirect(url_for("users.me"))
+
+    line_user_id = _resolve_user_id(request.form)
+    if not line_user_id:
+        flash("LINE user ID を取得できませんでした。")
+        return redirect(url_for("users.me"))
+
+    share_result, error = record_contact_share(match_id, match_type, line_user_id)
+    if error == "contact_card_missing":
+        flash("連絡先カードを入力してから共有してください。")
+        return redirect(url_for("users.me"))
+    if error == "contact_card_inactive":
+        flash("連絡先カードが共有停止中です。")
+        return redirect(url_for("users.me"))
+    if error:
+        flash("連絡先カードの共有に失敗しました。")
+        return redirect(url_for("users.me"))
+
+    to_user_id = share_result.get("to_user_id", "")
+    if to_user_id and not to_user_id.startswith("anon_"):
+        try:
+            send_line_message(to_user_id, _format_contact_share_message(share_result))
+        except Exception:
+            pass
+
+    flash("連絡先カードを共有しました。")
     return redirect(url_for("users.me"))

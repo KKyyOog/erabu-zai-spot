@@ -17,6 +17,34 @@
     <label>運搬情報 *</label>
     <textarea name="transport_info" rows="4" required placeholder="軽トラで搬送可能、4トンダンプで搬送可能など">{{ user.transport_info }}</textarea>
 
+    <h3>連絡先共有カード</h3>
+    <p class="hint">マッチ後に同意した相手だけへ共有されます。</p>
+
+    <label>共有用の表示名</label>
+    <input type="text" name="contact_display_name" value="{{ contact_card.display_name or user.display_name }}" placeholder="例：山田">
+
+    <label>連絡方法</label>
+    <select name="contact_method">
+      {% set method = contact_card.contact_method or '' %}
+      <option value="" {{ 'selected' if method == '' else '' }}>選択してください</option>
+      <option value="LINE" {{ 'selected' if method == 'LINE' else '' }}>LINE</option>
+      <option value="メール" {{ 'selected' if method == 'メール' else '' }}>メール</option>
+      <option value="電話" {{ 'selected' if method == '電話' else '' }}>電話</option>
+      <option value="その他" {{ 'selected' if method == 'その他' else '' }}>その他</option>
+    </select>
+
+    <label>連絡先</label>
+    <input type="text" name="contact_value" value="{{ contact_card.contact_value or '' }}" placeholder="例：LINE ID、メールアドレスなど">
+
+    <label>連絡しやすい時間帯</label>
+    <input type="text" name="contact_available_time" value="{{ contact_card.available_time or '' }}" placeholder="例：平日18時以降">
+
+    <label>対応可能エリア</label>
+    <input type="text" name="contact_area" value="{{ contact_card.contact_area or '' }}" placeholder="例：知名町周辺、島内全域など">
+
+    <label>ひとこと</label>
+    <textarea name="contact_message" rows="3" placeholder="例：まずはLINEで「マッチングの件」と送ってください。">{{ contact_card.message or '' }}</textarea>
+
     <button type="submit">更新する</button>
   </form>
 </section>

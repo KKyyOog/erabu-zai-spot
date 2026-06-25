@@ -18,6 +18,33 @@
     <label>運搬情報 *</label>
     <textarea name="transport_info" rows="4" required placeholder="軽トラで搬送可能、4トンダンプで搬送可能など"></textarea>
 
+    <h3>連絡先共有カード</h3>
+    <p class="hint">マッチ後に同意した相手だけへ共有されます。</p>
+
+    <label>共有用の表示名</label>
+    <input type="text" name="contact_display_name" placeholder="例：山田">
+
+    <label>連絡方法</label>
+    <select name="contact_method">
+      <option value="">選択してください</option>
+      <option value="LINE">LINE</option>
+      <option value="メール">メール</option>
+      <option value="電話">電話</option>
+      <option value="その他">その他</option>
+    </select>
+
+    <label>連絡先</label>
+    <input type="text" name="contact_value" placeholder="例：LINE ID、メールアドレスなど">
+
+    <label>連絡しやすい時間帯</label>
+    <input type="text" name="contact_available_time" placeholder="例：平日18時以降">
+
+    <label>対応可能エリア</label>
+    <input type="text" name="contact_area" placeholder="例：知名町周辺、島内全域など">
+
+    <label>ひとこと</label>
+    <textarea name="contact_message" rows="3" placeholder="例：まずはLINEで「マッチングの件」と送ってください。"></textarea>
+
     <button type="submit">登録する</button>
   </form>
 </section>

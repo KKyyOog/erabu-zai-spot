@@ -20,6 +20,33 @@
     <label>運搬情報 *</label>
     <textarea name="transport_info" id="transport_info" rows="4" required placeholder="軽トラで搬送可能、4トンダンプで搬送可能など"></textarea>
 
+    <h3>連絡先共有カード</h3>
+    <p class="hint">マッチ後に同意した相手だけへ共有されます。</p>
+
+    <label>共有用の表示名</label>
+    <input type="text" name="contact_display_name" id="contact_display_name" placeholder="例：山田">
+
+    <label>連絡方法</label>
+    <select name="contact_method" id="contact_method">
+      <option value="">選択してください</option>
+      <option value="LINE">LINE</option>
+      <option value="メール">メール</option>
+      <option value="電話">電話</option>
+      <option value="その他">その他</option>
+    </select>
+
+    <label>連絡先</label>
+    <input type="text" name="contact_value" id="contact_value" placeholder="例：LINE ID、メールアドレスなど">
+
+    <label>連絡しやすい時間帯</label>
+    <input type="text" name="contact_available_time" id="contact_available_time" placeholder="例：平日18時以降">
+
+    <label>対応可能エリア</label>
+    <input type="text" name="contact_area" id="contact_area" placeholder="例：知名町周辺、島内全域など">
+
+    <label>ひとこと</label>
+    <textarea name="contact_message" id="contact_message" rows="3" placeholder="例：まずはLINEで「マッチングの件」と送ってください。"></textarea>
+
     <button type="submit" id="submit-button">登録する</button>
   </form>
 </section>
@@ -104,20 +131,39 @@
 
   function renderMatchingHistory(history) {
     const container = document.getElementById('matching-history-container');
+    const currentUserId = document.getElementById('line_user_id').value;
     if (!history || history.length === 0) {
       container.innerHTML = '<p>まだマッチング履歴はありません。</p>';
       return;
     }
 
-    container.innerHTML = history.map((match) => `
-      <div class="matching-history-item">
-        <p><strong>材ID:</strong> ${escapeHtml(match.material_id)}</p>
-        <p><strong>操作:</strong> ${escapeHtml(match.action)}</p>
-        <p><strong>状態:</strong> ${escapeHtml(match.status)}</p>
-        <p><strong>メッセージ:</strong> ${escapeHtml(match.message)}</p>
-        <p><strong>日時:</strong> ${escapeHtml(match.created_at)}</p>
-      </div>
-    `).join('');
+    container.innerHTML = history.map((match) => {
+      const isProvider = match.provider_user_id === currentUserId;
+      const shareStatus = isProvider ? match.provider_contact_share_status : match.requester_contact_share_status;
+      const matchType = match.match_type || 'material';
+      const entryLabel = matchType === 'viewing' ? '見学ID' : '材ID';
+      const entryId = match.entry_id || match.material_id || match.property_id || '';
+      const shareAction = `/users/matches/${encodeURIComponent(matchType)}/${encodeURIComponent(match.match_id)}/share-contact`;
+      const shareControl = shareStatus === 'shared'
+        ? '<p class="hint">連絡先カード共有済み</p>'
+        : `
+          <form method="post" action="${shareAction}">
+            <input type="hidden" name="line_user_id" value="${escapeHtml(currentUserId)}">
+            <button type="submit">連絡先カードを共有する</button>
+          </form>
+        `;
+
+      return `
+        <div class="matching-history-item">
+          <p><strong>${entryLabel}:</strong> ${escapeHtml(entryId)}</p>
+          <p><strong>操作:</strong> ${escapeHtml(match.action)}</p>
+          <p><strong>状態:</strong> ${escapeHtml(match.status)}</p>
+          <p><strong>メッセージ:</strong> ${escapeHtml(match.message)}</p>
+          <p><strong>日時:</strong> ${escapeHtml(match.created_at)}</p>
+          ${shareControl}
+        </div>
+      `;
+    }).join('');
   }
 
   function fillUserForm(user) {
@@ -126,12 +172,22 @@
     document.getElementById('transport_info').value = user.transport_info || '';
   }
 
+  function fillContactCard(card, user) {
+    document.getElementById('contact_display_name').value = card.display_name || user.display_name || '';
+    document.getElementById('contact_method').value = card.contact_method || '';
+    document.getElementById('contact_value').value = card.contact_value || '';
+    document.getElementById('contact_available_time').value = card.available_time || '';
+    document.getElementById('contact_area').value = card.contact_area || '';
+    document.getElementById('contact_message').value = card.message || '';
+  }
+
   function clearUserForm() {
     fillUserForm({
       display_name: '',
       address: '',
       transport_info: '',
     });
+    fillContactCard({}, {});
   }
 
   async function initMeFlow() {
@@ -173,6 +229,7 @@
       }
       renderMaterials(body.materials || [], profile.userId);
       renderMatchingHistory(body.matching_history || []);
+      fillContactCard(body.contact_card || {}, body.user || {});
       if (body.ok && body.exists) {
         document.getElementById('form-title').textContent = 'ユーザー情報（更新）';
         fillUserForm(body.user || {});

@@ -34,6 +34,65 @@ DEMOLITION_HEADERS = [
 
 USER_FIELDS = ("display_name", "address", "transport_info")
 
+MATERIAL_MATCHING_HISTORY_SHEET = "材のマッチング履歴"
+VIEWING_MATCHING_HISTORY_SHEET = "見学マッチング履歴"
+CONTACT_CARDS_SHEET = "連絡先カード管理"
+CONTACT_SHARE_LOGS_SHEET = "連絡先共有履歴"
+
+MATCHING_HISTORY_HEADERS = [
+    "match_id",
+    "material_id",
+    "property_id",
+    "provider_user_id",
+    "requester_user_id",
+    "action",
+    "message",
+    "status",
+    "provider_contact_share_status",
+    "requester_contact_share_status",
+    "provider_contact_shared_at",
+    "requester_contact_shared_at",
+    "created_at",
+    "updated_at",
+]
+
+CONTACT_CARD_HEADERS = [
+    "contact_card_id",
+    "user_id",
+    "line_user_id",
+    "display_name",
+    "contact_method",
+    "contact_value",
+    "available_time",
+    "contact_area",
+    "message",
+    "is_active",
+    "created_at",
+    "updated_at",
+]
+
+CONTACT_SHARE_LOG_HEADERS = [
+    "contact_share_id",
+    "match_id",
+    "match_type",
+    "from_user_id",
+    "to_user_id",
+    "share_status",
+    "shared_display_name",
+    "shared_contact_method",
+    "shared_contact_value",
+    "shared_available_time",
+    "shared_contact_area",
+    "shared_message",
+    "consent_version",
+    "requested_at",
+    "shared_at",
+    "declined_at",
+    "expires_at",
+    "created_at",
+    "updated_at",
+]
+
 
 def _normalize_user_id(data=None, fallback=""):
     data = data or {}
@@ -95,8 +154,25 @@ def _get_or_create_sheet(sheet_name, headers):
     existing_headers = sheet.row_values(1)
     if not existing_headers:
         sheet.append_row(headers)
+    else:
+        missing_headers = [header for header in headers if header not in existing_headers]
+        if missing_headers:
+            start_col = len(existing_headers) + 1
+            end_col = start_col + len(missing_headers) - 1
+            sheet.update(
+                f"{_column_letter(start_col)}1:{_column_letter(end_col)}1",
+                [missing_headers],
+            )
 
     return sheet
+
+
+def _column_letter(index):
+    letters = ""
+    while index:
+        index, remainder = divmod(index - 1, 26)
+        letters = chr(65 + remainder) + letters
+    return letters
 
 
 def _get_header_map(sheet):
@@ -276,33 +352,233 @@ def get_materials_by_line_user_id(line_user_id, include_all=False):
     return filtered
 
 
-def append_matching_history(data):
-    sheet = _get_sheet("マッチング履歴")
+def _matching_sheet_name(match_type="material"):
+    if match_type == "viewing":
+        return VIEWING_MATCHING_HISTORY_SHEET
+    return MATERIAL_MATCHING_HISTORY_SHEET
+
+
+def _get_matching_sheet(match_type="material"):
+    return _get_or_create_sheet(_matching_sheet_name(match_type), MATCHING_HISTORY_HEADERS)
+
+
+def append_matching_history(data, match_type="material"):
+    sheet = _get_matching_sheet(match_type)
     match_id = f"match_{uuid4().hex[:10]}"
 
-    row = [
-        match_id,
-        data.get("material_id", ""),
-        data.get("provider_user_id", ""),
-        data.get("requester_user_id", ""),
-        data.get("action", ""),
-        data.get("message", ""),
-        data.get("status", "未対応"),
-        _now(),
-    ]
+    row, _ = _build_row_for_headers(
+        sheet,
+        {
+            "match_id": match_id,
+            "material_id": data.get("material_id", ""),
+            "property_id": data.get("property_id", ""),
+            "provider_user_id": data.get("provider_user_id", ""),
+            "requester_user_id": data.get("requester_user_id", ""),
+            "action": data.get("action", ""),
+            "message": data.get("message", ""),
+            "status": data.get("status", "未対応"),
+            "provider_contact_share_status": data.get("provider_contact_share_status", "not_requested"),
+            "requester_contact_share_status": data.get("requester_contact_share_status", "not_requested"),
+            "created_at": _now(),
+            "updated_at": _now(),
+        },
+    )
     sheet.append_row(row)
     return match_id
 
 
 def get_matching_history_by_user(line_user_id):
-    sheet = _get_sheet("マッチング履歴")
+    history = []
+    for match_type in ("material", "viewing"):
+        try:
+            sheet = _get_matching_sheet(match_type)
+            records = sheet.get_all_records()
+        except Exception:
+            records = []
+
+        for record in records:
+            if (
+                record.get("provider_user_id") == line_user_id
+                or record.get("requester_user_id") == line_user_id
+            ):
+                record["match_type"] = match_type
+                record["entry_id"] = record.get("material_id") or record.get("property_id")
+                history.append(record)
+
+    return sorted(history, key=lambda record: str(record.get("created_at", "")), reverse=True)
+
+
+def get_matching_history_by_id(match_id, match_type="material"):
+    sheet = _get_matching_sheet(match_type)
     records = sheet.get_all_records()
-    return [
-        record
-        for record in records
-        if record.get("provider_user_id") == line_user_id
-        or record.get("requester_user_id") == line_user_id
-    ]
+    for idx, record in enumerate(records, start=2):
+        if record.get("match_id") == match_id:
+            record["match_type"] = match_type
+            record["entry_id"] = record.get("material_id") or record.get("property_id")
+            return idx, record
+    return None, None
+
+
+def update_matching_contact_share_status(match_id, match_type, user_id, status):
+    sheet = _get_matching_sheet(match_type)
+    row_index, record = get_matching_history_by_id(match_id, match_type)
+    if not row_index:
+        return False
+
+    if record.get("provider_user_id") == user_id:
+        status_field = "provider_contact_share_status"
+        shared_at_field = "provider_contact_shared_at"
+    elif record.get("requester_user_id") == user_id:
+        status_field = "requester_contact_share_status"
+        shared_at_field = "requester_contact_shared_at"
+    else:
+        return False
+
+    header_map = _get_header_map(sheet)
+    now = _now()
+    if header_map.get(status_field):
+        sheet.update_cell(row_index, header_map[status_field], status)
+    if status == "shared" and header_map.get(shared_at_field):
+        sheet.update_cell(row_index, header_map[shared_at_field], now)
+    if header_map.get("updated_at"):
+        sheet.update_cell(row_index, header_map["updated_at"], now)
+    return True
+
+
+def get_contact_card_by_user(line_user_id):
+    sheet = _get_or_create_sheet(CONTACT_CARDS_SHEET, CONTACT_CARD_HEADERS)
+    records = sheet.get_all_records()
+    for record in records:
+        if (
+            record.get("line_user_id") == line_user_id
+            or record.get("user_id") == line_user_id
+        ):
+            return record
+    return None
+
+
+def upsert_contact_card(line_user_id, data):
+    sheet = _get_or_create_sheet(CONTACT_CARDS_SHEET, CONTACT_CARD_HEADERS)
+    records = sheet.get_all_records()
+    header_map = _get_header_map(sheet)
+    now = _now()
+    contact_card_id = ""
+    row_index = None
+
+    for idx, record in enumerate(records, start=2):
+        if (
+            record.get("line_user_id") == line_user_id
+            or record.get("user_id") == line_user_id
+        ):
+            row_index = idx
+            contact_card_id = record.get("contact_card_id", "")
+            break
+
+    if not contact_card_id:
+        contact_card_id = f"contact_{uuid4().hex[:10]}"
+
+    values = {
+        "contact_card_id": contact_card_id,
+        "user_id": line_user_id,
+        "line_user_id": line_user_id,
+        "display_name": data.get("contact_display_name") or data.get("display_name", ""),
+        "contact_method": data.get("contact_method", ""),
+        "contact_value": data.get("contact_value", ""),
+        "available_time": data.get("contact_available_time", ""),
+        "contact_area": data.get("contact_area", ""),
+        "message": data.get("contact_message", ""),
+        "is_active": data.get("contact_is_active", "TRUE"),
+        "updated_at": now,
+    }
+
+    if row_index:
+        for field, value in values.items():
+            if header_map.get(field):
+                sheet.update_cell(row_index, header_map[field], value)
+        return contact_card_id
+
+    values["created_at"] = now
+    row, _ = _build_row_for_headers(sheet, values)
+    sheet.append_row(row)
+    return contact_card_id
+
+
+def append_contact_share_log(data):
+    sheet = _get_or_create_sheet(CONTACT_SHARE_LOGS_SHEET, CONTACT_SHARE_LOG_HEADERS)
+    now = _now()
+    contact_share_id = f"share_{uuid4().hex[:10]}"
+    row, _ = _build_row_for_headers(
+        sheet,
+        {
+            "contact_share_id": contact_share_id,
+            "match_id": data.get("match_id", ""),
+            "match_type": data.get("match_type", ""),
+            "from_user_id": data.get("from_user_id", ""),
+            "to_user_id": data.get("to_user_id", ""),
+            "share_status": data.get("share_status", "shared"),
+            "shared_display_name": data.get("shared_display_name", ""),
+            "shared_contact_method": data.get("shared_contact_method", ""),
+            "shared_contact_value": data.get("shared_contact_value", ""),
+            "shared_available_time": data.get("shared_available_time", ""),
+            "shared_contact_area": data.get("shared_contact_area", ""),
+            "shared_message": data.get("shared_message", ""),
+            "consent_version": data.get("consent_version", "contact_share_v1"),
+            "requested_at": data.get("requested_at", ""),
+            "shared_at": data.get("shared_at", now),
+            "declined_at": data.get("declined_at", ""),
+            "expires_at": data.get("expires_at", ""),
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    sheet.append_row(row)
+    return contact_share_id
+
+
+def record_contact_share(match_id, match_type, from_user_id):
+    row_index, match = get_matching_history_by_id(match_id, match_type)
+    if not row_index:
+        return None, "match_not_found"
+
+    if match.get("provider_user_id") == from_user_id:
+        to_user_id = match.get("requester_user_id", "")
+    elif match.get("requester_user_id") == from_user_id:
+        to_user_id = match.get("provider_user_id", "")
+    else:
+        return None, "not_match_member"
+
+    card = get_contact_card_by_user(from_user_id)
+    if not card or not card.get("contact_value"):
+        return None, "contact_card_missing"
+    if str(card.get("is_active", "TRUE")).upper() in ("FALSE", "0", "NO", "OFF"):
+        return None, "contact_card_inactive"
+
+    shared_at = _now()
+    share_id = append_contact_share_log(
+        {
+            "match_id": match_id,
+            "match_type": match_type,
+            "from_user_id": from_user_id,
+            "to_user_id": to_user_id,
+            "share_status": "shared",
+            "shared_display_name": card.get("display_name", ""),
+            "shared_contact_method": card.get("contact_method", ""),
+            "shared_contact_value": card.get("contact_value", ""),
+            "shared_available_time": card.get("available_time", ""),
+            "shared_contact_area": card.get("contact_area", ""),
+            "shared_message": card.get("message", ""),
+            "shared_at": shared_at,
+        }
+    )
+    update_matching_contact_share_status(match_id, match_type, from_user_id, "shared")
+    return {
+        "contact_share_id": share_id,
+        "match": match,
+        "card": card,
+        "from_user_id": from_user_id,
+        "to_user_id": to_user_id,
+        "shared_at": shared_at,
+    }, None
 
 
 def append_user(data):
