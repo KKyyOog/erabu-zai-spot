@@ -5,8 +5,12 @@
   <p class="entry-badge demolition">解体物件</p>
   <h2>{{ property_record.property_name or property_record.location or '物件名未設定' }}</h2>
 
-  {% if property_record.building_photo_url %}
-    <img class="detail-image" src="{{ property_record.building_photo_url }}" alt="{{ property_record.property_name or property_record.location }}">
+  {% if property_record.building_photo_urls %}
+    <div class="detail-carousel" aria-label="{{ property_record.property_name or property_record.location or '物件写真' }}">
+      {% for image_url in property_record.building_photo_urls %}
+        <img class="detail-image" src="{{ image_url }}" alt="{{ property_record.property_name or property_record.location or '物件写真' }}">
+      {% endfor %}
+    </div>
   {% endif %}
 
   <dl class="detail-list">

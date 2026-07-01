@@ -15,8 +15,12 @@
       {% for item in items %}
         <article class="listing-card">
           <div class="listing-card__image">
-            {% if item.image_url %}
-              <img src="{{ item.image_url }}" alt="{{ item.title }}">
+            {% if item.image_urls %}
+              <div class="image-carousel" aria-label="{{ item.title or item.location or '登録写真' }}">
+                {% for image_url in item.image_urls %}
+                  <img src="{{ image_url }}" alt="{{ item.title or item.location or '登録写真' }}">
+                {% endfor %}
+              </div>
             {% else %}
               <span>写真なし</span>
             {% endif %}
@@ -49,7 +53,15 @@
                   <dd>{{ item.condition or '未設定' }}</dd>
                 </div>
               </dl>
-              <a class="button-link compact" href="{{ url_for('materials.detail', material_id=item.id) }}">詳細を見る</a>
+              <div class="listing-actions">
+                <a class="button-link compact" href="{{ url_for('materials.detail', material_id=item.id) }}">詳細を見る</a>
+                <form method="post" action="{{ url_for('materials.interest') }}">
+                  <input type="hidden" name="material_id" value="{{ item.id }}">
+                  <input type="hidden" name="line_user_id">
+                  <input type="hidden" name="return_type" value="{{ display_filter }}">
+                  <button type="submit">欲しい</button>
+                </form>
+              </div>
             </div>
           {% else %}
             <div class="listing-card__body">

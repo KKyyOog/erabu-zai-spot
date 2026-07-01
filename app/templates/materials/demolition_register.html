@@ -62,11 +62,11 @@
     <label>築年数</label>
     <input type="text" name="building_age" placeholder="例：築40年、昭和50年代など">
 
-    <label>建物写真（ファイルまたはカメラ）</label>
-    <input type="file" name="building_image_file" accept="image/*" capture="environment">
+    <label>建物写真（複数選択可）</label>
+    <input type="file" name="building_image_files" accept="image/*" multiple>
 
-    <label>建物写真URL（任意）</label>
-    <input type="url" name="building_photo_url" placeholder="Google Drive等の画像URL（ファイルを選ばない場合）">
+    <label>建物写真URL（任意・複数可）</label>
+    <textarea name="building_photo_urls_text" rows="3" placeholder="Google Drive等の画像URL"></textarea>
 
     <label>状態評価</label>
     <textarea name="condition_evaluation" rows="4" placeholder="例：柱や建具は再利用できそう、雨漏りあり、現地確認が必要など"></textarea>

@@ -10,6 +10,24 @@ import json
 
 SCOPE = ["https://www.googleapis.com/auth/spreadsheets"]
 
+MATERIAL_HEADERS = [
+    "material_id",
+    "line_user_id",
+    "display_name",
+    "title",
+    "material_type",
+    "description",
+    "size",
+    "quantity",
+    "condition",
+    "location",
+    "pickup_deadline",
+    "image_url",
+    "image_urls",
+    "status",
+    "created_at",
+]
+
 DEMOLITION_HEADERS = [
     "property_id",
     "line_user_id",
@@ -26,6 +44,7 @@ DEMOLITION_HEADERS = [
     "floors",
     "building_age",
     "building_photo_url",
+    "building_photo_urls",
     "condition_evaluation",
     "notes",
     "status",
@@ -167,6 +186,10 @@ def _get_or_create_sheet(sheet_name, headers):
     return sheet
 
 
+def _get_material_sheet():
+    return _get_or_create_sheet("材登録", MATERIAL_HEADERS)
+
+
 def _column_letter(index):
     letters = ""
     while index:
@@ -232,7 +255,7 @@ def _now():
 
 
 def append_material(data):
-    sheet = _get_sheet("材登録")
+    sheet = _get_material_sheet()
     material_id = f"mat_{uuid4().hex[:10]}"
 
     # line_user_id が空の場合、一意のIDを生成
@@ -255,6 +278,7 @@ def append_material(data):
             "location": data.get("location", ""),
             "pickup_deadline": data.get("pickup_deadline", ""),
             "image_url": data.get("image_url", ""),
+            "image_urls": data.get("image_urls", ""),
             "status": "募集中",
             "created_at": _now(),
         },
@@ -291,6 +315,7 @@ def append_demolition_property(data):
             "floors": data.get("floors", ""),
             "building_age": data.get("building_age", ""),
             "building_photo_url": data.get("building_photo_url", ""),
+            "building_photo_urls": data.get("building_photo_urls", ""),
             "condition_evaluation": data.get("condition_evaluation", ""),
             "notes": data.get("notes", ""),
             "status": "登録済み",
@@ -324,7 +349,7 @@ def get_demolition_property_by_id(property_id):
 
 
 def get_materials(include_all=False):
-    sheet = _get_sheet("材登録")
+    sheet = _get_material_sheet()
     records = sheet.get_all_records()
 
     if include_all:
@@ -652,7 +677,7 @@ def update_user(line_user_id, data):
 
 
 def update_material_status(material_id, status):
-    sheet = _get_sheet("材登録")
+    sheet = _get_material_sheet()
     records = sheet.get_all_records()
 
     headers = sheet.row_values(1)

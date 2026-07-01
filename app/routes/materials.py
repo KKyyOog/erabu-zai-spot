@@ -1,3 +1,4 @@
+import json
 import os
 
 import cloudinary
@@ -48,6 +49,61 @@ def _upload_image(image_file):
     return upload_result.get("secure_url", "")
 
 
+def _upload_images(image_files):
+    image_urls = []
+    for image_file in image_files:
+        if not image_file or not image_file.filename:
+            continue
+        image_url = _upload_image(image_file)
+        if image_url:
+            image_urls.append(image_url)
+    return image_urls
+
+
+def _split_image_urls(value):
+    if not value:
+        return []
+
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    text = str(value).strip()
+    if not text:
+        return []
+
+    if text.startswith("["):
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except json.JSONDecodeError:
+            pass
+
+    urls = []
+    for line in text.replace(",", "\n").splitlines():
+        url = line.strip()
+        if url:
+            urls.append(url)
+    return urls
+
+
+def _dedupe_urls(urls):
+    deduped = []
+    seen = set()
+    for url in urls:
+        if url and url not in seen:
+            deduped.append(url)
+            seen.add(url)
+    return deduped
+
+
+def _collect_image_urls(record, primary_field, collection_field):
+    return _dedupe_urls(
+        _split_image_urls(record.get(collection_field, ""))
+        + _split_image_urls(record.get(primary_field, ""))
+    )
+
+
 def _sort_key_created_at(item):
     value = item.get("created_at", "")
     if not value:
@@ -60,12 +116,14 @@ def _build_listing_items(display_filter):
 
     if display_filter in ("all", "materials"):
         for material in get_materials():
+            image_urls = _collect_image_urls(material, "image_url", "image_urls")
             items.append(
                 {
                     "entry_type": "material",
                     "id": material.get("material_id", ""),
                     "title": material.get("title", ""),
-                    "image_url": material.get("image_url", ""),
+                    "image_url": image_urls[0] if image_urls else "",
+                    "image_urls": image_urls,
                     "location": material.get("location", ""),
                     "status": material.get("status", ""),
                     "created_at": material.get("created_at", ""),
@@ -77,12 +135,18 @@ def _build_listing_items(display_filter):
 
     if display_filter in ("all", "demolitions"):
         for property_record in get_demolition_properties():
+            image_urls = _collect_image_urls(
+                property_record,
+                "building_photo_url",
+                "building_photo_urls",
+            )
             items.append(
                 {
                     "entry_type": "demolition",
                     "id": property_record.get("property_id", ""),
                     "title": property_record.get("property_name", ""),
-                    "image_url": property_record.get("building_photo_url", ""),
+                    "image_url": image_urls[0] if image_urls else "",
+                    "image_urls": image_urls,
                     "location": property_record.get("location", ""),
                     "status": property_record.get("status", ""),
                     "created_at": property_record.get("created_at", ""),
@@ -148,8 +212,15 @@ def register_demolition():
 @materials_bp.route("/submit", methods=["POST"])
 def submit():
     form = request.form.to_dict()
-    image_file = request.files.get("image_file")
-    final_image_url = form.get("image_url", "")
+    image_files = [image_file for image_file in request.files.getlist("image_files") if image_file and image_file.filename]
+    legacy_image_file = request.files.get("image_file")
+    if legacy_image_file and legacy_image_file.filename:
+        image_files.append(legacy_image_file)
+    input_image_urls = _dedupe_urls(
+        _split_image_urls(form.get("image_url", ""))
+        + _split_image_urls(form.get("image_urls_text", ""))
+    )
+    final_image_urls = input_image_urls
 
     required_fields = ["title", "material_type", "location"]
     missing = [field for field in required_fields if not form.get(field)]
@@ -158,10 +229,11 @@ def submit():
         flash("必須項目が入力されていません。")
         return redirect(url_for("materials.register_material"))
 
-    if image_file and image_file.filename:
+    if image_files:
         try:
-            final_image_url = _upload_image(image_file)
-            current_app.logger.info("[materials.submit] cloudinary upload success secure_url=%s", final_image_url)
+            uploaded_image_urls = _upload_images(image_files)
+            final_image_urls = _dedupe_urls(uploaded_image_urls + input_image_urls)
+            current_app.logger.info("[materials.submit] cloudinary upload success count=%s", len(uploaded_image_urls))
         except ValueError as exc:
             flash(str(exc))
             return redirect(url_for("materials.register_material"))
@@ -174,10 +246,11 @@ def submit():
         form["line_user_id"] = ""
         form["display_name"] = ""
 
-    form["image_url"] = final_image_url
+    form["image_url"] = final_image_urls[0] if final_image_urls else ""
+    form["image_urls"] = json.dumps(final_image_urls, ensure_ascii=False)
     current_app.logger.info(
-        "[materials.submit] final image_url before save=%s line_user_id=%s title=%s",
-        form.get("image_url", ""),
+        "[materials.submit] final image count before save=%s line_user_id=%s title=%s",
+        len(final_image_urls),
         form.get("line_user_id", ""),
         form.get("title", ""),
     )
@@ -190,8 +263,19 @@ def submit():
 @materials_bp.route("/demolitions/submit", methods=["POST"])
 def submit_demolition():
     form = request.form.to_dict()
-    image_file = request.files.get("building_image_file")
-    final_image_url = form.get("building_photo_url", "")
+    image_files = [
+        image_file
+        for image_file in request.files.getlist("building_image_files")
+        if image_file and image_file.filename
+    ]
+    legacy_image_file = request.files.get("building_image_file")
+    if legacy_image_file and legacy_image_file.filename:
+        image_files.append(legacy_image_file)
+    input_image_urls = _dedupe_urls(
+        _split_image_urls(form.get("building_photo_url", ""))
+        + _split_image_urls(form.get("building_photo_urls_text", ""))
+    )
+    final_image_urls = input_image_urls
 
     required_fields = ["property_name", "location", "registrant_type"]
     missing = [field for field in required_fields if not form.get(field)]
@@ -200,10 +284,11 @@ def submit_demolition():
         flash("必須項目が入力されていません。")
         return redirect(url_for("materials.register_demolition"))
 
-    if image_file and image_file.filename:
+    if image_files:
         try:
-            final_image_url = _upload_image(image_file)
-            current_app.logger.info("[demolitions.submit] cloudinary upload success secure_url=%s", final_image_url)
+            uploaded_image_urls = _upload_images(image_files)
+            final_image_urls = _dedupe_urls(uploaded_image_urls + input_image_urls)
+            current_app.logger.info("[demolitions.submit] cloudinary upload success count=%s", len(uploaded_image_urls))
         except ValueError as exc:
             flash(str(exc))
             return redirect(url_for("materials.register_demolition"))
@@ -216,7 +301,8 @@ def submit_demolition():
         form["line_user_id"] = ""
         form["display_name"] = ""
 
-    form["building_photo_url"] = final_image_url
+    form["building_photo_url"] = final_image_urls[0] if final_image_urls else ""
+    form["building_photo_urls"] = json.dumps(final_image_urls, ensure_ascii=False)
     append_demolition_property(form)
     flash("解体物件を登録しました。")
     return redirect(url_for("materials.list_materials"))
@@ -247,6 +333,7 @@ def detail(material_id):
     material = get_material_by_id(material_id)
     if not material:
         return "指定された材が見つかりません。", 404
+    material["image_urls"] = _collect_image_urls(material, "image_url", "image_urls")
     return render_template("materials/detail.html", material=material)
 
 
@@ -255,6 +342,11 @@ def demolition_detail(property_id):
     property_record = get_demolition_property_by_id(property_id)
     if not property_record:
         return "指定された解体物件が見つかりません。", 404
+    property_record["building_photo_urls"] = _collect_image_urls(
+        property_record,
+        "building_photo_url",
+        "building_photo_urls",
+    )
     return render_template("materials/demolition_detail.html", property_record=property_record)
 
 
@@ -268,7 +360,7 @@ def delete(material_id):
 
     if line_user_id:
         return redirect(url_for("users.detail", line_user_id=line_user_id))
-    return redirect(url_for("materials.list_materials"))
+    return redirect(url_for("materials.list_materials", type=request.form.get("return_type", "all")))
 
 
 @materials_bp.route("/interest", methods=["POST"])
@@ -313,7 +405,7 @@ def interest():
     )
 
     flash("欲しい通知を送信しました。")
-    return redirect(url_for("materials.list_materials"))
+    return redirect(url_for("materials.list_materials", type=request.form.get("return_type", "all")))
 
 
 @materials_bp.route("/demolitions/visit-interest", methods=["POST"])

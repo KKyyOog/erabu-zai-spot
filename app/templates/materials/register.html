@@ -48,11 +48,11 @@
     <label>引取期限</label>
     <input type="date" name="pickup_deadline">
 
-    <label>写真（ファイルまたはカメラ）</label>
-    <input type="file" name="image_file" accept="image/*" capture="environment">
+    <label>写真（複数選択可）</label>
+    <input type="file" name="image_files" accept="image/*" multiple>
 
-    <label>写真URL（任意）</label>
-    <input type="url" name="image_url" placeholder="Google Drive等の画像URL（ファイルを選ばない場合）">
+    <label>写真URL（任意・複数可）</label>
+    <textarea name="image_urls_text" rows="3" placeholder="Google Drive等の画像URL"></textarea>
 
     <button type="submit">登録する</button>
   </form>

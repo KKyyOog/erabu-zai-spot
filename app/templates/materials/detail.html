@@ -4,8 +4,12 @@
 <article class="card">
   <h2>{{ material.title }}</h2>
 
-  {% if material.image_url %}
-    <img class="detail-image" src="{{ material.image_url }}" alt="{{ material.title }}">
+  {% if material.image_urls %}
+    <div class="detail-carousel" aria-label="{{ material.title or '材の写真' }}">
+      {% for image_url in material.image_urls %}
+        <img class="detail-image" src="{{ image_url }}" alt="{{ material.title or '材の写真' }}">
+      {% endfor %}
+    </div>
   {% endif %}
 
   <dl class="detail-list">
