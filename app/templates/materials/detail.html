@@ -8,13 +8,42 @@
     <img class="detail-image" src="{{ material.image_url }}" alt="{{ material.title }}">
   {% endif %}
 
-  <p><strong>種類：</strong>{{ material.material_type }}</p>
-  <p><strong>説明：</strong>{{ material.description }}</p>
-  <p><strong>寸法：</strong>{{ material.size }}</p>
-  <p><strong>数量：</strong>{{ material.quantity }}</p>
-  <p><strong>状態：</strong>{{ material.condition }}</p>
-  <p><strong>保管場所：</strong>{{ material.location }}</p>
-  <p><strong>引取期限：</strong>{{ material.pickup_deadline }}</p>
+  <dl class="detail-list">
+    <div>
+      <dt>種類</dt>
+      <dd>{{ material.material_type or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>説明</dt>
+      <dd>{{ material.description or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>寸法</dt>
+      <dd>{{ material.size or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>数量</dt>
+      <dd>{{ material.quantity or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>状態</dt>
+      <dd>{{ material.condition or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>保管場所</dt>
+      <dd>{{ material.location or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>引取期限</dt>
+      <dd>{{ material.pickup_deadline|date_jp if material.pickup_deadline else '未設定' }}</dd>
+    </div>
+    {% if material.created_at %}
+      <div>
+        <dt>登録日</dt>
+        <dd>{{ material.created_at|date_jp }}</dd>
+      </div>
+    {% endif %}
+  </dl>
 
   <form method="post" action="{{ url_for('materials.interest') }}">
     <input type="hidden" name="material_id" value="{{ material.material_id }}">

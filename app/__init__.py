@@ -1,6 +1,8 @@
 import os
 import logging
+from datetime import datetime
 
+import truststore
 from flask import Flask, request
 
 from app.routes.materials import materials_bp
@@ -13,6 +15,7 @@ from app.config import Config
 
 def create_app():
     logging.basicConfig(level=logging.INFO)
+    truststore.inject_into_ssl()
 
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -28,6 +31,27 @@ def create_app():
     @app.context_processor
     def inject_liff_id():
         return {"LIFF_ID": app.config["LIFF_ID"]}
+
+    @app.template_filter("date_jp")
+    def date_jp(value):
+        if not value:
+            return ""
+
+        text = str(value).strip()
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d",
+            "%Y/%m/%d %H:%M:%S",
+            "%Y/%m/%d",
+        ):
+            try:
+                parsed = datetime.strptime(text[:19], fmt)
+                return f"{parsed.year}年{parsed.month}月{parsed.day}日"
+            except ValueError:
+                continue
+
+        return text.split(" ")[0]
 
     @app.before_request
     def log_debug_request():

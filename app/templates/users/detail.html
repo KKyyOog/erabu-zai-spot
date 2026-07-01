@@ -63,10 +63,30 @@
   <h3>自分の材登録履歴</h3>
   {% if materials %}
     {% for material in materials %}
-      <div class="material-history-item">
-        <p><strong>{{ material.title }}</strong>（{{ material.material_type }}）</p>
-        <p>場所: {{ material.location }} / 状態: {{ material.status }}</p>
-        <p>登録日: {{ material.created_at }}</p>
+      <div class="history-card material-history-item">
+        <div class="history-card__header">
+          <div>
+            <span class="entry-badge">材登録</span>
+            <h4>{{ material.title or '名称未設定' }}</h4>
+          </div>
+          {% if material.created_at %}
+            <span class="listing-date">{{ material.created_at|date_jp }}</span>
+          {% endif %}
+        </div>
+        <dl class="summary-list compact-list">
+          <div>
+            <dt>種類</dt>
+            <dd>{{ material.material_type or '未設定' }}</dd>
+          </div>
+          <div>
+            <dt>所在地</dt>
+            <dd>{{ material.location or '未設定' }}</dd>
+          </div>
+          <div>
+            <dt>状態</dt>
+            <dd>{{ material.status or '未設定' }}</dd>
+          </div>
+        </dl>
         <form method="post" action="{{ url_for('materials.delete', material_id=material.material_id) }}">
           <input type="hidden" name="line_user_id" value="{{ user.line_user_id }}">
           <button type="submit">削除する</button>
@@ -82,15 +102,30 @@
   <h3>マッチング履歴</h3>
   {% if matching_history %}
     {% for match in matching_history %}
-      <div class="matching-history-item">
-        <p><strong>{{ '見学ID' if match.match_type == 'viewing' else '材ID' }}:</strong> {{ match.entry_id or match.material_id or match.property_id }}</p>
-        <p><strong>操作:</strong> {{ match.action }}</p>
-        <p><strong>状態:</strong> {{ match.status }}</p>
-        <p><strong>メッセージ:</strong> {{ match.message }}</p>
-        <p><strong>日時:</strong> {{ match.created_at }}</p>
+      {% set is_provider = match.provider_user_id == user.line_user_id %}
+      <div class="history-card matching-history-item">
+        <div class="history-card__header">
+          <div>
+            <span class="entry-badge {{ 'demolition' if match.match_type == 'viewing' else '' }}">
+              {{ '見学マッチング' if match.match_type == 'viewing' else '材マッチング' }}
+            </span>
+            <h4>{{ match.entry_id or match.material_id or match.property_id or 'ID未設定' }}</h4>
+          </div>
+          {% if match.created_at %}
+            <span class="listing-date">{{ match.created_at|date_jp }}</span>
+          {% endif %}
+        </div>
+        <div class="match-meta">
+          <span>{{ '登録者側' if is_provider else '希望者側' }}</span>
+          <span>{{ match.action or '操作未設定' }}</span>
+          <span>{{ match.status or '状態未設定' }}</span>
+        </div>
+        {% if match.message %}
+          <p class="match-message">{{ match.message }}</p>
+        {% endif %}
         {% set share_status = match.provider_contact_share_status if match.provider_user_id == user.line_user_id else match.requester_contact_share_status %}
         {% if share_status == 'shared' %}
-          <p class="hint">連絡先カード共有済み</p>
+          <p class="share-status shared">連絡先カード共有済み</p>
         {% else %}
           <form method="post" action="{{ url_for('users.share_contact', match_type=match.match_type or 'material', match_id=match.match_id) }}">
             <input type="hidden" name="line_user_id" value="{{ user.line_user_id }}">

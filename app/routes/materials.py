@@ -70,7 +70,6 @@ def _build_listing_items(display_filter):
                     "status": material.get("status", ""),
                     "created_at": material.get("created_at", ""),
                     "material_type": material.get("material_type", ""),
-                    "size": material.get("size", ""),
                     "quantity": material.get("quantity", ""),
                     "condition": material.get("condition", ""),
                 }
@@ -87,15 +86,9 @@ def _build_listing_items(display_filter):
                     "location": property_record.get("location", ""),
                     "status": property_record.get("status", ""),
                     "created_at": property_record.get("created_at", ""),
+                    "registrant_name": property_record.get("display_name", ""),
                     "registrant_type": property_record.get("registrant_type", ""),
                     "demolition_date": property_record.get("demolition_date", ""),
-                    "demolition_contractor": property_record.get("demolition_contractor", ""),
-                    "viewing_period": property_record.get("viewing_period", ""),
-                    "building_use": property_record.get("building_use", ""),
-                    "structure": property_record.get("structure", ""),
-                    "floors": property_record.get("floors", ""),
-                    "building_age": property_record.get("building_age", ""),
-                    "condition_evaluation": property_record.get("condition_evaluation", ""),
                 }
             )
 
@@ -235,7 +228,13 @@ def list_materials():
     if display_filter not in ("all", "materials", "demolitions"):
         display_filter = "all"
 
-    items = _build_listing_items(display_filter)
+    try:
+        items = _build_listing_items(display_filter)
+    except Exception:
+        current_app.logger.exception("[materials.list] failed to load listing items")
+        flash("登録情報の読み込みに失敗しました。時間をおいて再度お試しください。")
+        items = []
+
     return render_template(
         "materials/list.html",
         items=items,
@@ -249,6 +248,14 @@ def detail(material_id):
     if not material:
         return "指定された材が見つかりません。", 404
     return render_template("materials/detail.html", material=material)
+
+
+@materials_bp.route("/demolitions/<property_id>", methods=["GET"])
+def demolition_detail(property_id):
+    property_record = get_demolition_property_by_id(property_id)
+    if not property_record:
+        return "指定された解体物件が見つかりません。", 404
+    return render_template("materials/demolition_detail.html", property_record=property_record)
 
 
 @materials_bp.route("/<material_id>/delete", methods=["POST"])

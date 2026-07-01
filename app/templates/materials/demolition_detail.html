@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block content %}
+<article class="card">
+  <p class="entry-badge demolition">解体物件</p>
+  <h2>{{ property_record.property_name or property_record.location or '物件名未設定' }}</h2>
+
+  {% if property_record.building_photo_url %}
+    <img class="detail-image" src="{{ property_record.building_photo_url }}" alt="{{ property_record.property_name or property_record.location }}">
+  {% endif %}
+
+  <dl class="detail-list">
+    <div>
+      <dt>所在地</dt>
+      <dd>{{ property_record.location or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>登録者</dt>
+      <dd>{{ property_record.display_name or property_record.registrant_type or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>解体予定日</dt>
+      <dd>{{ property_record.demolition_date|date_jp if property_record.demolition_date else '未定' }}</dd>
+    </div>
+    <div>
+      <dt>解体業者</dt>
+      <dd>{{ property_record.demolition_contractor or '未定' }}</dd>
+    </div>
+    <div>
+      <dt>見学期間</dt>
+      <dd>{{ property_record.viewing_period or '未定' }}</dd>
+    </div>
+    <div>
+      <dt>建物用途</dt>
+      <dd>{{ property_record.building_use or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>構造</dt>
+      <dd>{{ property_record.structure or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>階数</dt>
+      <dd>{{ property_record.floors or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>築年数</dt>
+      <dd>{{ property_record.building_age or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>状態評価</dt>
+      <dd>{{ property_record.condition_evaluation or '未設定' }}</dd>
+    </div>
+    <div>
+      <dt>備考</dt>
+      <dd>{{ property_record.notes or 'なし' }}</dd>
+    </div>
+    {% if property_record.created_at %}
+      <div>
+        <dt>登録日</dt>
+        <dd>{{ property_record.created_at|date_jp }}</dd>
+      </div>
+    {% endif %}
+  </dl>
+
+  <form method="post" action="{{ url_for('materials.visit_interest') }}">
+    <input type="hidden" name="property_id" value="{{ property_record.property_id }}">
+    <input type="hidden" name="line_user_id" id="line_user_id">
+    <input type="hidden" name="user_id" id="user_id">
+    <button type="submit">見学したい</button>
+  </form>
+</article>
+
+<script>
+  window.LIFF_ID = {{ LIFF_ID|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/liff.js') }}"></script>
+{% endblock %}

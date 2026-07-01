@@ -109,6 +109,24 @@
       .replaceAll("'", '&#39;');
   }
 
+  function formatDateJp(value) {
+    if (!value) {
+      return '';
+    }
+    const normalized = String(value).trim().replace(' ', 'T');
+    const date = new Date(normalized);
+    if (!Number.isNaN(date.getTime())) {
+      return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+    }
+
+    const match = String(value).match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (match) {
+      return `${Number(match[1])}年${Number(match[2])}月${Number(match[3])}日`;
+    }
+
+    return String(value).split(' ')[0];
+  }
+
   function renderMaterials(materials, userId) {
     const container = document.getElementById('materials-container');
     if (!materials || materials.length === 0) {
@@ -117,10 +135,28 @@
     }
 
     container.innerHTML = materials.map((material) => `
-      <div class="material-history-item">
-        <p><strong>${escapeHtml(material.title)}</strong>（${escapeHtml(material.material_type)}）</p>
-        <p>場所: ${escapeHtml(material.location)} / 状態: ${escapeHtml(material.status)}</p>
-        <p>登録日: ${escapeHtml(material.created_at)}</p>
+      <div class="history-card material-history-item">
+        <div class="history-card__header">
+          <div>
+            <span class="entry-badge">材登録</span>
+            <h4>${escapeHtml(material.title || '名称未設定')}</h4>
+          </div>
+          <span class="listing-date">${escapeHtml(formatDateJp(material.created_at))}</span>
+        </div>
+        <dl class="summary-list compact-list">
+          <div>
+            <dt>種類</dt>
+            <dd>${escapeHtml(material.material_type || '未設定')}</dd>
+          </div>
+          <div>
+            <dt>所在地</dt>
+            <dd>${escapeHtml(material.location || '未設定')}</dd>
+          </div>
+          <div>
+            <dt>状態</dt>
+            <dd>${escapeHtml(material.status || '未設定')}</dd>
+          </div>
+        </dl>
         <form method="post" action="/materials/${encodeURIComponent(material.material_id)}/delete">
           <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
           <button type="submit">削除する</button>
@@ -141,11 +177,12 @@
       const isProvider = match.provider_user_id === currentUserId;
       const shareStatus = isProvider ? match.provider_contact_share_status : match.requester_contact_share_status;
       const matchType = match.match_type || 'material';
-      const entryLabel = matchType === 'viewing' ? '見学ID' : '材ID';
+      const entryLabel = matchType === 'viewing' ? '見学' : '材';
+      const roleLabel = isProvider ? '登録者側' : '希望者側';
       const entryId = match.entry_id || match.material_id || match.property_id || '';
       const shareAction = `/users/matches/${encodeURIComponent(matchType)}/${encodeURIComponent(match.match_id)}/share-contact`;
       const shareControl = shareStatus === 'shared'
-        ? '<p class="hint">連絡先カード共有済み</p>'
+        ? '<p class="share-status shared">連絡先カード共有済み</p>'
         : `
           <form method="post" action="${shareAction}">
             <input type="hidden" name="line_user_id" value="${escapeHtml(currentUserId)}">
@@ -154,12 +191,20 @@
         `;
 
       return `
-        <div class="matching-history-item">
-          <p><strong>${entryLabel}:</strong> ${escapeHtml(entryId)}</p>
-          <p><strong>操作:</strong> ${escapeHtml(match.action)}</p>
-          <p><strong>状態:</strong> ${escapeHtml(match.status)}</p>
-          <p><strong>メッセージ:</strong> ${escapeHtml(match.message)}</p>
-          <p><strong>日時:</strong> ${escapeHtml(match.created_at)}</p>
+        <div class="history-card matching-history-item">
+          <div class="history-card__header">
+            <div>
+              <span class="entry-badge ${matchType === 'viewing' ? 'demolition' : ''}">${entryLabel}マッチング</span>
+              <h4>${escapeHtml(entryId || 'ID未設定')}</h4>
+            </div>
+            <span class="listing-date">${escapeHtml(formatDateJp(match.created_at))}</span>
+          </div>
+          <div class="match-meta">
+            <span>${escapeHtml(roleLabel)}</span>
+            <span>${escapeHtml(match.action || '操作未設定')}</span>
+            <span>${escapeHtml(match.status || '状態未設定')}</span>
+          </div>
+          ${match.message ? `<p class="match-message">${escapeHtml(match.message)}</p>` : ''}
           ${shareControl}
         </div>
       `;

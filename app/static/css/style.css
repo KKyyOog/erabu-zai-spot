@@ -29,7 +29,7 @@ body {
 
 .card {
   background: white;
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 20px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
   margin-bottom: 20px;
@@ -86,7 +86,7 @@ body {
   display: inline-block;
   padding: 10px 14px;
   border: 1px solid #d8d0bd;
-  border-radius: 999px;
+  border-radius: 8px;
   color: #2f2a23;
   text-decoration: none;
   background: white;
@@ -100,9 +100,9 @@ body {
 
 .entry-badge {
   display: inline-block;
-  margin: 0 0 8px;
+  margin: 0;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: #e7f0dc;
   color: #466642;
   font-size: 13px;
@@ -128,7 +128,7 @@ button {
   box-sizing: border-box;
   margin-top: 6px;
   padding: 12px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid #ccc;
   font-size: 16px;
 }
@@ -148,7 +148,7 @@ button,
 .material-card img,
 .detail-image {
   width: 100%;
-  border-radius: 12px;
+  border-radius: 8px;
   object-fit: cover;
   max-height: 260px;
 }
@@ -156,7 +156,7 @@ button,
 .flash {
   background: #fff7d6;
   border: 1px solid #ead27b;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 8px 16px;
   margin-bottom: 16px;
 }
@@ -172,4 +172,198 @@ td {
   border-bottom: 1px solid #ddd;
   padding: 10px;
   text-align: left;
+}
+
+.listing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.listing-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: white;
+  border: 1px solid #ded7c8;
+  border-radius: 8px;
+  box-shadow: 0 5px 18px rgba(47, 42, 35, 0.07);
+}
+
+.listing-card__image {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 148px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  background: #ebe6da;
+  color: #6f6759;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.listing-card__image img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.listing-card__body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: white;
+}
+
+.listing-card__body h3,
+.history-card h4 {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.listing-card__topline,
+.history-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.history-card__header > div {
+  display: grid;
+  gap: 8px;
+}
+
+.listing-date {
+  flex: 0 0 auto;
+  color: #766e60;
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: nowrap;
+}
+
+.summary-list,
+.detail-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.summary-list div,
+.detail-list div {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.summary-list dt,
+.detail-list dt {
+  color: #766e60;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.summary-list dd,
+.detail-list dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.compact-list {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.compact-list div {
+  grid-template-columns: 56px 1fr;
+}
+
+.button-link.compact,
+.listing-actions button,
+.history-card button {
+  margin-top: 0;
+  padding: 10px 12px;
+}
+
+.button-link.secondary {
+  background: #6f6759;
+}
+
+.listing-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.listing-actions form {
+  margin: 0;
+}
+
+.history-card {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #ded7c8;
+  border-radius: 8px;
+  background: #fffdf7;
+}
+
+.match-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.match-meta span,
+.share-status {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: #f0ece1;
+  color: #3f392f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.match-message {
+  margin: 12px 0 0;
+  padding: 10px;
+  border-left: 3px solid #a9b38c;
+  background: #f8f5ec;
+  line-height: 1.6;
+}
+
+.share-status.shared {
+  margin: 12px 0 0;
+  background: #e7f0dc;
+  color: #466642;
+}
+
+.detail-list {
+  margin-top: 16px;
+}
+
+@media (min-width: 720px) {
+  .listing-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+
+  .listing-card__image {
+    height: 156px;
+  }
+
+  .listing-actions {
+    grid-template-columns: 1fr 1fr;
+  }
 }

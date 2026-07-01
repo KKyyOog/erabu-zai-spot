@@ -11,41 +11,79 @@
   </nav>
 
   {% if items %}
-    <div class="grid">
+    <div class="listing-grid">
       {% for item in items %}
-        <article class="card material-card">
-          {% if item.image_url %}
-            <img src="{{ item.image_url }}" alt="{{ item.title }}">
-          {% endif %}
+        <article class="listing-card">
+          <div class="listing-card__image">
+            {% if item.image_url %}
+              <img src="{{ item.image_url }}" alt="{{ item.title }}">
+            {% else %}
+              <span>写真なし</span>
+            {% endif %}
+          </div>
 
           {% if item.entry_type == 'material' %}
-            <p class="entry-badge">材登録</p>
-            <h3>{{ item.title }}</h3>
-            <p><strong>種類：</strong>{{ item.material_type }}</p>
-            <p><strong>寸法：</strong>{{ item.size }}</p>
-            <p><strong>数量：</strong>{{ item.quantity }}</p>
-            <p><strong>場所：</strong>{{ item.location }}</p>
-            <p><strong>状態：</strong>{{ item.condition }}</p>
-            <p><strong>登録日時：</strong>{{ item.created_at }}</p>
-            <a class="button-link" href="{{ url_for('materials.detail', material_id=item.id) }}">詳細を見る</a>
+            <div class="listing-card__body">
+              <div class="listing-card__topline">
+                <p class="entry-badge">材登録</p>
+                {% if item.created_at %}
+                  <span class="listing-date">{{ item.created_at|date_jp }}</span>
+                {% endif %}
+              </div>
+              <h3>{{ item.title or '名称未設定' }}</h3>
+              <dl class="summary-list">
+                <div>
+                  <dt>数量</dt>
+                  <dd>{{ item.quantity or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>種類</dt>
+                  <dd>{{ item.material_type or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>所在地</dt>
+                  <dd>{{ item.location or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>状態</dt>
+                  <dd>{{ item.condition or '未設定' }}</dd>
+                </div>
+              </dl>
+              <a class="button-link compact" href="{{ url_for('materials.detail', material_id=item.id) }}">詳細を見る</a>
+            </div>
           {% else %}
-            <p class="entry-badge demolition">解体物件</p>
-            <h3>{{ item.title }}</h3>
-            <p><strong>所在地：</strong>{{ item.location }}</p>
-            <p><strong>登録者：</strong>{{ item.registrant_type }}</p>
-            <p><strong>解体予定日：</strong>{{ item.demolition_date or '未定' }}</p>
-            <p><strong>解体業者：</strong>{{ item.demolition_contractor or '未定' }}</p>
-            <p><strong>見学期間：</strong>{{ item.viewing_period or '未定' }}</p>
-            <p><strong>建物：</strong>{{ item.building_use }} {{ item.structure }} {{ item.floors }}</p>
-            <p><strong>築年数：</strong>{{ item.building_age }}</p>
-            <p><strong>状態評価：</strong>{{ item.condition_evaluation }}</p>
-            <p><strong>登録日時：</strong>{{ item.created_at }}</p>
-            <form method="post" action="{{ url_for('materials.visit_interest') }}">
-              <input type="hidden" name="property_id" value="{{ item.id }}">
-              <input type="hidden" name="line_user_id">
-              <input type="hidden" name="return_type" value="{{ display_filter }}">
-              <button type="submit">見学したい</button>
-            </form>
+            <div class="listing-card__body">
+              <div class="listing-card__topline">
+                <p class="entry-badge demolition">解体物件</p>
+                {% if item.created_at %}
+                  <span class="listing-date">{{ item.created_at|date_jp }}</span>
+                {% endif %}
+              </div>
+              <h3>{{ item.title or item.location or '物件名未設定' }}</h3>
+              <dl class="summary-list">
+                <div>
+                  <dt>所在地</dt>
+                  <dd>{{ item.location or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>登録者</dt>
+                  <dd>{{ item.registrant_name or item.registrant_type or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>解体予定日</dt>
+                  <dd>{{ item.demolition_date|date_jp if item.demolition_date else '未定' }}</dd>
+                </div>
+              </dl>
+              <div class="listing-actions">
+                <a class="button-link compact secondary" href="{{ url_for('materials.demolition_detail', property_id=item.id) }}">詳細を見る</a>
+                <form method="post" action="{{ url_for('materials.visit_interest') }}">
+                  <input type="hidden" name="property_id" value="{{ item.id }}">
+                  <input type="hidden" name="line_user_id">
+                  <input type="hidden" name="return_type" value="{{ display_filter }}">
+                  <button type="submit">見学したい</button>
+                </form>
+              </div>
+            </div>
           {% endif %}
         </article>
       {% endfor %}
