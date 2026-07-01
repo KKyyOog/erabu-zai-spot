@@ -4,6 +4,7 @@
 <section class="card">
   <h2 id="form-title">ユーザー情報</h2>
   <div id="status">LINE プロフィールを取得しています...</div>
+  <button type="button" id="line-login-button" class="secondary-action" hidden>LINEでログインして読み込む</button>
   <p id="profile-note" class="hint"></p>
 
   <form id="user-form" method="post" action="{{ url_for('users.me_save') }}">
@@ -235,10 +236,34 @@
     fillContactCard({}, {});
   }
 
+  function setSubmitEnabled(enabled) {
+    document.getElementById('submit-button').disabled = !enabled;
+  }
+
+  function setLineLoginButtonVisible(visible) {
+    document.getElementById('line-login-button').hidden = !visible;
+  }
+
+  function showUnavailableState(message, showLoginButton = false) {
+    clearUserForm();
+    renderMaterials([], '');
+    renderMatchingHistory([]);
+    document.getElementById('form-title').textContent = 'ユーザー情報';
+    document.getElementById('profile-note').textContent = '';
+    document.getElementById('status').textContent = message;
+    setSubmitEnabled(false);
+    setLineLoginButtonVisible(showLoginButton);
+  }
+
   async function initMeFlow() {
     const status = document.getElementById('status');
     if (!window.LIFF_ID) {
-      status.textContent = 'LIFF が設定されていません。手動で情報を入力してください。';
+      showUnavailableState('LIFF が設定されていないため、ユーザー情報を読み込めません。');
+      return;
+    }
+
+    if (!window.liff) {
+      showUnavailableState('LIFF SDK を読み込めないため、ユーザー情報を読み込めません。');
       return;
     }
 
@@ -246,10 +271,12 @@
       await liff.init({ liffId: window.LIFF_ID });
       clearLegacyLiffReturnUrl();
       if (!liff.isLoggedIn()) {
-        await logLiffDebug('users/me redirecting to LIFF login without redirectUri.', getLiffDebugContext());
-        liff.login();
+        await logLiffDebug('users/me LIFF login skipped; waiting for explicit user action.', getLiffDebugContext());
+        showUnavailableState('LINEログイン後にユーザー情報を読み込めます。', true);
         return;
       }
+      setLineLoginButtonVisible(false);
+      setSubmitEnabled(true);
       await logLiffDebug('users/me LIFF login confirmed.', getLiffDebugContext());
       const profile = await liff.getProfile();
       document.getElementById('line_user_id').value = profile.userId;
@@ -289,9 +316,15 @@
     } catch (e) {
       console.error(e);
       await logLiffDebug('users/me LIFF error: ' + e.message, getLiffDebugContext());
-      status.textContent = 'ユーザー情報の取得に失敗しました。手動で入力してください。';
+      showUnavailableState('ユーザー情報の取得に失敗しました。');
     }
   }
+
+  document.getElementById('line-login-button').addEventListener('click', () => {
+    if (window.liff) {
+      liff.login({ redirectUri: window.location.href });
+    }
+  });
 
   initMeFlow();
 </script>
