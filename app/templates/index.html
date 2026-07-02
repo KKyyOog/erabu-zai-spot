@@ -6,17 +6,17 @@
   <p class="hint">目的のページを選んでください。</p>
 
   <div class="choice-grid">
-    <a class="choice-card" href="{{ url_for('materials.list_materials') }}">
+    <a class="choice-card" href="{{ liff_url_for('materials.list_materials') }}">
       <span class="choice-title">一覧を見る</span>
       <span class="choice-text">登録された材と解体物件を確認します。</span>
     </a>
 
-    <a class="choice-card" href="{{ url_for('materials.register') }}">
+    <a class="choice-card" href="{{ liff_url_for('materials.register') }}">
       <span class="choice-title">登録する</span>
       <span class="choice-text">材または解体物件の情報を登録します。</span>
     </a>
 
-    <a class="choice-card" href="{{ url_for('users.me') }}">
+    <a class="choice-card" href="{{ liff_url_for('users.me') }}">
       <span class="choice-title">マイページ</span>
       <span class="choice-text">自分の登録情報、履歴、連絡先カードを確認します。</span>
     </a>

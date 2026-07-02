@@ -72,6 +72,7 @@
 
 <script>
   window.LIFF_ID = {{ LIFF_ID|tojson }};
+  window.USERS_ME_LIFF_URL = {{ liff_url_for('users.me')|tojson }};
 
   function clearLegacyLiffReturnUrl() {
     try {
@@ -298,7 +299,7 @@
       if (!liff.isLoggedIn()) {
         logLiffDebug('users/me redirecting to LIFF login.', getLiffDebugContext());
         setLoading(true, 'LINEログインへ移動しています...');
-        liff.login({ redirectUri: window.location.href });
+        liff.login({ redirectUri: window.USERS_ME_LIFF_URL || window.location.href });
         return;
       }
       setSubmitEnabled(true);
