@@ -17,6 +17,7 @@ from app.services.sheets_service import (
     get_user_by_line_user_id,
 )
 from app.services.line_service import send_line_message
+from app.services.liff_service import liff_url_for
 
 materials_bp = Blueprint("materials", __name__, url_prefix="/materials")
 
@@ -397,7 +398,7 @@ def interest():
                 f"メッセージ: {message or 'なし'}",
                 "",
                 "連絡先を共有する場合は、マイページのマッチング履歴から共有してください。",
-                url_for("users.me", _external=True),
+                liff_url_for("users.me"),
                 f"match_id: {match_id}",
             ]
         ),
@@ -440,7 +441,7 @@ def visit_interest():
                 _public_user_summary(requester_line_user_id),
                 "",
                 "連絡先を共有する場合は、マイページのマッチング履歴から共有してください。",
-                url_for("users.me", _external=True),
+                liff_url_for("users.me"),
                 f"match_id: {match_id}",
             ]
         ),
