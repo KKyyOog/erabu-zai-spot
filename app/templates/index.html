@@ -1,6 +1,59 @@
 {% extends "base.html" %}
 
 {% block content %}
+<script>
+  window.LIFF_ID = {{ LIFF_ID|tojson }};
+
+  (function routeLiffState() {
+    const params = new URLSearchParams(window.location.search);
+    const rawState = params.get("liff.state");
+    if (!rawState) {
+      return;
+    }
+
+    let target;
+    try {
+      target = new URL(rawState, window.location.origin);
+    } catch (error) {
+      console.warn("Invalid LIFF state:", error);
+      return;
+    }
+
+    if (target.origin !== window.location.origin || !target.pathname.startsWith("/")) {
+      return;
+    }
+
+    const targetParams = new URLSearchParams(target.search);
+    [
+      "liff.referrer",
+      "access_token",
+      "context_token",
+      "feature_token",
+      "id_token",
+      "client_id",
+      "mst_challenge",
+    ].forEach((name) => targetParams.delete(name));
+
+    const cleanSearch = targetParams.toString();
+    const targetUrl = target.pathname + (cleanSearch ? `?${cleanSearch}` : "");
+
+    const moveToTarget = () => {
+      window.location.replace(targetUrl);
+    };
+
+    if (!window.liff || !window.LIFF_ID) {
+      moveToTarget();
+      return;
+    }
+
+    liff.init({ liffId: window.LIFF_ID })
+      .catch((error) => {
+        console.warn("LIFF state initialization failed:", error);
+      })
+      .finally(moveToTarget);
+  })();
+</script>
+
 <section class="card">
   <h2>えらぶ材すぽっと</h2>
   <p class="hint">目的のページを選んでください。</p>
