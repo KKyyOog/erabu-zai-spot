@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
-from app.services.sheets_service import get_materials, update_material_status
+from app.services.db_service import get_materials, update_material_status
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 

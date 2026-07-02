@@ -6,6 +6,9 @@ load_dotenv()
 
 class Config:
     SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret")
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///erabu_zai_spot.db")
+    DATABASE_SSLMODE = os.getenv("DATABASE_SSLMODE", "require")
+    AUTO_CREATE_TABLES = os.getenv("AUTO_CREATE_TABLES", "true").lower() not in ("0", "false", "no")
     LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
     LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
     LIFF_ID = os.getenv("LIFF_ID", "")

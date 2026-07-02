@@ -11,6 +11,7 @@ from app.routes.link import link_bp
 from app.routes.callback import callback_bp
 from app.routes.admin import admin_bp
 from app.config import Config
+from app.services.db_service import init_database
 from app.services.liff_service import liff_url_for
 
 
@@ -22,6 +23,7 @@ def create_app():
     app.config.from_object(Config)
     app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "static", "uploads")
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    init_database(app)
 
     app.register_blueprint(materials_bp)
     app.register_blueprint(users_bp)
