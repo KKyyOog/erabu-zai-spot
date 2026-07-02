@@ -83,7 +83,6 @@ CONTACT_CARD_HEADERS = [
     "contact_method",
     "contact_value",
     "available_time",
-    "contact_area",
     "message",
     "is_active",
     "created_at",
@@ -101,7 +100,6 @@ CONTACT_SHARE_LOG_HEADERS = [
     "shared_contact_method",
     "shared_contact_value",
     "shared_available_time",
-    "shared_contact_area",
     "shared_message",
     "consent_version",
     "requested_at",
@@ -196,6 +194,31 @@ def _column_letter(index):
         index, remainder = divmod(index - 1, 26)
         letters = chr(65 + remainder) + letters
     return letters
+
+
+def _normalize_ascii(value):
+    if value is None:
+        return ""
+
+    text = str(value).strip()
+    return text.translate(str.maketrans(
+        "０１２３４５６７８９"
+        "ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ"
+        "ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ"
+        "＠．＿－＋（）　",
+        "0123456789"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz"
+        "@._-+() ",
+    ))
+
+
+def _update_cell_raw(sheet, row_index, col_index, value):
+    sheet.update(
+        f"{_column_letter(col_index)}{row_index}",
+        [[value]],
+        value_input_option="RAW",
+    )
 
 
 def _get_header_map(sheet):
@@ -472,7 +495,7 @@ def update_matching_contact_share_status(match_id, match_type, user_id, status):
 
 def get_contact_card_by_user(line_user_id):
     sheet = _get_or_create_sheet(CONTACT_CARDS_SHEET, CONTACT_CARD_HEADERS)
-    records = sheet.get_all_records()
+    records = sheet.get_all_records(numericise_ignore=["all"])
     for record in records:
         if (
             record.get("line_user_id") == line_user_id
@@ -484,7 +507,7 @@ def get_contact_card_by_user(line_user_id):
 
 def upsert_contact_card(line_user_id, data):
     sheet = _get_or_create_sheet(CONTACT_CARDS_SHEET, CONTACT_CARD_HEADERS)
-    records = sheet.get_all_records()
+    records = sheet.get_all_records(numericise_ignore=["all"])
     header_map = _get_header_map(sheet)
     now = _now()
     contact_card_id = ""
@@ -508,9 +531,8 @@ def upsert_contact_card(line_user_id, data):
         "line_user_id": line_user_id,
         "display_name": data.get("contact_display_name") or data.get("display_name", ""),
         "contact_method": data.get("contact_method", ""),
-        "contact_value": data.get("contact_value", ""),
+        "contact_value": _normalize_ascii(data.get("contact_value", "")),
         "available_time": data.get("contact_available_time", ""),
-        "contact_area": data.get("contact_area", ""),
         "message": data.get("contact_message", ""),
         "is_active": data.get("contact_is_active", "TRUE"),
         "updated_at": now,
@@ -519,12 +541,12 @@ def upsert_contact_card(line_user_id, data):
     if row_index:
         for field, value in values.items():
             if header_map.get(field):
-                sheet.update_cell(row_index, header_map[field], value)
+                _update_cell_raw(sheet, row_index, header_map[field], value)
         return contact_card_id
 
     values["created_at"] = now
     row, _ = _build_row_for_headers(sheet, values)
-    sheet.append_row(row)
+    sheet.append_row(row, value_input_option="RAW")
     return contact_card_id
 
 
@@ -543,9 +565,8 @@ def append_contact_share_log(data):
             "share_status": data.get("share_status", "shared"),
             "shared_display_name": data.get("shared_display_name", ""),
             "shared_contact_method": data.get("shared_contact_method", ""),
-            "shared_contact_value": data.get("shared_contact_value", ""),
+            "shared_contact_value": _normalize_ascii(data.get("shared_contact_value", "")),
             "shared_available_time": data.get("shared_available_time", ""),
-            "shared_contact_area": data.get("shared_contact_area", ""),
             "shared_message": data.get("shared_message", ""),
             "consent_version": data.get("consent_version", "contact_share_v1"),
             "requested_at": data.get("requested_at", ""),
@@ -556,7 +577,7 @@ def append_contact_share_log(data):
             "updated_at": now,
         },
     )
-    sheet.append_row(row)
+    sheet.append_row(row, value_input_option="RAW")
     return contact_share_id
 
 
@@ -590,7 +611,6 @@ def record_contact_share(match_id, match_type, from_user_id):
             "shared_contact_method": card.get("contact_method", ""),
             "shared_contact_value": card.get("contact_value", ""),
             "shared_available_time": card.get("available_time", ""),
-            "shared_contact_area": card.get("contact_area", ""),
             "shared_message": card.get("message", ""),
             "shared_at": shared_at,
         }

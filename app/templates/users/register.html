@@ -37,10 +37,16 @@
     <input type="text" name="contact_value" placeholder="例：LINE ID、メールアドレスなど">
 
     <label>連絡しやすい時間帯</label>
-    <input type="text" name="contact_available_time" placeholder="例：平日18時以降">
-
-    <label>対応可能エリア</label>
-    <input type="text" name="contact_area" placeholder="例：知名町周辺、島内全域など">
+    <select name="contact_available_time">
+      <option value="">選択してください</option>
+      <option value="いつでも">いつでも</option>
+      <option value="平日午前">平日午前</option>
+      <option value="平日午後">平日午後</option>
+      <option value="平日夕方以降">平日夕方以降</option>
+      <option value="土日祝午前">土日祝午前</option>
+      <option value="土日祝午後">土日祝午後</option>
+      <option value="要相談">要相談</option>
+    </select>
 
     <label>ひとこと</label>
     <textarea name="contact_message" rows="3" placeholder="例：まずはLINEで「マッチングの件」と送ってください。"></textarea>
