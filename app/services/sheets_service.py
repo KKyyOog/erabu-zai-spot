@@ -4,7 +4,7 @@ from uuid import uuid4
 import gspread
 from gspread.exceptions import WorksheetNotFound
 from google.oauth2.service_account import Credentials
-from flask import current_app
+from flask import current_app, g, has_request_context
 
 import json
 
@@ -131,6 +131,9 @@ def _find_user_row(records, line_user_id):
 
 
 def _get_client():
+    if has_request_context() and getattr(g, "gspread_client", None):
+        return g.gspread_client
+
     json_text = current_app.config.get("GOOGLE_SERVICE_ACCOUNT_JSON_TEXT")
 
     if json_text:
@@ -145,18 +148,30 @@ def _get_client():
             scopes=SCOPE,
         )
 
-    return gspread.authorize(credentials)
+    client = gspread.authorize(credentials)
+    if has_request_context():
+        g.gspread_client = client
+    return client
+
+
+def _get_spreadsheet():
+    if has_request_context() and getattr(g, "google_spreadsheet", None):
+        return g.google_spreadsheet
+
+    client = _get_client()
+    spreadsheet = client.open_by_key(current_app.config["GOOGLE_SHEET_ID"])
+    if has_request_context():
+        g.google_spreadsheet = spreadsheet
+    return spreadsheet
 
 
 def _get_sheet(sheet_name):
-    client = _get_client()
-    spreadsheet = client.open_by_key(current_app.config["GOOGLE_SHEET_ID"])
+    spreadsheet = _get_spreadsheet()
     return spreadsheet.worksheet(sheet_name)
 
 
 def _get_or_create_sheet(sheet_name, headers):
-    client = _get_client()
-    spreadsheet = client.open_by_key(current_app.config["GOOGLE_SHEET_ID"])
+    spreadsheet = _get_spreadsheet()
 
     try:
         sheet = spreadsheet.worksheet(sheet_name)
@@ -213,12 +228,18 @@ def _normalize_ascii(value):
     ))
 
 
-def _update_cell_raw(sheet, row_index, col_index, value):
-    sheet.update(
-        f"{_column_letter(col_index)}{row_index}",
-        [[value]],
-        value_input_option="RAW",
-    )
+def _batch_update_row_raw(sheet, row_index, header_map, values_by_header):
+    updates = []
+    for field, value in values_by_header.items():
+        col_index = header_map.get(field)
+        if col_index:
+            updates.append({
+                "range": f"{_column_letter(col_index)}{row_index}",
+                "values": [[value]],
+            })
+
+    if updates:
+        sheet.batch_update(updates, value_input_option="RAW")
 
 
 def _get_header_map(sheet):
@@ -259,18 +280,21 @@ def _build_user_row(headers, header_map, line_user_id, data):
 
 
 def _update_user_row(sheet, idx, header_map, line_user_id, data, record, update_timestamp=False):
+    values = {}
     if header_map.get("line_user_id"):
-        sheet.update_cell(idx, header_map["line_user_id"], line_user_id)
+        values["line_user_id"] = line_user_id
 
     for field in USER_FIELDS:
         if header_map.get(field):
-            sheet.update_cell(idx, header_map[field], data.get(field, record.get(field, "")))
+            values[field] = data.get(field, record.get(field, ""))
 
     if update_timestamp:
         if header_map.get("updated_at"):
-            sheet.update_cell(idx, header_map["updated_at"], _now())
+            values["updated_at"] = _now()
         if header_map.get("updatedAt"):
-            sheet.update_cell(idx, header_map["updatedAt"], _now())
+            values["updatedAt"] = _now()
+
+    _batch_update_row_raw(sheet, idx, header_map, values)
 
 
 def _now():
@@ -484,12 +508,11 @@ def update_matching_contact_share_status(match_id, match_type, user_id, status):
 
     header_map = _get_header_map(sheet)
     now = _now()
-    if header_map.get(status_field):
-        sheet.update_cell(row_index, header_map[status_field], status)
-    if status == "shared" and header_map.get(shared_at_field):
-        sheet.update_cell(row_index, header_map[shared_at_field], now)
-    if header_map.get("updated_at"):
-        sheet.update_cell(row_index, header_map["updated_at"], now)
+    values = {status_field: status}
+    if status == "shared":
+        values[shared_at_field] = now
+    values["updated_at"] = now
+    _batch_update_row_raw(sheet, row_index, header_map, values)
     return True
 
 
@@ -539,9 +562,7 @@ def upsert_contact_card(line_user_id, data):
     }
 
     if row_index:
-        for field, value in values.items():
-            if header_map.get(field):
-                _update_cell_raw(sheet, row_index, header_map[field], value)
+        _batch_update_row_raw(sheet, row_index, header_map, values)
         return contact_card_id
 
     values["created_at"] = now

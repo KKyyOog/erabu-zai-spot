@@ -93,16 +93,28 @@
     };
   }
 
-  async function logLiffDebug(message, details = {}) {
+  function logLiffDebug(message, details = {}) {
+    const payload = JSON.stringify({
+      message: message,
+      details: details,
+      timestamp: new Date().toISOString(),
+    });
+
     try {
-      await fetch('/link/liff-debug', {
+      if (navigator.sendBeacon) {
+        const sent = navigator.sendBeacon('/link/liff-debug', new Blob([payload], { type: 'application/json' }));
+        if (sent) {
+          return;
+        }
+      }
+
+      fetch('/link/liff-debug', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: message,
-          details: details,
-          timestamp: new Date().toISOString(),
-        }),
+        body: payload,
+        keepalive: true,
+      }).catch((error) => {
+        console.warn('Failed to send LIFF debug log:', error);
       });
     } catch (error) {
       console.warn('Failed to send LIFF debug log:', error);
@@ -284,13 +296,13 @@
       await liff.init({ liffId: window.LIFF_ID });
       clearLegacyLiffReturnUrl();
       if (!liff.isLoggedIn()) {
-        await logLiffDebug('users/me redirecting to LIFF login.', getLiffDebugContext());
+        logLiffDebug('users/me redirecting to LIFF login.', getLiffDebugContext());
         setLoading(true, 'LINEログインへ移動しています...');
         liff.login({ redirectUri: window.location.href });
         return;
       }
       setSubmitEnabled(true);
-      await logLiffDebug('users/me LIFF login confirmed.', getLiffDebugContext());
+      logLiffDebug('users/me LIFF login confirmed.', getLiffDebugContext());
       const profile = await liff.getProfile();
       document.getElementById('line_user_id').value = profile.userId;
       document.getElementById('user_id').value = profile.userId;
@@ -330,7 +342,7 @@
       }
     } catch (e) {
       console.error(e);
-      await logLiffDebug('users/me LIFF error: ' + e.message, getLiffDebugContext());
+      logLiffDebug('users/me LIFF error: ' + e.message, getLiffDebugContext());
       showUnavailableState('ユーザー情報の取得に失敗しました。');
     }
   }

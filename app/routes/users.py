@@ -1,3 +1,5 @@
+import time
+
 from flask import Blueprint, jsonify, render_template, request, redirect, url_for, flash
 
 from app.services.sheets_service import (
@@ -13,6 +15,31 @@ from app.services.sheets_service import (
 from app.services.line_service import send_line_message
 
 users_bp = Blueprint("users", __name__, url_prefix="/users")
+
+ME_DATA_CACHE_SECONDS = 20
+_me_data_cache = {}
+
+
+def _get_cached_me_data(line_user_id):
+    cached = _me_data_cache.get(line_user_id)
+    if not cached:
+        return None
+
+    expires_at, payload = cached
+    if expires_at <= time.time():
+        _me_data_cache.pop(line_user_id, None)
+        return None
+
+    return payload
+
+
+def _set_cached_me_data(line_user_id, payload):
+    _me_data_cache[line_user_id] = (time.time() + ME_DATA_CACHE_SECONDS, payload)
+
+
+def _clear_me_data_cache(line_user_id):
+    if line_user_id:
+        _me_data_cache.pop(line_user_id, None)
 
 
 def _resolve_user_id(form, route_user_id=""):
@@ -85,6 +112,7 @@ def submit():
 
     line_user_id = append_user(form)
     _save_contact_card_if_present(line_user_id, form)
+    _clear_me_data_cache(line_user_id)
     flash("ユーザー情報を登録しました。")
     return redirect(url_for("users.detail", line_user_id=line_user_id))
 
@@ -155,6 +183,7 @@ def update_profile(line_user_id):
     result = update_user(resolved_user_id, form)
     if result:
         _save_contact_card_if_present(resolved_user_id, form)
+        _clear_me_data_cache(resolved_user_id)
     flash("ユーザー情報を更新しました。" if exists else "ユーザー情報を登録しました。")
 
     if result:
@@ -176,21 +205,25 @@ def me_data():
     if not user_id:
         return jsonify({"ok": False, "message": "userId is required"}), 400
 
+    cached = _get_cached_me_data(user_id)
+    if cached:
+        return jsonify(cached)
+
     user = get_user_by_line_user_id(user_id)
     materials = get_materials_by_line_user_id(user_id)
     matching_history = get_matching_history_by_user(user_id)
     contact_card = get_contact_card_by_user(user_id) or {}
     if user:
-        return jsonify({
+        payload = {
             "ok": True,
             "exists": True,
             "user": user,
             "contact_card": contact_card,
             "materials": materials,
             "matching_history": matching_history,
-        })
+        }
     else:
-        return jsonify({
+        payload = {
             "ok": True,
             "exists": False,
             "user": {
@@ -202,7 +235,10 @@ def me_data():
             "contact_card": contact_card,
             "materials": materials,
             "matching_history": matching_history,
-        })
+        }
+
+    _set_cached_me_data(user_id, payload)
+    return jsonify(payload)
 
 
 @users_bp.route("/me/save", methods=["POST"])
@@ -229,6 +265,7 @@ def me_save():
     result = update_user(resolved_user_id, form)
     if result:
         _save_contact_card_if_present(resolved_user_id, form)
+        _clear_me_data_cache(resolved_user_id)
 
     if result:
         flash("ユーザー情報を更新しました。" if exists else "ユーザー情報を登録しました。")
@@ -259,6 +296,8 @@ def share_contact(match_type, match_id):
     if error:
         flash("連絡先カードの共有に失敗しました。")
         return redirect(url_for("users.me"))
+
+    _clear_me_data_cache(line_user_id)
 
     to_user_id = share_result.get("to_user_id", "")
     if to_user_id and not to_user_id.startswith("anon_"):

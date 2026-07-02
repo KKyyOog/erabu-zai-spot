@@ -98,7 +98,7 @@ async function initializeLiff() {
       await logToServer("WARNING: display_name input not found");
     }
 
-    await fetch("/link/liff", {
+    fetch("/link/liff", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -108,28 +108,46 @@ async function initializeLiff() {
         displayName: profile.displayName,
         pictureUrl: profile.pictureUrl || "",
       }),
-    });
-
-    console.log("LIFF link endpoint called successfully.");
-    await logToServer("LIFF link endpoint called successfully. userId=" + profile.userId);
+      keepalive: true,
+    })
+      .then(() => {
+        console.log("LIFF link endpoint called successfully.");
+        logToServer("LIFF link endpoint called successfully. userId=" + profile.userId);
+      })
+      .catch((error) => {
+        console.warn("LIFF link endpoint failed:", error);
+        logToServer("LIFF link endpoint failed: " + error.message);
+      });
   } catch (error) {
     console.error("LIFF initialization error:", error);
     await logToServer("LIFF initialization error: " + error.message);
   }
 }
 
-async function logToServer(message, details = {}) {
+function logToServer(message, details = {}) {
+  const payload = JSON.stringify({
+    message: message,
+    details: details,
+    timestamp: new Date().toISOString(),
+  });
+
   try {
-    await fetch("/link/liff-debug", {
+    if (navigator.sendBeacon) {
+      const sent = navigator.sendBeacon("/link/liff-debug", new Blob([payload], { type: "application/json" }));
+      if (sent) {
+        return;
+      }
+    }
+
+    fetch("/link/liff-debug", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        message: message,
-        details: details,
-        timestamp: new Date().toISOString(),
-      }),
+      body: payload,
+      keepalive: true,
+    }).catch((error) => {
+      console.error("Failed to send debug log:", error);
     });
   } catch (e) {
     console.error("Failed to send debug log:", e);
