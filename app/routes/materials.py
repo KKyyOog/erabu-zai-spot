@@ -5,7 +5,7 @@ import cloudinary
 import cloudinary.uploader
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 
-from app.services.sheets_service import (
+from app.services.db_service import (
     append_material,
     append_demolition_property,
     get_materials,
