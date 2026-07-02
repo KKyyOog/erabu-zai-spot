@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 
 import truststore
-from flask import Flask, request
+from flask import Flask, render_template, request
 
 from app.routes.materials import materials_bp
 from app.routes.users import users_bp
@@ -11,6 +11,7 @@ from app.routes.link import link_bp
 from app.routes.callback import callback_bp
 from app.routes.admin import admin_bp
 from app.config import Config
+from app.services.liff_service import liff_url_for
 
 
 def create_app():
@@ -30,7 +31,10 @@ def create_app():
 
     @app.context_processor
     def inject_liff_id():
-        return {"LIFF_ID": app.config["LIFF_ID"]}
+        return {
+            "LIFF_ID": app.config["LIFF_ID"],
+            "liff_url_for": liff_url_for,
+        }
 
     @app.template_filter("date_jp")
     def date_jp(value):
@@ -68,6 +72,6 @@ def create_app():
 
     @app.route("/")
     def index():
-        return "えらぶ材すぽっと is running."
+        return render_template("index.html")
 
     return app

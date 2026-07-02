@@ -26,3 +26,19 @@ python run.py
 - `/materials/list`：材一覧
 - `/admin`：管理画面
 - `/callback`：LINE Webhook
+
+## LIFF URL の使い分け
+
+LINE Developers の LIFF Endpoint URL は本番ドメインのルートに設定します。
+
+```text
+https://example.com/
+```
+
+実際に案内するURLは、LIFF URL にページのパスを付けて使い分けます。
+
+```text
+https://liff.line.me/{LIFF_ID}/materials/list
+https://liff.line.me/{LIFF_ID}/materials/register
+https://liff.line.me/{LIFF_ID}/users/me
+```
