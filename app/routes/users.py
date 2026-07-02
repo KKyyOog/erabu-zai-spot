@@ -33,7 +33,6 @@ def _save_contact_card_if_present(line_user_id, form):
         "contact_method",
         "contact_value",
         "contact_available_time",
-        "contact_area",
         "contact_message",
     )
     if any(form.get(field) for field in card_fields):
@@ -55,8 +54,6 @@ def _format_contact_share_message(share_result):
     ]
     if card.get("available_time"):
         lines.append(f"連絡しやすい時間: {card.get('available_time')}")
-    if card.get("contact_area"):
-        lines.append(f"対応エリア: {card.get('contact_area')}")
     if card.get("message"):
         lines.extend(["", card.get("message")])
     return "\n".join(lines)

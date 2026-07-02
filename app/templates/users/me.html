@@ -3,8 +3,10 @@
 {% block content %}
 <section class="card">
   <h2 id="form-title">ユーザー情報</h2>
-  <div id="status">LINE プロフィールを取得しています...</div>
-  <button type="button" id="line-login-button" class="secondary-action" hidden>LINEでログインして読み込む</button>
+  <div id="loading-status" class="loading-status" role="status" aria-live="polite">
+    <span class="loading-spinner" aria-hidden="true"></span>
+    <span id="status">LINE プロフィールを取得しています...</span>
+  </div>
   <p id="profile-note" class="hint"></p>
 
   <form id="user-form" method="post" action="{{ url_for('users.me_save') }}">
@@ -40,10 +42,16 @@
     <input type="text" name="contact_value" id="contact_value" placeholder="例：LINE ID、メールアドレスなど">
 
     <label>連絡しやすい時間帯</label>
-    <input type="text" name="contact_available_time" id="contact_available_time" placeholder="例：平日18時以降">
-
-    <label>対応可能エリア</label>
-    <input type="text" name="contact_area" id="contact_area" placeholder="例：知名町周辺、島内全域など">
+    <select name="contact_available_time" id="contact_available_time">
+      <option value="">選択してください</option>
+      <option value="いつでも">いつでも</option>
+      <option value="平日午前">平日午前</option>
+      <option value="平日午後">平日午後</option>
+      <option value="平日夕方以降">平日夕方以降</option>
+      <option value="土日祝午前">土日祝午前</option>
+      <option value="土日祝午後">土日祝午後</option>
+      <option value="要相談">要相談</option>
+    </select>
 
     <label>ひとこと</label>
     <textarea name="contact_message" id="contact_message" rows="3" placeholder="例：まずはLINEで「マッチングの件」と送ってください。"></textarea>
@@ -223,7 +231,6 @@
     document.getElementById('contact_method').value = card.contact_method || '';
     document.getElementById('contact_value').value = card.contact_value || '';
     document.getElementById('contact_available_time').value = card.available_time || '';
-    document.getElementById('contact_area').value = card.contact_area || '';
     document.getElementById('contact_message').value = card.message || '';
   }
 
@@ -240,23 +247,29 @@
     document.getElementById('submit-button').disabled = !enabled;
   }
 
-  function setLineLoginButtonVisible(visible) {
-    document.getElementById('line-login-button').hidden = !visible;
+  function setLoading(isLoading, message) {
+    const loadingStatus = document.getElementById('loading-status');
+    const status = document.getElementById('status');
+    loadingStatus.classList.toggle('is-loading', isLoading);
+    status.textContent = message;
   }
 
-  function showUnavailableState(message, showLoginButton = false) {
+  function showUnavailableState(message) {
     clearUserForm();
     renderMaterials([], '');
     renderMatchingHistory([]);
     document.getElementById('form-title').textContent = 'ユーザー情報';
     document.getElementById('profile-note').textContent = '';
-    document.getElementById('status').textContent = message;
+    setLoading(false, message);
     setSubmitEnabled(false);
-    setLineLoginButtonVisible(showLoginButton);
+  }
+
+  function showRegistrationPrompt() {
+    window.alert('ユーザー情報がまだ登録されていません。続けてユーザー情報を登録してください。');
   }
 
   async function initMeFlow() {
-    const status = document.getElementById('status');
+    setLoading(true, 'LINE プロフィールを取得しています...');
     if (!window.LIFF_ID) {
       showUnavailableState('LIFF が設定されていないため、ユーザー情報を読み込めません。');
       return;
@@ -271,11 +284,11 @@
       await liff.init({ liffId: window.LIFF_ID });
       clearLegacyLiffReturnUrl();
       if (!liff.isLoggedIn()) {
-        await logLiffDebug('users/me LIFF login skipped; waiting for explicit user action.', getLiffDebugContext());
-        showUnavailableState('LINEログイン後にユーザー情報を読み込めます。', true);
+        await logLiffDebug('users/me redirecting to LIFF login.', getLiffDebugContext());
+        setLoading(true, 'LINEログインへ移動しています...');
+        liff.login({ redirectUri: window.location.href });
         return;
       }
-      setLineLoginButtonVisible(false);
       setSubmitEnabled(true);
       await logLiffDebug('users/me LIFF login confirmed.', getLiffDebugContext());
       const profile = await liff.getProfile();
@@ -283,6 +296,7 @@
       document.getElementById('user_id').value = profile.userId;
       document.getElementById('userid').value = profile.userId;
       document.getElementById('profile-note').textContent = `LINE表示名: ${profile.displayName}`;
+      setLoading(true, '登録情報を読み込んでいます...');
 
       const resp = await fetch('/users/me/data', {
         method: 'POST',
@@ -296,7 +310,7 @@
         renderMatchingHistory([]);
         document.getElementById('form-title').textContent = 'ユーザー情報（新規登録）';
         document.getElementById('submit-button').textContent = '登録する';
-        status.textContent = 'ユーザー情報を読み込めませんでした。新規登録として入力してください。';
+        setLoading(false, 'ユーザー情報を読み込めませんでした。新規登録として入力してください。');
         return;
       }
       renderMaterials(body.materials || [], profile.userId);
@@ -306,12 +320,13 @@
         document.getElementById('form-title').textContent = 'ユーザー情報（更新）';
         fillUserForm(body.user || {});
         document.getElementById('submit-button').textContent = '更新する';
-        status.textContent = '登録済みの情報を読み込みました。';
+        setLoading(false, '登録済みの情報を読み込みました。');
       } else {
         clearUserForm();
         document.getElementById('form-title').textContent = 'ユーザー情報（新規登録）';
         document.getElementById('submit-button').textContent = '登録する';
-        status.textContent = '新規登録用の空フォームです。';
+        setLoading(false, '新規登録用の空フォームです。');
+        setTimeout(showRegistrationPrompt, 0);
       }
     } catch (e) {
       console.error(e);
@@ -319,12 +334,6 @@
       showUnavailableState('ユーザー情報の取得に失敗しました。');
     }
   }
-
-  document.getElementById('line-login-button').addEventListener('click', () => {
-    if (window.liff) {
-      liff.login({ redirectUri: window.location.href });
-    }
-  });
 
   initMeFlow();
 </script>

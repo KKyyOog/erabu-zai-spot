@@ -43,10 +43,17 @@
     <input type="text" name="contact_value" value="{{ contact_card.contact_value or '' }}" placeholder="例：LINE ID、メールアドレスなど">
 
     <label>連絡しやすい時間帯</label>
-    <input type="text" name="contact_available_time" value="{{ contact_card.available_time or '' }}" placeholder="例：平日18時以降">
-
-    <label>対応可能エリア</label>
-    <input type="text" name="contact_area" value="{{ contact_card.contact_area or '' }}" placeholder="例：知名町周辺、島内全域など">
+    <select name="contact_available_time">
+      {% set available_time = contact_card.available_time or '' %}
+      <option value="" {{ 'selected' if available_time == '' else '' }}>選択してください</option>
+      <option value="いつでも" {{ 'selected' if available_time == 'いつでも' else '' }}>いつでも</option>
+      <option value="平日午前" {{ 'selected' if available_time == '平日午前' else '' }}>平日午前</option>
+      <option value="平日午後" {{ 'selected' if available_time == '平日午後' else '' }}>平日午後</option>
+      <option value="平日夕方以降" {{ 'selected' if available_time == '平日夕方以降' else '' }}>平日夕方以降</option>
+      <option value="土日祝午前" {{ 'selected' if available_time == '土日祝午前' else '' }}>土日祝午前</option>
+      <option value="土日祝午後" {{ 'selected' if available_time == '土日祝午後' else '' }}>土日祝午後</option>
+      <option value="要相談" {{ 'selected' if available_time == '要相談' else '' }}>要相談</option>
+    </select>
 
     <label>ひとこと</label>
     <textarea name="contact_message" rows="3" placeholder="例：まずはLINEで「マッチングの件」と送ってください。">{{ contact_card.message or '' }}</textarea>
