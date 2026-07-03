@@ -78,6 +78,7 @@ body {
 .filter-tabs {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-bottom: 18px;
 }
@@ -96,6 +97,17 @@ body {
   background: #466642;
   border-color: #466642;
   color: white;
+}
+
+.material-type-tabs {
+  margin-top: -8px;
+}
+
+.filter-label {
+  margin-right: 2px;
+  color: #5d5548;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .entry-badge {
@@ -164,6 +176,67 @@ button {
   font-size: 16px;
 }
 
+input[readonly] {
+  background: #f1eee6;
+  color: #5d5548;
+}
+
+.conditional-input[hidden] {
+  display: none;
+}
+
+.form-fieldset {
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.form-fieldset legend {
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+
+.star-rating {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.star-rating input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.star-rating label {
+  display: inline-flex;
+  width: auto;
+  min-height: 42px;
+  align-items: center;
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid #d8d0bd;
+  border-radius: 8px;
+  background: white;
+  color: #766e60;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.star-rating input:checked + label {
+  border-color: #466642;
+  background: #e7f0dc;
+  color: #2f4d2b;
+}
+
+.star-rating input:focus-visible + label {
+  outline: 2px solid #466642;
+  outline-offset: 2px;
+}
+
 button,
 .button-link {
   display: inline-block;
@@ -174,6 +247,64 @@ button,
   text-decoration: none;
   text-align: center;
   cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.secondary-button {
+  background: #6f6759;
+}
+
+.danger-button {
+  background: #a54336;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.section-heading h2,
+.section-heading h3 {
+  margin: 0;
+}
+
+.section-heading .hint {
+  margin: 8px 0 0;
+}
+
+.profile-panels {
+  display: grid;
+  gap: 16px;
+}
+
+.profile-panel {
+  padding: 16px;
+  border: 1px solid #ded7c8;
+  border-radius: 8px;
+  background: #fffdf7;
+}
+
+.profile-panel--primary {
+  background: #f8fbf2;
+  border-color: #cad7b8;
+}
+
+.panel-heading {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.panel-heading h3 {
+  margin: 0;
+  font-size: 18px;
 }
 
 .material-card img,
@@ -310,6 +441,40 @@ td {
   gap: 8px;
 }
 
+.history-card__title {
+  min-width: 0;
+}
+
+.history-card__bodyline {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 12px;
+  align-items: start;
+  margin-top: 12px;
+}
+
+.history-thumb {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 8px;
+  background: #ebe6da;
+  color: #6f6759;
+  font-size: 12px;
+  font-weight: 700;
+  object-fit: cover;
+}
+
+.history-thumb--small {
+  width: 68px;
+  height: 68px;
+}
+
+.history-thumb--empty {
+  border: 1px dashed #c9bfac;
+}
+
 .listing-date {
   flex: 0 0 auto;
   color: #766e60;
@@ -390,6 +555,38 @@ td {
   background: #fffdf7;
 }
 
+.history-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.history-actions form {
+  margin: 0;
+}
+
+.material-edit-form label {
+  margin-top: 0;
+}
+
+.edit-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.edit-grid__full {
+  min-width: 0;
+}
+
+.form-error {
+  margin: 10px 0 0;
+  color: #a54336;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .match-meta {
   display: flex;
   flex-wrap: wrap;
@@ -427,6 +624,11 @@ td {
 }
 
 @media (min-width: 720px) {
+  .profile-panels {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    align-items: start;
+  }
+
   .listing-grid {
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   }
@@ -437,5 +639,37 @@ td {
 
   .listing-actions {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .history-actions {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    max-width: 360px;
+  }
+
+  .edit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .edit-grid__full {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 520px) {
+  .section-heading {
+    display: grid;
+  }
+
+  .history-card__header {
+    display: grid;
+  }
+
+  .history-card__bodyline {
+    grid-template-columns: 68px 1fr;
+  }
+
+  .history-thumb {
+    width: 68px;
+    height: 68px;
   }
 }

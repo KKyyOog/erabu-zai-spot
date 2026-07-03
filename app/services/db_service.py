@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from uuid import uuid4
 import unicodedata
 
@@ -312,7 +313,85 @@ def get_materials_by_line_user_id(line_user_id, include_all=False):
     stmt = select(materials).where(materials.c.line_user_id == line_user_id).order_by(materials.c.created_at)
     if not include_all:
         stmt = stmt.where(materials.c.status != DELETED_STATUS)
-    return _select_many(stmt)
+    return [_decorate_material_record(record) for record in _select_many(stmt)]
+
+
+def get_provider_shared_material_ids():
+    stmt = select(matching_history.c.material_id).where(
+        matching_history.c.match_type == "material",
+        matching_history.c.provider_contact_share_status == "shared",
+        matching_history.c.material_id != "",
+    )
+    with _engine().connect() as conn:
+        return {row[0] for row in conn.execute(stmt).all() if row[0]}
+
+
+def _split_image_urls(value):
+    if not value:
+        return []
+
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    text = str(value).strip()
+    if not text:
+        return []
+
+    if text.startswith("["):
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except json.JSONDecodeError:
+            pass
+
+    urls = []
+    for line in text.replace(",", "\n").splitlines():
+        url = line.strip()
+        if url:
+            urls.append(url)
+    return urls
+
+
+def _collect_image_urls(record, primary_field, collection_field):
+    urls = []
+    seen = set()
+    for url in _split_image_urls(record.get(collection_field, "")) + _split_image_urls(record.get(primary_field, "")):
+        if url and url not in seen:
+            urls.append(url)
+            seen.add(url)
+    return urls
+
+
+def _decorate_material_record(record):
+    if not record:
+        return record
+
+    image_urls = _collect_image_urls(record, "image_url", "image_urls")
+    record["image_urls"] = image_urls
+    record["image_url"] = image_urls[0] if image_urls else record.get("image_url", "")
+    return record
+
+
+def _decorate_match_record(record):
+    record["entry_id"] = record.get("material_id") or record.get("property_id")
+    record["entry_title"] = ""
+    record["entry_image_url"] = ""
+
+    if record.get("match_type") == "viewing":
+        entry = get_demolition_property_by_id(record.get("property_id", ""))
+        if entry:
+            image_urls = _collect_image_urls(entry, "building_photo_url", "building_photo_urls")
+            record["entry_title"] = entry.get("property_name", "")
+            record["entry_image_url"] = image_urls[0] if image_urls else ""
+    else:
+        entry = get_material_by_id(record.get("material_id", ""))
+        if entry:
+            image_urls = _collect_image_urls(entry, "image_url", "image_urls")
+            record["entry_title"] = entry.get("title", "")
+            record["entry_image_url"] = image_urls[0] if image_urls else ""
+
+    return record
 
 
 def append_matching_history(data, match_type="material"):
@@ -367,7 +446,7 @@ def get_matching_history_by_user(line_user_id):
     )
     history = _select_many(stmt)
     for record in history:
-        record["entry_id"] = record.get("material_id") or record.get("property_id")
+        _decorate_match_record(record)
     return history
 
 
@@ -380,7 +459,7 @@ def get_matching_history_by_id(match_id, match_type="material"):
     if not records:
         return None, None
     record = records[0]
-    record["entry_id"] = record.get("material_id") or record.get("property_id")
+    _decorate_match_record(record)
     return 1, record
 
 
@@ -581,3 +660,32 @@ def update_material_status(material_id, status):
 
 def delete_material(material_id):
     return update_material_status(material_id, DELETED_STATUS)
+
+
+def update_material(material_id, line_user_id, data):
+    existing = get_material_by_id(material_id)
+    if not existing or existing.get("line_user_id") != line_user_id:
+        return None
+
+    allowed_fields = (
+        "title",
+        "material_type",
+        "description",
+        "size",
+        "quantity",
+        "condition",
+        "location",
+        "pickup_deadline",
+        "image_url",
+        "image_urls",
+    )
+    values = {field: data.get(field, existing.get(field, "")) for field in allowed_fields}
+
+    with _engine().begin() as conn:
+        result = conn.execute(update(materials).where(materials.c.material_id == material_id).values(**values))
+
+    if result.rowcount <= 0:
+        return None
+
+    updated = get_material_by_id(material_id)
+    return _decorate_material_record(updated)

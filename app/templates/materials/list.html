@@ -5,9 +5,17 @@
   <h2>登録情報を見る</h2>
 
   <nav class="filter-tabs" aria-label="一覧の絞り込み">
-    <a class="{{ 'active' if display_filter == 'all' else '' }}" href="{{ url_for('materials.list_materials', type='all') }}">全表示</a>
-    <a class="{{ 'active' if display_filter == 'materials' else '' }}" href="{{ url_for('materials.list_materials', type='materials') }}">材登録のみ</a>
-    <a class="{{ 'active' if display_filter == 'demolitions' else '' }}" href="{{ url_for('materials.list_materials', type='demolitions') }}">物件登録のみ</a>
+    <a class="{{ 'active' if display_filter == 'all' else '' }}" href="{{ url_for('materials.list_materials', type='all', material_type='all') }}">全表示</a>
+    <a class="{{ 'active' if display_filter == 'materials' else '' }}" href="{{ url_for('materials.list_materials', type='materials', material_type=material_type_filter) }}">材登録のみ</a>
+    <a class="{{ 'active' if display_filter == 'demolitions' else '' }}" href="{{ url_for('materials.list_materials', type='demolitions', material_type='all') }}">物件登録のみ</a>
+  </nav>
+
+  <nav class="filter-tabs material-type-tabs" aria-label="材の種類で絞り込み">
+    <span class="filter-label">材の種類</span>
+    <a class="{{ 'active' if material_type_filter == 'all' else '' }}" href="{{ url_for('materials.list_materials', type='materials', material_type='all') }}">すべて</a>
+    {% for material_type in material_type_options %}
+      <a class="{{ 'active' if material_type_filter == material_type else '' }}" href="{{ url_for('materials.list_materials', type='materials', material_type=material_type) }}">{{ material_type }}</a>
+    {% endfor %}
   </nav>
 
   {% if items %}
@@ -45,7 +53,7 @@
                   <dd>{{ item.material_type or '未設定' }}</dd>
                 </div>
                 <div>
-                  <dt>所在地</dt>
+                  <dt>保管場所</dt>
                   <dd>{{ item.location or '未設定' }}</dd>
                 </div>
                 <div>
@@ -59,6 +67,7 @@
                   <input type="hidden" name="material_id" value="{{ item.id }}">
                   <input type="hidden" name="line_user_id">
                   <input type="hidden" name="return_type" value="{{ display_filter }}">
+                  <input type="hidden" name="return_material_type" value="{{ material_type_filter }}">
                   <button type="submit">欲しい</button>
                 </form>
               </div>
@@ -92,6 +101,7 @@
                   <input type="hidden" name="property_id" value="{{ item.id }}">
                   <input type="hidden" name="line_user_id">
                   <input type="hidden" name="return_type" value="{{ display_filter }}">
+                  <input type="hidden" name="return_material_type" value="{{ material_type_filter }}">
                   <button type="submit">見学したい</button>
                 </form>
               </div>

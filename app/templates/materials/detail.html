@@ -38,7 +38,7 @@
       <dd>{{ material.location or '未設定' }}</dd>
     </div>
     <div>
-      <dt>引取期限</dt>
+      <dt>取引期限</dt>
       <dd>{{ material.pickup_deadline|date_jp if material.pickup_deadline else '未設定' }}</dd>
     </div>
     {% if material.created_at %}

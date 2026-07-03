@@ -3,7 +3,7 @@ import os
 
 import cloudinary
 import cloudinary.uploader
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from app.services.db_service import (
     append_material,
@@ -12,14 +12,26 @@ from app.services.db_service import (
     get_material_by_id,
     get_demolition_properties,
     get_demolition_property_by_id,
+    get_provider_shared_material_ids,
     append_matching_history,
     delete_material,
     get_user_by_line_user_id,
+    update_material,
 )
 from app.services.line_service import send_line_message
 from app.services.liff_service import liff_url_for
 
 materials_bp = Blueprint("materials", __name__, url_prefix="/materials")
+
+MATERIAL_TYPE_OPTIONS = [
+    "木材",
+    "金属",
+    "建具",
+    "家具",
+    "石材・ブロック",
+    "設備・配管",
+    "その他",
+]
 
 
 cloudinary.config(
@@ -112,29 +124,37 @@ def _sort_key_created_at(item):
     return str(value)
 
 
-def _build_listing_items(display_filter):
+def _build_listing_items(display_filter, material_type_filter="all"):
     items = []
+    matched_material_ids = get_provider_shared_material_ids()
 
-    if display_filter in ("all", "materials"):
+    if display_filter in ("all", "materials") and material_type_filter in ("all", *MATERIAL_TYPE_OPTIONS):
         for material in get_materials():
+            material_id = material.get("material_id", "")
+            material_type = material.get("material_type", "")
+            if material_id in matched_material_ids:
+                continue
+            if material_type_filter != "all" and material_type != material_type_filter:
+                continue
+
             image_urls = _collect_image_urls(material, "image_url", "image_urls")
             items.append(
                 {
                     "entry_type": "material",
-                    "id": material.get("material_id", ""),
+                    "id": material_id,
                     "title": material.get("title", ""),
                     "image_url": image_urls[0] if image_urls else "",
                     "image_urls": image_urls,
                     "location": material.get("location", ""),
                     "status": material.get("status", ""),
                     "created_at": material.get("created_at", ""),
-                    "material_type": material.get("material_type", ""),
+                    "material_type": material_type,
                     "quantity": material.get("quantity", ""),
                     "condition": material.get("condition", ""),
                 }
             )
 
-    if display_filter in ("all", "demolitions"):
+    if display_filter in ("all", "demolitions") and material_type_filter == "all":
         for property_record in get_demolition_properties():
             image_urls = _collect_image_urls(
                 property_record,
@@ -314,9 +334,12 @@ def list_materials():
     display_filter = request.args.get("type", "all")
     if display_filter not in ("all", "materials", "demolitions"):
         display_filter = "all"
+    material_type_filter = request.args.get("material_type", "all")
+    if material_type_filter not in ("all", *MATERIAL_TYPE_OPTIONS):
+        material_type_filter = "all"
 
     try:
-        items = _build_listing_items(display_filter)
+        items = _build_listing_items(display_filter, material_type_filter)
     except Exception:
         current_app.logger.exception("[materials.list] failed to load listing items")
         flash("登録情報の読み込みに失敗しました。時間をおいて再度お試しください。")
@@ -326,6 +349,8 @@ def list_materials():
         "materials/list.html",
         items=items,
         display_filter=display_filter,
+        material_type_filter=material_type_filter,
+        material_type_options=MATERIAL_TYPE_OPTIONS,
     )
 
 
@@ -359,9 +384,60 @@ def delete(material_id):
     else:
         flash("材登録の削除に失敗しました。")
 
+    if request.form.get("return_to") == "me":
+        return redirect(url_for("users.me"))
     if line_user_id:
         return redirect(url_for("users.detail", line_user_id=line_user_id))
     return redirect(url_for("materials.list_materials", type=request.form.get("return_type", "all")))
+
+
+@materials_bp.route("/<material_id>/update", methods=["POST"])
+def update_material_entry(material_id):
+    form = request.form.to_dict()
+    line_user_id = _resolve_line_user_id(form)
+    if not line_user_id:
+        return jsonify({"ok": False, "message": "LINE user ID を取得できませんでした。"}), 400
+
+    existing = get_material_by_id(material_id)
+    if not existing:
+        return jsonify({"ok": False, "message": "指定された材登録が見つかりません。"}), 404
+    if existing.get("line_user_id") != line_user_id:
+        return jsonify({"ok": False, "message": "この材登録は編集できません。"}), 403
+
+    required_fields = ["title", "material_type", "location"]
+    missing = [field for field in required_fields if not form.get(field)]
+    if missing:
+        return jsonify({"ok": False, "message": "必須項目が入力されていません。"}), 400
+
+    image_files = [
+        image_file
+        for image_file in request.files.getlist("image_files")
+        if image_file and image_file.filename
+    ]
+    input_image_urls = _dedupe_urls(
+        _split_image_urls(form.get("image_url", ""))
+        + _split_image_urls(form.get("image_urls_text", ""))
+    )
+    final_image_urls = input_image_urls
+
+    if image_files:
+        try:
+            uploaded_image_urls = _upload_images(image_files)
+            final_image_urls = _dedupe_urls(uploaded_image_urls + input_image_urls)
+        except ValueError as exc:
+            return jsonify({"ok": False, "message": str(exc)}), 400
+        except Exception:
+            current_app.logger.exception("[materials.update] cloudinary upload failed")
+            return jsonify({"ok": False, "message": "画像のアップロードに失敗しました。"}), 500
+
+    form["image_url"] = final_image_urls[0] if final_image_urls else ""
+    form["image_urls"] = json.dumps(final_image_urls, ensure_ascii=False)
+
+    updated_material = update_material(material_id, line_user_id, form)
+    if not updated_material:
+        return jsonify({"ok": False, "message": "材登録の更新に失敗しました。"}), 500
+
+    return jsonify({"ok": True, "material": updated_material})
 
 
 @materials_bp.route("/interest", methods=["POST"])
@@ -406,7 +482,13 @@ def interest():
     )
 
     flash("欲しい通知を送信しました。")
-    return redirect(url_for("materials.list_materials", type=request.form.get("return_type", "all")))
+    return redirect(
+        url_for(
+            "materials.list_materials",
+            type=request.form.get("return_type", "all"),
+            material_type=request.form.get("return_material_type", "all"),
+        )
+    )
 
 
 @materials_bp.route("/demolitions/visit-interest", methods=["POST"])
@@ -449,4 +531,10 @@ def visit_interest():
     )
 
     flash("見学希望を送信しました。")
-    return redirect(url_for("materials.list_materials", type=request.form.get("return_type", "all")))
+    return redirect(
+        url_for(
+            "materials.list_materials",
+            type=request.form.get("return_type", "all"),
+            material_type=request.form.get("return_material_type", "all"),
+        )
+    )

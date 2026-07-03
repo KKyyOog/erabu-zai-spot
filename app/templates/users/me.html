@@ -1,67 +1,90 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="card">
-  <h2 id="form-title">ユーザー情報</h2>
-  <div id="loading-status" class="loading-status" role="status" aria-live="polite">
-    <span class="loading-spinner" aria-hidden="true"></span>
-    <span id="status">LINE プロフィールを取得しています...</span>
+<section class="card user-page-card">
+  <div class="section-heading">
+    <div>
+      <h2 id="form-title">ユーザー情報</h2>
+      <p id="profile-note" class="hint"></p>
+    </div>
+    <div id="loading-status" class="loading-status" role="status" aria-live="polite">
+      <span class="loading-spinner" aria-hidden="true"></span>
+      <span id="status">LINE プロフィールを取得しています...</span>
+    </div>
   </div>
-  <p id="profile-note" class="hint"></p>
 
   <form id="user-form" method="post" action="{{ url_for('users.me_save') }}">
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="user_id" id="user_id">
     <input type="hidden" name="userid" id="userid">
 
-    <label>名前 *</label>
-    <input type="text" name="display_name" id="display_name" required placeholder="例：山田太郎">
+    <div class="profile-panels">
+      <section class="profile-panel profile-panel--primary">
+        <div class="panel-heading">
+          <span class="entry-badge">基本情報</span>
+          <h3>名前・拠点・運搬情報</h3>
+        </div>
 
-    <label>拠点住所 *</label>
-    <input type="text" name="address" id="address" required placeholder="例：知名町、和泊町、現場名など">
+        <label>名前 *</label>
+        <input type="text" name="display_name" id="display_name" required placeholder="例：山田太郎">
 
-    <label>運搬情報 *</label>
-    <textarea name="transport_info" id="transport_info" rows="4" required placeholder="軽トラで搬送可能、4トンダンプで搬送可能など"></textarea>
+        <label>拠点住所 *</label>
+        <input type="text" name="address" id="address" required placeholder="例：知名町、和泊町、現場名など">
 
-    <h3>連絡先共有カード</h3>
-    <p class="hint">マッチ後に同意した相手だけへ共有されます。</p>
+        <label>運搬情報 *</label>
+        <textarea name="transport_info" id="transport_info" rows="4" required placeholder="軽トラで搬送可能、4トンダンプで搬送可能など"></textarea>
+      </section>
 
-    <label>共有用の表示名</label>
-    <input type="text" name="contact_display_name" id="contact_display_name" placeholder="例：山田">
+      <section class="profile-panel">
+        <div class="panel-heading">
+          <span class="entry-badge">連絡先共有カード</span>
+          <h3>マッチ後に共有する連絡先</h3>
+        </div>
+        <p class="hint">同意した相手だけへ共有されます。</p>
 
-    <label>連絡方法</label>
-    <select name="contact_method" id="contact_method">
-      <option value="">選択してください</option>
-      <option value="LINE">LINE</option>
-      <option value="メール">メール</option>
-      <option value="電話">電話</option>
-      <option value="その他">その他</option>
-    </select>
+        <label>共有用の表示名</label>
+        <input type="text" name="contact_display_name" id="contact_display_name" placeholder="例：山田">
 
-    <label>連絡先</label>
-    <input type="text" name="contact_value" id="contact_value" placeholder="例：LINE ID、メールアドレスなど">
+        <label>連絡方法</label>
+        <select name="contact_method" id="contact_method">
+          <option value="">選択してください</option>
+          <option value="LINE">LINE</option>
+          <option value="メール">メール</option>
+          <option value="電話">電話</option>
+          <option value="その他">その他</option>
+        </select>
 
-    <label>連絡しやすい時間帯</label>
-    <select name="contact_available_time" id="contact_available_time">
-      <option value="">選択してください</option>
-      <option value="いつでも">いつでも</option>
-      <option value="平日午前">平日午前</option>
-      <option value="平日午後">平日午後</option>
-      <option value="平日夕方以降">平日夕方以降</option>
-      <option value="土日祝午前">土日祝午前</option>
-      <option value="土日祝午後">土日祝午後</option>
-      <option value="要相談">要相談</option>
-    </select>
+        <label>連絡先</label>
+        <input type="text" name="contact_value" id="contact_value" placeholder="例：LINE ID、メールアドレスなど">
 
-    <label>ひとこと</label>
-    <textarea name="contact_message" id="contact_message" rows="3" placeholder="例：まずはLINEで「マッチングの件」と送ってください。"></textarea>
+        <label>連絡しやすい時間帯</label>
+        <select name="contact_available_time" id="contact_available_time">
+          <option value="">選択してください</option>
+          <option value="いつでも">いつでも</option>
+          <option value="平日午前">平日午前</option>
+          <option value="平日午後">平日午後</option>
+          <option value="平日夕方以降">平日夕方以降</option>
+          <option value="土日祝午前">土日祝午前</option>
+          <option value="土日祝午後">土日祝午後</option>
+          <option value="要相談">要相談</option>
+        </select>
+
+        <label>ひとこと</label>
+        <textarea name="contact_message" id="contact_message" rows="3" placeholder="例：まずはLINEで「マッチングの件」と送ってください。"></textarea>
+      </section>
+    </div>
 
     <button type="submit" id="submit-button">登録する</button>
   </form>
 </section>
 
 <section class="card">
-  <h3>自分の材登録履歴</h3>
+  <div class="section-heading">
+    <div>
+      <h3>自分の材登録履歴</h3>
+      <p class="hint">登録した材はここから内容を編集できます。</p>
+    </div>
+  </div>
   <div id="materials-container"><p>読み込み中...</p></div>
 </section>
 
@@ -72,6 +95,12 @@
 
 <script>
   window.LIFF_ID = {{ LIFF_ID|tojson }};
+  let currentMaterials = [];
+  let currentUserAddress = '';
+
+  const materialTypeOptions = ['木材', '金属', '建具', '家具', '石材・ブロック', '設備・配管', 'その他'];
+  const quantityOptions = ['少量（手持ち）', '軽トラ1台未満', '軽トラ1台分', '2tトラック1台分', 'それ以上', '要相談'];
+  const conditionOptions = ['★☆☆☆☆', '★★☆☆☆', '★★★☆☆', '★★★★☆', '★★★★★'];
 
   function clearLegacyLiffReturnUrl() {
     try {
@@ -148,42 +177,327 @@
     return String(value).split(' ')[0];
   }
 
+  function parseImageUrls(value) {
+    if (!value) {
+      return [];
+    }
+    if (Array.isArray(value)) {
+      return value.filter(Boolean);
+    }
+
+    const text = String(value).trim();
+    if (!text) {
+      return [];
+    }
+
+    if (text.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(Boolean);
+        }
+      } catch (error) {
+        console.warn('Failed to parse image URLs:', error);
+      }
+    }
+
+    return text.replaceAll(',', '\n').split(/\r?\n/).map((url) => url.trim()).filter(Boolean);
+  }
+
+  function getMaterialImageUrls(material) {
+    const urls = parseImageUrls(material.image_urls);
+    const primary = parseImageUrls(material.image_url);
+    return [...new Set([...urls, ...primary])];
+  }
+
+  function renderOptions(options, selectedValue, emptyLabel = '') {
+    const emptyOption = emptyLabel ? `<option value="">${escapeHtml(emptyLabel)}</option>` : '';
+    const optionValues = [...options];
+    if (selectedValue && !optionValues.includes(selectedValue)) {
+      optionValues.unshift(selectedValue);
+    }
+    return emptyOption + optionValues.map((option) => {
+      const selected = option === selectedValue ? ' selected' : '';
+      return `<option value="${escapeHtml(option)}"${selected}>${escapeHtml(option)}</option>`;
+    }).join('');
+  }
+
+  function renderConditionStars(selectedValue) {
+    const optionValues = [...conditionOptions];
+    if (selectedValue && !optionValues.includes(selectedValue)) {
+      optionValues.unshift(selectedValue);
+    }
+    return optionValues.map((option, index) => {
+      const id = `condition_${index + 1}_${Math.random().toString(36).slice(2)}`;
+      const checked = option === selectedValue || (!selectedValue && option === '★★★☆☆') ? ' checked' : '';
+      return `
+        <input type="radio" name="condition" id="${id}" value="${escapeHtml(option)}"${checked}>
+        <label for="${id}">${escapeHtml(option)}</label>
+      `;
+    }).join('');
+  }
+
+  function formatDateInput(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function deadlineDateAfter({ days = 0, months = 0 }) {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    if (days) {
+      date.setDate(date.getDate() + days);
+    }
+    if (months) {
+      date.setMonth(date.getMonth() + months);
+    }
+    return formatDateInput(date);
+  }
+
+  function getInitialDeadlineMode(value) {
+    if (value === '無期限') {
+      return 'unlimited';
+    }
+    if (value) {
+      return 'custom';
+    }
+    return 'one_week';
+  }
+
+  function dateInputValue(value) {
+    const match = String(value || '').match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : '';
+  }
+
+  function updateEditDeadlineValue(form) {
+    const mode = form.querySelector('[data-deadline-mode]').value;
+    const customInput = form.querySelector('[data-custom-deadline]');
+    const hiddenInput = form.querySelector('[name="pickup_deadline"]');
+    customInput.hidden = mode !== 'custom';
+
+    if (mode === 'one_week') {
+      hiddenInput.value = deadlineDateAfter({ days: 7 });
+    } else if (mode === 'two_weeks') {
+      hiddenInput.value = deadlineDateAfter({ days: 14 });
+    } else if (mode === 'one_month') {
+      hiddenInput.value = deadlineDateAfter({ months: 1 });
+    } else if (mode === 'unlimited') {
+      hiddenInput.value = '無期限';
+    } else {
+      hiddenInput.value = customInput.value;
+    }
+  }
+
+  function updateEditLocationValue(form) {
+    const mode = form.querySelector('[data-location-mode]').value;
+    const locationInput = form.querySelector('[name="location"]');
+    const note = form.querySelector('[data-location-note]');
+
+    if (mode === 'profile' && currentUserAddress) {
+      locationInput.value = currentUserAddress;
+      locationInput.readOnly = true;
+      note.textContent = `ユーザー情報の拠点住所: ${currentUserAddress}`;
+    } else {
+      locationInput.readOnly = false;
+      note.textContent = mode === 'profile'
+        ? 'ユーザー情報の拠点住所が未登録のため、住所を入力してください。'
+        : 'この材だけ別の保管場所を登録します。';
+    }
+  }
+
+  function initializeMaterialEditForm(form) {
+    const deadlineMode = form.querySelector('[data-deadline-mode]');
+    const customDeadline = form.querySelector('[data-custom-deadline]');
+    const locationMode = form.querySelector('[data-location-mode]');
+
+    deadlineMode.addEventListener('change', () => updateEditDeadlineValue(form));
+    customDeadline.addEventListener('input', () => updateEditDeadlineValue(form));
+    locationMode.addEventListener('change', () => updateEditLocationValue(form));
+    updateEditDeadlineValue(form);
+    updateEditLocationValue(form);
+  }
+
   function renderMaterials(materials, userId) {
+    currentMaterials = materials || [];
     const container = document.getElementById('materials-container');
-    if (!materials || materials.length === 0) {
+    if (!currentMaterials.length) {
       container.innerHTML = '<p>まだ材登録がありません。</p>';
       return;
     }
 
-    container.innerHTML = materials.map((material) => `
-      <div class="history-card material-history-item">
+    container.innerHTML = currentMaterials.map((material) => renderMaterialCard(material, userId)).join('');
+  }
+
+  function renderMaterialCard(material, userId) {
+    const imageUrls = getMaterialImageUrls(material);
+    const thumb = imageUrls[0]
+      ? `<img class="history-thumb" src="${escapeHtml(imageUrls[0])}" alt="${escapeHtml(material.title || '材の写真')}">`
+      : '<div class="history-thumb history-thumb--empty">写真なし</div>';
+
+    return `
+      <div class="history-card material-history-item" id="material-card-${escapeHtml(material.material_id)}">
         <div class="history-card__header">
-          <div>
+          <div class="history-card__title">
             <span class="entry-badge">材登録</span>
             <h4>${escapeHtml(material.title || '名称未設定')}</h4>
           </div>
           <span class="listing-date">${escapeHtml(formatDateJp(material.created_at))}</span>
         </div>
-        <dl class="summary-list compact-list">
-          <div>
-            <dt>種類</dt>
-            <dd>${escapeHtml(material.material_type || '未設定')}</dd>
-          </div>
-          <div>
-            <dt>所在地</dt>
-            <dd>${escapeHtml(material.location || '未設定')}</dd>
-          </div>
-          <div>
-            <dt>状態</dt>
-            <dd>${escapeHtml(material.status || '未設定')}</dd>
-          </div>
-        </dl>
-        <form method="post" action="/materials/${encodeURIComponent(material.material_id)}/delete">
-          <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
-          <button type="submit">削除する</button>
-        </form>
+        <div class="history-card__bodyline">
+          ${thumb}
+          <dl class="summary-list compact-list">
+            <div>
+              <dt>種類</dt>
+              <dd>${escapeHtml(material.material_type || '未設定')}</dd>
+            </div>
+            <div>
+              <dt>保管場所</dt>
+              <dd>${escapeHtml(material.location || '未設定')}</dd>
+            </div>
+            <div>
+              <dt>状態</dt>
+              <dd>${escapeHtml(material.condition || '未設定')}</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="history-actions">
+          <button type="button" class="secondary-button" onclick="showMaterialEdit('${escapeHtml(material.material_id)}')">編集する</button>
+          <form method="post" action="/materials/${encodeURIComponent(material.material_id)}/delete">
+            <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
+            <input type="hidden" name="return_to" value="me">
+            <button type="submit" class="danger-button">削除する</button>
+          </form>
+        </div>
       </div>
-    `).join('');
+    `;
+  }
+
+  function showMaterialEdit(materialId) {
+    const material = currentMaterials.find((item) => item.material_id === materialId);
+    if (!material) {
+      return;
+    }
+
+    const userId = document.getElementById('line_user_id').value;
+    const imageText = getMaterialImageUrls(material).join('\n');
+    const card = document.getElementById(`material-card-${materialId}`);
+    const locationMode = currentUserAddress && material.location === currentUserAddress ? 'profile' : 'custom';
+    const deadlineMode = getInitialDeadlineMode(material.pickup_deadline || '');
+    const customDeadlineValue = deadlineMode === 'custom' ? dateInputValue(material.pickup_deadline) : '';
+    card.innerHTML = `
+      <form class="material-edit-form" onsubmit="submitMaterialEdit(event, '${escapeHtml(material.material_id)}')" enctype="multipart/form-data">
+        <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
+        <div class="history-card__header">
+          <div class="history-card__title">
+            <span class="entry-badge">編集中</span>
+            <h4>${escapeHtml(material.title || '名称未設定')}</h4>
+          </div>
+          <span class="listing-date">${escapeHtml(formatDateJp(material.created_at))}</span>
+        </div>
+
+        <div class="edit-grid">
+          <div>
+            <label>材の名前 *</label>
+            <input type="text" name="title" value="${escapeHtml(material.title || '')}" required>
+          </div>
+          <div>
+            <label>材の種類 *</label>
+            <select name="material_type" required>
+              ${renderOptions(materialTypeOptions, material.material_type || '', '選択してください')}
+            </select>
+          </div>
+          <div>
+            <label>保管場所 *</label>
+            <select data-location-mode>
+              <option value="profile"${locationMode === 'profile' ? ' selected' : ''}>ユーザー情報の拠点を使う</option>
+              <option value="custom"${locationMode === 'custom' ? ' selected' : ''}>別の住所を入力する</option>
+            </select>
+            <input type="text" name="location" value="${escapeHtml(material.location || '')}" required>
+            <p class="hint" data-location-note></p>
+          </div>
+          <div>
+            <label>寸法</label>
+            <input type="text" name="size" value="${escapeHtml(material.size || '')}">
+          </div>
+          <div>
+            <label>数量</label>
+            <select name="quantity">
+              ${renderOptions(quantityOptions, material.quantity || '', '選択してください')}
+            </select>
+          </div>
+          <div class="edit-grid__full">
+            <fieldset class="form-fieldset">
+              <legend>状態</legend>
+              <div class="star-rating" role="radiogroup" aria-label="状態の五段階評価">
+                ${renderConditionStars(material.condition || '')}
+              </div>
+            </fieldset>
+          </div>
+          <div>
+            <label>取引期限</label>
+            <select data-deadline-mode>
+              <option value="one_week"${deadlineMode === 'one_week' ? ' selected' : ''}>1週間</option>
+              <option value="two_weeks"${deadlineMode === 'two_weeks' ? ' selected' : ''}>2週間</option>
+              <option value="one_month"${deadlineMode === 'one_month' ? ' selected' : ''}>一カ月</option>
+              <option value="unlimited"${deadlineMode === 'unlimited' ? ' selected' : ''}>無期限</option>
+              <option value="custom"${deadlineMode === 'custom' ? ' selected' : ''}>カスタム</option>
+            </select>
+            <input type="date" data-custom-deadline class="conditional-input" value="${escapeHtml(customDeadlineValue)}">
+            <input type="hidden" name="pickup_deadline" value="${escapeHtml(material.pickup_deadline || '')}">
+          </div>
+          <div class="edit-grid__full">
+            <label>説明</label>
+            <textarea name="description" rows="3">${escapeHtml(material.description || '')}</textarea>
+          </div>
+          <div class="edit-grid__full">
+            <label>写真URL（複数可）</label>
+            <textarea name="image_urls_text" rows="3">${escapeHtml(imageText)}</textarea>
+          </div>
+          <div class="edit-grid__full">
+            <label>写真を追加</label>
+            <input type="file" name="image_files" accept="image/*" multiple>
+          </div>
+        </div>
+
+        <div class="history-actions">
+          <button type="submit">保存する</button>
+          <button type="button" class="secondary-button" onclick="renderMaterials(currentMaterials, '${escapeHtml(userId)}')">キャンセル</button>
+        </div>
+        <p class="form-error" aria-live="polite"></p>
+      </form>
+    `;
+    initializeMaterialEditForm(card.querySelector('form'));
+  }
+
+  async function submitMaterialEdit(event, materialId) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const error = form.querySelector('.form-error');
+    const submitButton = form.querySelector('button[type="submit"]');
+    error.textContent = '';
+    submitButton.disabled = true;
+
+    try {
+      const resp = await fetch(`/materials/${encodeURIComponent(materialId)}/update`, {
+        method: 'POST',
+        body: new FormData(form),
+      });
+      const body = await resp.json();
+      if (!resp.ok || !body.ok) {
+        error.textContent = body.message || '材登録の更新に失敗しました。';
+        return;
+      }
+
+      currentMaterials = currentMaterials.map((item) => item.material_id === materialId ? body.material : item);
+      renderMaterials(currentMaterials, document.getElementById('line_user_id').value);
+    } catch (errorObj) {
+      console.error(errorObj);
+      error.textContent = '通信に失敗しました。時間をおいて再度お試しください。';
+    } finally {
+      submitButton.disabled = false;
+    }
   }
 
   function renderMatchingHistory(history) {
@@ -201,6 +515,10 @@
       const entryLabel = matchType === 'viewing' ? '見学' : '材';
       const roleLabel = isProvider ? '登録者側' : '希望者側';
       const entryId = match.entry_id || match.material_id || match.property_id || '';
+      const title = match.entry_title || entryId || 'ID未設定';
+      const thumb = match.entry_image_url
+        ? `<img class="history-thumb history-thumb--small" src="${escapeHtml(match.entry_image_url)}" alt="${escapeHtml(title)}">`
+        : '<div class="history-thumb history-thumb--small history-thumb--empty">写真なし</div>';
       const shareAction = `/users/matches/${encodeURIComponent(matchType)}/${encodeURIComponent(match.match_id)}/share-contact`;
       const shareControl = shareStatus === 'shared'
         ? '<p class="share-status shared">連絡先カード共有済み</p>'
@@ -214,25 +532,31 @@
       return `
         <div class="history-card matching-history-item">
           <div class="history-card__header">
-            <div>
+            <div class="history-card__title">
               <span class="entry-badge ${matchType === 'viewing' ? 'demolition' : ''}">${entryLabel}マッチング</span>
-              <h4>${escapeHtml(entryId || 'ID未設定')}</h4>
+              <h4>${escapeHtml(title)}</h4>
             </div>
             <span class="listing-date">${escapeHtml(formatDateJp(match.created_at))}</span>
           </div>
-          <div class="match-meta">
-            <span>${escapeHtml(roleLabel)}</span>
-            <span>${escapeHtml(match.action || '操作未設定')}</span>
-            <span>${escapeHtml(match.status || '状態未設定')}</span>
+          <div class="history-card__bodyline">
+            ${thumb}
+            <div>
+              <div class="match-meta">
+                <span>${escapeHtml(roleLabel)}</span>
+                <span>${escapeHtml(match.action || '操作未設定')}</span>
+                <span>${escapeHtml(match.status || '状態未設定')}</span>
+              </div>
+              ${match.message ? `<p class="match-message">${escapeHtml(match.message)}</p>` : ''}
+              ${shareControl}
+            </div>
           </div>
-          ${match.message ? `<p class="match-message">${escapeHtml(match.message)}</p>` : ''}
-          ${shareControl}
         </div>
       `;
     }).join('');
   }
 
   function fillUserForm(user) {
+    currentUserAddress = user.address || '';
     document.getElementById('display_name').value = user.display_name || '';
     document.getElementById('address').value = user.address || '';
     document.getElementById('transport_info').value = user.transport_info || '';
@@ -325,6 +649,7 @@
         setLoading(false, 'ユーザー情報を読み込めませんでした。新規登録として入力してください。');
         return;
       }
+      currentUserAddress = body.user?.address || '';
       renderMaterials(body.materials || [], profile.userId);
       renderMatchingHistory(body.matching_history || []);
       fillContactCard(body.contact_card || {}, body.user || {});

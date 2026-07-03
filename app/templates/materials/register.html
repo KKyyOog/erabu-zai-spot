@@ -31,22 +31,50 @@
     <input type="text" name="size" placeholder="例：長さ180cm、幅10cm程度">
 
     <label>数量</label>
-    <input type="text" name="quantity" placeholder="例：20本、軽トラ1台分など">
-
-    <label>状態</label>
-    <select name="condition">
-      <option value="すぐ使える">すぐ使える</option>
-      <option value="少し補修すれば使える">少し補修すれば使える</option>
-      <option value="加工すれば使える">加工すれば使える</option>
-      <option value="状態確認が必要">状態確認が必要</option>
-      <option value="その他">その他</option>
+    <select name="quantity">
+      <option value="">選択してください</option>
+      <option value="少量（手持ち）">少量（手持ち）</option>
+      <option value="軽トラ1台未満">軽トラ1台未満</option>
+      <option value="軽トラ1台分">軽トラ1台分</option>
+      <option value="2tトラック1台分">2tトラック1台分</option>
+      <option value="それ以上">それ以上</option>
+      <option value="要相談">要相談</option>
     </select>
 
-    <label>保管場所 *</label>
-    <input type="text" name="location" required placeholder="例：知名町、和泊町、現場名など">
+    <fieldset class="form-fieldset">
+      <legend>状態</legend>
+      <div class="star-rating" role="radiogroup" aria-label="状態の五段階評価">
+        <input type="radio" name="condition" id="condition_1" value="★☆☆☆☆">
+        <label for="condition_1">★☆☆☆☆</label>
+        <input type="radio" name="condition" id="condition_2" value="★★☆☆☆">
+        <label for="condition_2">★★☆☆☆</label>
+        <input type="radio" name="condition" id="condition_3" value="★★★☆☆" checked>
+        <label for="condition_3">★★★☆☆</label>
+        <input type="radio" name="condition" id="condition_4" value="★★★★☆">
+        <label for="condition_4">★★★★☆</label>
+        <input type="radio" name="condition" id="condition_5" value="★★★★★">
+        <label for="condition_5">★★★★★</label>
+      </div>
+    </fieldset>
 
-    <label>引取期限</label>
-    <input type="date" name="pickup_deadline">
+    <label>保管場所 *</label>
+    <select id="location_mode" class="location-mode-select">
+      <option value="profile">ユーザー情報の拠点を使う</option>
+      <option value="custom">別の住所を入力する</option>
+    </select>
+    <input type="text" name="location" id="location" required placeholder="例：知名町、和泊町、現場名など">
+    <p id="profile-location-note" class="hint">LINE内で開くと登録済みの拠点住所を自動入力します。</p>
+
+    <label>取引期限</label>
+    <select id="deadline_mode">
+      <option value="one_week">1週間</option>
+      <option value="two_weeks">2週間</option>
+      <option value="one_month">一カ月</option>
+      <option value="unlimited">無期限</option>
+      <option value="custom">カスタム</option>
+    </select>
+    <input type="date" id="custom_pickup_deadline" class="conditional-input" hidden>
+    <input type="hidden" name="pickup_deadline" id="pickup_deadline">
 
     <label>写真（複数選択可）</label>
     <input type="file" name="image_files" accept="image/*" multiple>
@@ -63,4 +91,93 @@
   window.LIFF_ID = {{ LIFF_ID|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/liff.js') }}"></script>
+<script>
+  const locationMode = document.getElementById('location_mode');
+  const locationInput = document.getElementById('location');
+  const profileLocationNote = document.getElementById('profile-location-note');
+  const deadlineMode = document.getElementById('deadline_mode');
+  const customDeadline = document.getElementById('custom_pickup_deadline');
+  const pickupDeadline = document.getElementById('pickup_deadline');
+  let profileAddress = '';
+
+  function formatDateInput(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function deadlineDateAfter({ days = 0, months = 0 }) {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    if (days) {
+      date.setDate(date.getDate() + days);
+    }
+    if (months) {
+      date.setMonth(date.getMonth() + months);
+    }
+    return formatDateInput(date);
+  }
+
+  function updateDeadlineValue() {
+    const mode = deadlineMode.value;
+    customDeadline.hidden = mode !== 'custom';
+
+    if (mode === 'one_week') {
+      pickupDeadline.value = deadlineDateAfter({ days: 7 });
+    } else if (mode === 'two_weeks') {
+      pickupDeadline.value = deadlineDateAfter({ days: 14 });
+    } else if (mode === 'one_month') {
+      pickupDeadline.value = deadlineDateAfter({ months: 1 });
+    } else if (mode === 'unlimited') {
+      pickupDeadline.value = '無期限';
+    } else {
+      pickupDeadline.value = customDeadline.value;
+    }
+  }
+
+  function updateLocationInput() {
+    if (locationMode.value === 'profile' && profileAddress) {
+      locationInput.value = profileAddress;
+      locationInput.readOnly = true;
+      profileLocationNote.textContent = `ユーザー情報の拠点住所: ${profileAddress}`;
+    } else {
+      locationInput.readOnly = false;
+      if (locationMode.value === 'profile') {
+        profileLocationNote.textContent = 'ユーザー情報の拠点住所が未登録のため、住所を入力してください。';
+      } else {
+        profileLocationNote.textContent = 'この材だけ別の保管場所を登録します。';
+      }
+    }
+  }
+
+  async function loadProfileAddressWhenReady() {
+    for (let i = 0; i < 40; i += 1) {
+      const userId = document.getElementById('line_user_id').value;
+      if (userId) {
+        try {
+          const resp = await fetch('/users/me/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId }),
+          });
+          const body = await resp.json();
+          profileAddress = body.user?.address || '';
+          updateLocationInput();
+        } catch (error) {
+          console.warn('Failed to load profile address:', error);
+        }
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
+  locationMode.addEventListener('change', updateLocationInput);
+  deadlineMode.addEventListener('change', updateDeadlineValue);
+  customDeadline.addEventListener('input', updateDeadlineValue);
+  updateDeadlineValue();
+  updateLocationInput();
+  loadProfileAddressWhenReady();
+</script>
 {% endblock %}
