@@ -337,16 +337,18 @@ td {
 }
 
 .listing-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
-  align-items: start;
+  column-count: 2;
+  column-gap: 12px;
 }
 
 .listing-card {
   position: relative;
-  display: flex;
+  display: inline-flex;
   flex-direction: column;
+  width: 100%;
+  margin: 0 0 12px;
+  break-inside: avoid;
+  page-break-inside: avoid;
   overflow: hidden;
   background: white;
   border: 1px solid #ded7c8;
@@ -358,7 +360,7 @@ td {
   position: relative;
   display: grid;
   place-items: center;
-  height: 148px;
+  height: 180px;
   flex: 0 0 auto;
   overflow: hidden;
   background: #ebe6da;
@@ -417,8 +419,8 @@ td {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
+  gap: 8px;
+  padding: 10px;
   background: white;
 }
 
@@ -426,6 +428,10 @@ td {
 .history-card h4 {
   margin: 0;
   line-height: 1.35;
+}
+
+.listing-card__body h3 {
+  font-size: 15px;
 }
 
 .listing-card__topline,
@@ -520,11 +526,20 @@ td {
   grid-template-columns: 56px 1fr;
 }
 
+.listing-card .summary-list {
+  gap: 5px;
+  font-size: 13px;
+}
+
+.listing-card .summary-list div {
+  grid-template-columns: 56px 1fr;
+}
+
 .button-link.compact,
 .listing-actions button,
 .history-card button {
   margin-top: 0;
-  padding: 10px 12px;
+  padding: 9px 8px;
 }
 
 .button-link.secondary {
@@ -533,7 +548,7 @@ td {
 
 .listing-actions {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-top: auto;
 }
@@ -630,15 +645,38 @@ td {
   }
 
   .listing-grid {
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    column-gap: 18px;
   }
 
   .listing-card__image {
-    height: 156px;
+    height: 320px;
   }
 
-  .listing-actions {
-    grid-template-columns: 1fr 1fr;
+  .listing-card {
+    margin-bottom: 18px;
+  }
+
+  .listing-card__body {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .listing-card__body h3 {
+    font-size: 17px;
+  }
+
+  .listing-card .summary-list {
+    gap: 6px;
+    font-size: 14px;
+  }
+
+  .listing-card .summary-list div {
+    grid-template-columns: 68px 1fr;
+  }
+
+  .button-link.compact,
+  .listing-actions button {
+    padding: 10px 12px;
   }
 
   .history-actions {
@@ -671,5 +709,37 @@ td {
   .history-thumb {
     width: 68px;
     height: 68px;
+  }
+
+  .listing-grid {
+    column-gap: 10px;
+  }
+
+  .listing-card {
+    margin-bottom: 10px;
+  }
+
+  .listing-card__image {
+    height: 160px;
+  }
+
+  .listing-card__topline {
+    display: grid;
+    gap: 4px;
+  }
+
+  .listing-date {
+    white-space: normal;
+  }
+
+  .listing-actions {
+    gap: 6px;
+  }
+
+  .button-link.compact,
+  .listing-actions button {
+    min-height: 40px;
+    padding: 8px 6px;
+    font-size: 13px;
   }
 }
