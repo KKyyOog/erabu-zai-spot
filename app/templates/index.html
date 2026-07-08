@@ -33,6 +33,7 @@
       "client_id",
       "mst_challenge",
     ].forEach((name) => targetParams.delete(name));
+    targetParams.set("liff_entry", "1");
 
     const cleanSearch = targetParams.toString();
     const targetUrl = target.pathname + (cleanSearch ? `?${cleanSearch}` : "");

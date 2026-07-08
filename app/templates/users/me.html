@@ -134,6 +134,10 @@
     }
 
     const params = new URLSearchParams(window.location.search);
+    if (params.get('liff_entry') === '1') {
+      return false;
+    }
+
     const liffCallbackParams = [
       'liff.state',
       'liff.referrer',
