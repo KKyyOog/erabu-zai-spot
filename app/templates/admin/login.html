@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+  <h2>Admin login</h2>
+  <p class="hint">Please open this page from LINE and sign in with the configured admin account.</p>
+  <p id="admin-auth-status" class="hint">Checking LINE login...</p>
+</section>
+
+<script>
+  window.LIFF_ID = {{ LIFF_ID|tojson }};
+  window.REQUIRE_LIFF_LOGIN = true;
+  window.addEventListener('line-authenticated', () => {
+    window.location.reload();
+  });
+  setTimeout(() => {
+    const status = document.getElementById('admin-auth-status');
+    if (status) {
+      status.textContent = 'If this page does not refresh automatically, reopen it from LINE after login.';
+    }
+  }, 5000);
+</script>
+<script src="{{ url_for('static', filename='js/liff.js') }}"></script>
+{% endblock %}

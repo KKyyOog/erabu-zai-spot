@@ -51,8 +51,10 @@ async function initializeLiff() {
 
     console.log("User is logged in. Getting profile...");
     const profile = await liff.getProfile();
-    console.log("Profile retrieved:", profile);
-    await logToServer("Profile retrieved: userId=" + profile.userId + ", displayName=" + profile.displayName);
+    const idToken = liff.getIDToken();
+    window.LINE_ID_TOKEN = idToken || "";
+    console.log("Profile retrieved.");
+    await logToServer("Profile retrieved.");
 
     const lineUserIdInput = document.getElementById("line_user_id");
     const userIdInput = document.getElementById("user_id");
@@ -65,10 +67,23 @@ async function initializeLiff() {
       });
     };
 
+    const ensureIdTokenInputs = (value) => {
+      document.querySelectorAll("form").forEach((form) => {
+        let input = form.querySelector('input[name="id_token"]');
+        if (!input) {
+          input = document.createElement("input");
+          input.type = "hidden";
+          input.name = "id_token";
+          form.appendChild(input);
+        }
+        input.value = value || "";
+      });
+    };
+
     console.log("Setting form values...");
     if (lineUserIdInput) {
       lineUserIdInput.value = profile.userId;
-      console.log("line_user_id set to:", profile.userId);
+      console.log("line_user_id set.");
     } else {
       console.warn("line_user_id input not found");
       await logToServer("WARNING: line_user_id input not found");
@@ -85,13 +100,15 @@ async function initializeLiff() {
     setAllInputsByName("line_user_id", profile.userId);
     setAllInputsByName("user_id", profile.userId);
     setAllInputsByName("userid", profile.userId);
+    setAllInputsByName("id_token", window.LINE_ID_TOKEN);
+    ensureIdTokenInputs(window.LINE_ID_TOKEN);
 
     if (displayNameInput) {
       if (window.FILL_DISPLAY_NAME_FROM_LIFF === true && !displayNameInput.value.trim()) {
         displayNameInput.value = profile.displayName;
-        console.log("display_name set to:", profile.displayName);
+        console.log("display_name set.");
       } else if (window.FILL_DISPLAY_NAME_FROM_LIFF === true) {
-        console.log("display_name already present, keeping current value:", displayNameInput.value);
+        console.log("display_name already present.");
       }
     } else {
       console.warn("display_name input not found");
@@ -105,14 +122,14 @@ async function initializeLiff() {
       },
       body: JSON.stringify({
         userId: profile.userId,
-        displayName: profile.displayName,
-        pictureUrl: profile.pictureUrl || "",
+        idToken: window.LINE_ID_TOKEN,
       }),
       keepalive: true,
     })
       .then(() => {
         console.log("LIFF link endpoint called successfully.");
-        logToServer("LIFF link endpoint called successfully. userId=" + profile.userId);
+        logToServer("LIFF link endpoint called successfully.");
+        window.dispatchEvent(new Event("line-authenticated"));
       })
       .catch((error) => {
         console.warn("LIFF link endpoint failed:", error);

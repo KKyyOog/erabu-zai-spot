@@ -21,6 +21,9 @@ def create_app():
 
     app = Flask(__name__)
     app.config.from_object(Config)
+    if app.config["SECRET_KEY"] == "dev-secret":
+        app.logger.warning("FLASK_SECRET_KEY is using the development default. Set a strong secret in production.")
+
     app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "static", "uploads")
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     init_database(app)
@@ -63,14 +66,35 @@ def create_app():
     def log_debug_request():
         if request.path.startswith(("/link", "/users/me", "/callback")):
             app.logger.info(
-                "[REQUEST DEBUG] method=%s path=%s query=%s remote_addr=%s referer=%s user_agent=%s",
+                "[REQUEST DEBUG] method=%s path=%s remote_addr=%s referer_present=%s user_agent=%s",
                 request.method,
                 request.path,
-                request.query_string.decode("utf-8", errors="ignore"),
                 request.headers.get("X-Forwarded-For", request.remote_addr),
-                request.headers.get("Referer", ""),
+                bool(request.headers.get("Referer", "")),
                 request.headers.get("User-Agent", ""),
             )
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=()",
+        )
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://static.line-scdn.net; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self' https://api.line.me https://access.line.me https://*.line.me; "
+            "frame-src https://liff.line.me https://access.line.me https://*.line.me; "
+            "base-uri 'self'; "
+            "form-action 'self';",
+        )
+        return response
 
     @app.route("/")
     def index():

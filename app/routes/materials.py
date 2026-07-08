@@ -20,6 +20,7 @@ from app.services.db_service import (
 )
 from app.services.line_service import send_line_message
 from app.services.liff_service import liff_url_for
+from app.services.line_auth_service import LineAuthError, require_verified_line_user_id, resolve_verified_line_user_id
 
 materials_bp = Blueprint("materials", __name__, url_prefix="/materials")
 
@@ -233,6 +234,14 @@ def register_demolition():
 @materials_bp.route("/submit", methods=["POST"])
 def submit():
     form = request.form.to_dict()
+    try:
+        line_user_id = resolve_verified_line_user_id(form.get("line_user_id", ""), allow_anonymous=True)
+    except LineAuthError:
+        flash("LINE login verification failed. Please reopen this page from LINE.")
+        return redirect(url_for("materials.register_material"))
+    if line_user_id:
+        form["line_user_id"] = line_user_id
+
     image_files = [image_file for image_file in request.files.getlist("image_files") if image_file and image_file.filename]
     legacy_image_file = request.files.get("image_file")
     if legacy_image_file and legacy_image_file.filename:
@@ -284,6 +293,14 @@ def submit():
 @materials_bp.route("/demolitions/submit", methods=["POST"])
 def submit_demolition():
     form = request.form.to_dict()
+    try:
+        line_user_id = resolve_verified_line_user_id(form.get("line_user_id", ""), allow_anonymous=True)
+    except LineAuthError:
+        flash("LINE login verification failed. Please reopen this page from LINE.")
+        return redirect(url_for("materials.register_demolition"))
+    if line_user_id:
+        form["line_user_id"] = line_user_id
+
     image_files = [
         image_file
         for image_file in request.files.getlist("building_image_files")
@@ -379,6 +396,17 @@ def demolition_detail(property_id):
 @materials_bp.route("/<material_id>/delete", methods=["POST"])
 def delete(material_id):
     line_user_id = request.form.get("line_user_id", "")
+    try:
+        line_user_id = require_verified_line_user_id(line_user_id)
+    except LineAuthError:
+        flash("LINE login verification failed. Please reopen this page from LINE.")
+        return redirect(url_for("users.me"))
+
+    existing = get_material_by_id(material_id)
+    if not existing or existing.get("line_user_id") != line_user_id:
+        flash("This material cannot be deleted by the current user.")
+        return redirect(url_for("users.me"))
+
     if delete_material(material_id):
         flash("材登録を削除しました。")
     else:
@@ -395,6 +423,11 @@ def delete(material_id):
 def update_material_entry(material_id):
     form = request.form.to_dict()
     line_user_id = _resolve_line_user_id(form)
+    try:
+        line_user_id = require_verified_line_user_id(line_user_id)
+    except LineAuthError:
+        return jsonify({"ok": False, "message": "LINE authentication failed"}), 401
+
     if not line_user_id:
         return jsonify({"ok": False, "message": "LINE user ID を取得できませんでした。"}), 400
 
@@ -444,6 +477,12 @@ def update_material_entry(material_id):
 def interest():
     material_id = request.form.get("material_id")
     requester_line_user_id = _resolve_line_user_id(request.form)
+    try:
+        requester_line_user_id = require_verified_line_user_id(requester_line_user_id)
+    except LineAuthError:
+        flash("LINE login verification failed. Please reopen this page from LINE.")
+        return redirect(url_for("materials.list_materials"))
+
     message = request.form.get("message", "")
 
     material = get_material_by_id(material_id)
@@ -495,6 +534,11 @@ def interest():
 def visit_interest():
     property_id = request.form.get("property_id")
     requester_line_user_id = _resolve_line_user_id(request.form)
+    try:
+        requester_line_user_id = require_verified_line_user_id(requester_line_user_id)
+    except LineAuthError:
+        flash("LINE login verification failed. Please reopen this page from LINE.")
+        return redirect(url_for("materials.list_materials"))
 
     property_record = get_demolition_property_by_id(property_id)
     if not property_record:

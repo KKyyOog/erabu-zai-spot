@@ -1,6 +1,8 @@
 import logging
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
+
+from app.services.line_auth_service import LineAuthError, verify_id_token
 
 link_bp = Blueprint("link", __name__, url_prefix="/link")
 logger = logging.getLogger(__name__)
@@ -10,28 +12,32 @@ logger = logging.getLogger(__name__)
 def liff_link():
     data = request.get_json(silent=True) or {}
 
-    user_id = data.get("userId")
-    display_name = data.get("displayName", "")
-    picture_url = data.get("pictureUrl", "")
+    user_id = (data.get("userId") or "").strip()
+    id_token = (data.get("idToken") or data.get("id_token") or "").strip()
 
     logger.info(
-        "[LIFF] profile received userId=%s displayName=%s path=%s user_agent=%s",
-        user_id,
-        display_name,
+        "[LIFF] auth received user_id_present=%s id_token_present=%s path=%s user_agent=%s",
+        bool(user_id),
+        bool(id_token),
         request.path,
         request.headers.get("User-Agent", ""),
     )
 
     if not user_id:
-        logger.warning("[LIFF] profile rejected because userId is missing payload=%s", data)
+        logger.warning("[LIFF] auth rejected because userId is missing")
         return jsonify({"ok": False, "message": "userId is required"}), 400
+    if not id_token:
+        logger.warning("[LIFF] auth rejected because idToken is missing")
+        return jsonify({"ok": False, "message": "idToken is required"}), 400
 
-    logger.info(
-        "[LIFF] profile accepted userId=%s displayName=%s pictureUrl=%s",
-        user_id,
-        display_name,
-        picture_url,
-    )
+    try:
+        claims = verify_id_token(id_token, expected_user_id=user_id)
+    except LineAuthError as exc:
+        logger.warning("[LIFF] auth rejected: %s", exc)
+        return jsonify({"ok": False, "message": "LINE authentication failed"}), 401
+
+    session["line_user_id"] = claims["sub"]
+    logger.info("[LIFF] auth accepted")
     return jsonify({"ok": True})
 
 
@@ -43,10 +49,9 @@ def liff_debug():
     details = data.get("details", {})
 
     logger.info(
-        "[LIFF DEBUG] timestamp=%s message=%s details=%s remote_addr=%s referer=%s user_agent=%s",
+        "[LIFF DEBUG] timestamp=%s message=%s remote_addr=%s referer=%s user_agent=%s",
         timestamp,
         message,
-        details,
         request.headers.get("X-Forwarded-For", request.remote_addr),
         request.headers.get("Referer", ""),
         request.headers.get("User-Agent", ""),

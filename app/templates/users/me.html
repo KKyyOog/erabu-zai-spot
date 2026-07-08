@@ -17,6 +17,7 @@
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="user_id" id="user_id">
     <input type="hidden" name="userid" id="userid">
+    <input type="hidden" name="id_token" id="id_token">
 
     <div class="profile-panels">
       <section class="profile-panel profile-panel--primary">
@@ -97,6 +98,7 @@
   window.LIFF_ID = {{ LIFF_ID|tojson }};
   let currentMaterials = [];
   let currentUserAddress = '';
+  let currentIdToken = '';
 
   const materialTypeOptions = ['木材', '金属', '建具', '家具', '石材・ブロック', '設備・配管', 'その他'];
   const quantityOptions = ['少量（手持ち）', '軽トラ1台未満', '軽トラ1台分', '2tトラック1台分', 'それ以上', '要相談'];
@@ -120,6 +122,43 @@
       inClient: Boolean(window.liff && liff.isInClient && liff.isInClient()),
       userAgent: navigator.userAgent,
     };
+  }
+
+  function currentLiffUrl() {
+    return `https://liff.line.me/${encodeURIComponent(window.LIFF_ID)}${window.location.pathname}${window.location.search}${window.location.hash}`;
+  }
+
+  function shouldReopenViaLiff() {
+    if (!window.LIFF_ID || (window.liff && liff.isInClient && liff.isInClient())) {
+      return false;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const liffCallbackParams = [
+      'liff.state',
+      'liff.referrer',
+      'access_token',
+      'context_token',
+      'feature_token',
+      'id_token',
+      'client_id',
+      'mst_challenge',
+    ];
+    if (liffCallbackParams.some((name) => params.has(name))) {
+      return false;
+    }
+
+    const redirectKey = `erabu_zai_spot_liff_reopen:${window.location.pathname}${window.location.search}`;
+    try {
+      if (window.sessionStorage.getItem(redirectKey) === '1') {
+        return false;
+      }
+      window.sessionStorage.setItem(redirectKey, '1');
+    } catch (error) {
+      console.warn('Failed to store LIFF reopen guard:', error);
+    }
+
+    return true;
   }
 
   function logLiffDebug(message, details = {}) {
@@ -366,6 +405,7 @@
           <button type="button" class="secondary-button" onclick="showMaterialEdit('${escapeHtml(material.material_id)}')">編集する</button>
           <form method="post" action="/materials/${encodeURIComponent(material.material_id)}/delete">
             <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
+            <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
             <input type="hidden" name="return_to" value="me">
             <button type="submit" class="danger-button">削除する</button>
           </form>
@@ -389,6 +429,7 @@
     card.innerHTML = `
       <form class="material-edit-form" onsubmit="submitMaterialEdit(event, '${escapeHtml(material.material_id)}')" enctype="multipart/form-data">
         <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
+        <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
         <div class="history-card__header">
           <div class="history-card__title">
             <span class="entry-badge">編集中</span>
@@ -525,6 +566,7 @@
         : `
           <form method="post" action="${shareAction}">
             <input type="hidden" name="line_user_id" value="${escapeHtml(currentUserId)}">
+            <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
             <button type="submit">連絡先カードを共有する</button>
           </form>
         `;
@@ -620,6 +662,16 @@
       await liff.init({ liffId: window.LIFF_ID });
       clearLegacyLiffReturnUrl();
       if (!liff.isLoggedIn()) {
+        if (shouldReopenViaLiff()) {
+          const liffUrl = currentLiffUrl();
+          logLiffDebug('users/me reopening via LIFF URL.', {
+            ...getLiffDebugContext(),
+            liffUrl: liffUrl,
+          });
+          window.location.replace(liffUrl);
+          return;
+        }
+
         logLiffDebug('users/me redirecting to LIFF login.', getLiffDebugContext());
         setLoading(true, 'LINEログインへ移動しています...');
         liff.login({ redirectUri: window.location.href });
@@ -628,16 +680,18 @@
       setSubmitEnabled(true);
       logLiffDebug('users/me LIFF login confirmed.', getLiffDebugContext());
       const profile = await liff.getProfile();
+      currentIdToken = liff.getIDToken() || '';
       document.getElementById('line_user_id').value = profile.userId;
       document.getElementById('user_id').value = profile.userId;
       document.getElementById('userid').value = profile.userId;
+      document.getElementById('id_token').value = currentIdToken;
       document.getElementById('profile-note').textContent = `LINE表示名: ${profile.displayName}`;
       setLoading(true, '登録情報を読み込んでいます...');
 
       const resp = await fetch('/users/me/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: profile.userId }),
+        body: JSON.stringify({ userId: profile.userId, idToken: currentIdToken }),
       });
       const body = await resp.json();
       if (!resp.ok || !body.ok) {

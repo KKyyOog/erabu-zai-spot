@@ -159,7 +159,7 @@
           const resp = await fetch('/users/me/data', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId }),
+            body: JSON.stringify({ userId, idToken: window.LINE_ID_TOKEN || '' }),
           });
           const body = await resp.json();
           profileAddress = body.user?.address || '';

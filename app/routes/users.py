@@ -13,6 +13,7 @@ from app.services.db_service import (
     update_user,
 )
 from app.services.line_service import send_line_message
+from app.services.line_auth_service import LineAuthError, require_verified_line_user_id
 
 users_bp = Blueprint("users", __name__, url_prefix="/users")
 
@@ -110,63 +111,57 @@ def submit():
         flash("必須項目が入力されていません。")
         return redirect(url_for("users.register"))
 
+    try:
+        line_user_id = require_verified_line_user_id(form.get("line_user_id", ""))
+    except LineAuthError:
+        flash("LINE login verification failed. Please reopen this page from LINE.")
+        return redirect(url_for("users.me"))
+
+    form["line_user_id"] = line_user_id
+    form["user_id"] = line_user_id
+    form["userid"] = line_user_id
+
     line_user_id = append_user(form)
     _save_contact_card_if_present(line_user_id, form)
     _clear_me_data_cache(line_user_id)
     flash("ユーザー情報を登録しました。")
-    return redirect(url_for("users.detail", line_user_id=line_user_id))
+    return redirect(url_for("users.me"))
 
 
 @users_bp.route("/check/<line_user_id>", methods=["GET"])
 def check(line_user_id):
-    user = get_user_by_line_user_id(line_user_id)
+    try:
+        verified_user_id = require_verified_line_user_id(line_user_id)
+    except LineAuthError:
+        return jsonify({"exists": False, "message": "LINE authentication failed"}), 401
+
+    user = get_user_by_line_user_id(verified_user_id)
     return jsonify({"exists": user is not None})
 
 
 @users_bp.route("/<line_user_id>", methods=["GET"])
 def detail(line_user_id):
-    user = get_user_by_line_user_id(line_user_id)
-    user_exists = user is not None
-
-    if not user:
-        user = {
-            "line_user_id": line_user_id,
-            "display_name": "",
-            "address": "",
-            "transport_info": "",
-            "created_at": "",
-        }
-
-    materials = get_materials_by_line_user_id(line_user_id)
-    matching_history = get_matching_history_by_user(line_user_id)
-    contact_card = get_contact_card_by_user(line_user_id) or {}
-
-    return render_template(
-        "users/detail.html",
-        user=user,
-        user_exists=user_exists,
-        materials=materials,
-        matching_history=matching_history,
-        contact_card=contact_card,
-    )
-
+    flash("Please use the LINE-authenticated my page.")
+    return redirect(url_for("users.me"))
 
 @users_bp.route("/<line_user_id>/edit", methods=["GET"])
 def edit(line_user_id):
-    user = get_user_by_line_user_id(line_user_id)
-    if not user:
-        return "指定されたユーザーが見つかりません。", 404
-    contact_card = get_contact_card_by_user(line_user_id) or {}
-    return render_template("users/edit.html", user=user, contact_card=contact_card)
+    flash("Please use the LINE-authenticated my page.")
+    return redirect(url_for("users.me"))
 
 
 @users_bp.route("/<line_user_id>/update", methods=["POST"])
 def update_profile(line_user_id):
     form = request.form.to_dict()
     resolved_user_id = _resolve_user_id(form, line_user_id)
+    try:
+        resolved_user_id = require_verified_line_user_id(resolved_user_id)
+    except LineAuthError:
+        flash("LINE login verification failed. Please reopen this page from LINE.")
+        return redirect(url_for("users.me"))
     if not resolved_user_id or resolved_user_id.lower() == "me":
         flash("LINE user ID を取得できませんでした。画面を開き直してください。")
-        return redirect(url_for("users.detail", line_user_id=line_user_id))
+        return redirect(url_for("users.me"))
 
     form["line_user_id"] = resolved_user_id
     form["user_id"] = resolved_user_id
@@ -177,7 +172,7 @@ def update_profile(line_user_id):
 
     if missing:
         flash("必須項目が入力されていません。")
-        return redirect(url_for("users.detail", line_user_id=resolved_user_id))
+        return redirect(url_for("users.me"))
 
     exists = get_user_by_line_user_id(resolved_user_id) is not None
     result = update_user(resolved_user_id, form)
@@ -187,10 +182,10 @@ def update_profile(line_user_id):
     flash("ユーザー情報を更新しました。" if exists else "ユーザー情報を登録しました。")
 
     if result:
-        return redirect(url_for("users.detail", line_user_id=resolved_user_id))
+        return redirect(url_for("users.me"))
 
     flash("ユーザー情報の保存に失敗しました。")
-    return redirect(url_for("users.detail", line_user_id=resolved_user_id))
+    return redirect(url_for("users.me"))
 
 
 @users_bp.route("/me", methods=["GET"])
@@ -204,6 +199,10 @@ def me_data():
     user_id = (data.get("userId") or data.get("line_user_id") or "").strip()
     if not user_id:
         return jsonify({"ok": False, "message": "userId is required"}), 400
+    try:
+        user_id = require_verified_line_user_id(user_id)
+    except LineAuthError:
+        return jsonify({"ok": False, "message": "LINE authentication failed"}), 401
 
     cached = _get_cached_me_data(user_id)
     if cached:
@@ -245,6 +244,11 @@ def me_data():
 def me_save():
     form = request.form.to_dict()
     resolved_user_id = _resolve_user_id(form)
+    try:
+        resolved_user_id = require_verified_line_user_id(resolved_user_id)
+    except LineAuthError:
+        flash("LINE login verification failed. Please reopen this page from LINE.")
+        return redirect(url_for("users.me"))
 
     if not resolved_user_id or resolved_user_id.lower() == "me":
         flash("LINE user ID を取得できませんでした。画面を開き直してください。")
@@ -282,6 +286,12 @@ def share_contact(match_type, match_id):
         return redirect(url_for("users.me"))
 
     line_user_id = _resolve_user_id(request.form)
+    try:
+        line_user_id = require_verified_line_user_id(line_user_id)
+    except LineAuthError:
+        flash("LINE login verification failed. Please reopen this page from LINE.")
+        return redirect(url_for("users.me"))
+
     if not line_user_id:
         flash("LINE user ID を取得できませんでした。")
         return redirect(url_for("users.me"))
