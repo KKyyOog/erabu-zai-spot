@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+from urllib.parse import urlparse
 from uuid import uuid4
 import unicodedata
 
@@ -357,10 +358,17 @@ def _collect_image_urls(record, primary_field, collection_field):
     urls = []
     seen = set()
     for url in _split_image_urls(record.get(collection_field, "")) + _split_image_urls(record.get(primary_field, "")):
-        if url and url not in seen:
+        if url and url not in seen and _is_allowed_image_url(url):
             urls.append(url)
             seen.add(url)
     return urls
+
+
+def _is_allowed_image_url(url):
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.netloc:
+        return False
+    return (parsed.hostname or "").lower() == "res.cloudinary.com"
 
 
 def _decorate_material_record(record):

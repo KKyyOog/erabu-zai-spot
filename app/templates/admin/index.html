@@ -4,6 +4,23 @@
 <section>
   <h2>管理画面</h2>
 
+  <div class="admin-toolbar">
+    <label>
+      検索
+      <input type="search" id="admin-search" placeholder="名前・種類・場所・IDで検索">
+    </label>
+    <label>
+      状態
+      <select id="admin-status-filter">
+        <option value="">すべて</option>
+        <option value="募集中">募集中</option>
+        <option value="交渉中">交渉中</option>
+        <option value="引取済み">引取済み</option>
+        <option value="廃棄予定">廃棄予定</option>
+      </select>
+    </label>
+  </div>
+
   <table>
     <thead>
       <tr>
@@ -17,7 +34,7 @@
     </thead>
     <tbody>
       {% for material in materials %}
-        <tr>
+        <tr data-admin-row data-status="{{ material.status }}" data-search="{{ [material.material_id, material.title, material.material_type, material.location, material.status]|join(' ') }}">
           <td>{{ material.material_id }}</td>
           <td>{{ material.title }}</td>
           <td>{{ material.material_type }}</td>
@@ -27,10 +44,10 @@
             <form method="post" action="{{ url_for('admin.update_status') }}">
               <input type="hidden" name="material_id" value="{{ material.material_id }}">
               <select name="status">
-                <option value="募集中">募集中</option>
-                <option value="交渉中">交渉中</option>
-                <option value="引取済み">引取済み</option>
-                <option value="廃棄予定">廃棄予定</option>
+                <option value="募集中" {{ 'selected' if material.status == '募集中' else '' }}>募集中</option>
+                <option value="交渉中" {{ 'selected' if material.status == '交渉中' else '' }}>交渉中</option>
+                <option value="引取済み" {{ 'selected' if material.status == '引取済み' else '' }}>引取済み</option>
+                <option value="廃棄予定" {{ 'selected' if material.status == '廃棄予定' else '' }}>廃棄予定</option>
               </select>
               <button type="submit">更新</button>
             </form>
@@ -39,5 +56,42 @@
       {% endfor %}
     </tbody>
   </table>
+  <p id="admin-empty" class="empty-state" hidden>条件に合う材はありません。</p>
 </section>
+<script>
+  const adminSearch = document.getElementById('admin-search');
+  const adminStatusFilter = document.getElementById('admin-status-filter');
+  const adminRows = Array.from(document.querySelectorAll('[data-admin-row]'));
+  const adminEmpty = document.getElementById('admin-empty');
+
+  function filterAdminRows() {
+    const query = adminSearch.value.trim().toLowerCase();
+    const status = adminStatusFilter.value;
+    let visibleCount = 0;
+
+    adminRows.forEach((row) => {
+      const matchesQuery = !query || row.dataset.search.toLowerCase().includes(query);
+      const matchesStatus = !status || row.dataset.status === status;
+      const visible = matchesQuery && matchesStatus;
+      row.hidden = !visible;
+      if (visible) {
+        visibleCount += 1;
+      }
+    });
+
+    adminEmpty.hidden = visibleCount !== 0;
+  }
+
+  adminSearch.addEventListener('input', filterAdminRows);
+  adminStatusFilter.addEventListener('change', filterAdminRows);
+  document.querySelectorAll('form').forEach((form) => {
+    form.addEventListener('submit', (event) => {
+      const materialId = form.querySelector('[name="material_id"]')?.value || '';
+      const status = form.querySelector('[name="status"]')?.value || '';
+      if (!window.confirm(`${materialId} の状態を「${status}」に更新します。`)) {
+        event.preventDefault();
+      }
+    });
+  });
+</script>
 {% endblock %}

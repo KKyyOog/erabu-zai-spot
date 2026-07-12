@@ -100,7 +100,7 @@
         </div>
         <div class="history-card__bodyline">
           {% if material.image_url %}
-            <img class="history-thumb" src="{{ material.image_url }}" alt="{{ material.title or '材の写真' }}">
+            <img class="history-thumb" src="{{ material.image_url }}" alt="{{ material.title or '材の写真' }}" loading="lazy" decoding="async">
           {% else %}
             <div class="history-thumb history-thumb--empty">写真なし</div>
           {% endif %}
@@ -149,7 +149,7 @@
         </div>
         <div class="history-card__bodyline">
           {% if match.entry_image_url %}
-            <img class="history-thumb history-thumb--small" src="{{ match.entry_image_url }}" alt="{{ match.entry_title or match.entry_id or '登録写真' }}">
+            <img class="history-thumb history-thumb--small" src="{{ match.entry_image_url }}" alt="{{ match.entry_title or match.entry_id or '登録写真' }}" loading="lazy" decoding="async">
           {% else %}
             <div class="history-thumb history-thumb--small history-thumb--empty">写真なし</div>
           {% endif %}

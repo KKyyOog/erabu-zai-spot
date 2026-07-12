@@ -5,6 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>えらぶ材すぽっと</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260703-list-masonry') }}">
+  <script>
+    window.CSRF_TOKEN = {{ csrf_token()|tojson }};
+    window.ensureCsrfToken = function ensureCsrfToken(form) {
+      if (!form || !window.CSRF_TOKEN) {
+        return;
+      }
+      let input = form.querySelector('input[name="_csrf_token"]');
+      if (!input) {
+        input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "_csrf_token";
+        form.appendChild(input);
+      }
+      input.value = window.CSRF_TOKEN;
+    };
+    document.addEventListener("DOMContentLoaded", function () {
+      document.querySelectorAll("form").forEach(window.ensureCsrfToken);
+    });
+    document.addEventListener("submit", function (event) {
+      window.ensureCsrfToken(event.target);
+    }, true);
+  </script>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
 <body>

@@ -1,5 +1,6 @@
 import json
 import os
+from urllib.parse import urlparse
 
 import cloudinary
 import cloudinary.uploader
@@ -20,9 +21,11 @@ from app.services.db_service import (
 )
 from app.services.line_service import send_line_message
 from app.services.liff_service import liff_url_for
-from app.services.line_auth_service import LineAuthError, require_verified_line_user_id, resolve_verified_line_user_id
+from app.services.line_auth_service import LineAuthError, require_verified_line_user_id
 
 materials_bp = Blueprint("materials", __name__, url_prefix="/materials")
+
+MAX_IMAGES_PER_ENTRY = 6
 
 MATERIAL_TYPE_OPTIONS = [
     "木材",
@@ -44,10 +47,22 @@ cloudinary.config(
 
 
 def _upload_image(image_file):
-    allowed_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+    allowed_extensions = {
+        ".png": "png",
+        ".jpg": "jpeg",
+        ".jpeg": "jpeg",
+        ".gif": "gif",
+        ".webp": "webp",
+    }
     ext = os.path.splitext(image_file.filename)[1].lower()
     if ext not in allowed_extensions:
         raise ValueError("画像は png, jpg, jpeg, gif, webp 形式のみアップロードできます。")
+
+    header = image_file.stream.read(32)
+    image_file.stream.seek(0)
+    detected_type = _detect_image_type(header)
+    if detected_type != allowed_extensions[ext]:
+        raise ValueError("画像ファイルの形式を確認できませんでした。")
 
     current_app.logger.info(
         "[materials] uploading image filename=%s content_type=%s",
@@ -64,6 +79,9 @@ def _upload_image(image_file):
 
 
 def _upload_images(image_files):
+    if len(image_files) > MAX_IMAGES_PER_ENTRY:
+        raise ValueError(f"画像は{MAX_IMAGES_PER_ENTRY}枚までアップロードできます。")
+
     image_urls = []
     for image_file in image_files:
         if not image_file or not image_file.filename:
@@ -72,6 +90,18 @@ def _upload_images(image_files):
         if image_url:
             image_urls.append(image_url)
     return image_urls
+
+
+def _detect_image_type(header):
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if header.startswith(b"\xff\xd8\xff"):
+        return "jpeg"
+    if header.startswith((b"GIF87a", b"GIF89a")):
+        return "gif"
+    if len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+        return "webp"
+    return ""
 
 
 def _split_image_urls(value):
@@ -111,11 +141,34 @@ def _dedupe_urls(urls):
     return deduped
 
 
+def _is_allowed_image_url(url):
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.netloc:
+        return False
+
+    hostname = (parsed.hostname or "").lower()
+    return hostname == "res.cloudinary.com"
+
+
+def _validate_image_urls(urls):
+    if len(urls) > MAX_IMAGES_PER_ENTRY:
+        raise ValueError(f"画像URLは{MAX_IMAGES_PER_ENTRY}件まで登録できます。")
+
+    if any(not _is_allowed_image_url(url) for url in urls):
+        raise ValueError("画像URLはCloudinaryのhttps URLのみ登録できます。")
+
+    return urls
+
+
 def _collect_image_urls(record, primary_field, collection_field):
-    return _dedupe_urls(
+    return _validate_display_image_urls(_dedupe_urls(
         _split_image_urls(record.get(collection_field, ""))
         + _split_image_urls(record.get(primary_field, ""))
-    )
+    ))
+
+
+def _validate_display_image_urls(urls):
+    return [url for url in urls if _is_allowed_image_url(url)]
 
 
 def _sort_key_created_at(item):
@@ -152,6 +205,7 @@ def _build_listing_items(display_filter, material_type_filter="all"):
                     "material_type": material_type,
                     "quantity": material.get("quantity", ""),
                     "condition": material.get("condition", ""),
+                    "pickup_deadline": material.get("pickup_deadline", ""),
                 }
             )
 
@@ -235,12 +289,11 @@ def register_demolition():
 def submit():
     form = request.form.to_dict()
     try:
-        line_user_id = resolve_verified_line_user_id(form.get("line_user_id", ""), allow_anonymous=True)
+        line_user_id = require_verified_line_user_id(form.get("line_user_id", ""))
     except LineAuthError:
         flash("LINE login verification failed. Please reopen this page from LINE.")
         return redirect(url_for("materials.register_material"))
-    if line_user_id:
-        form["line_user_id"] = line_user_id
+    form["line_user_id"] = line_user_id
 
     image_files = [image_file for image_file in request.files.getlist("image_files") if image_file and image_file.filename]
     legacy_image_file = request.files.get("image_file")
@@ -250,6 +303,11 @@ def submit():
         _split_image_urls(form.get("image_url", ""))
         + _split_image_urls(form.get("image_urls_text", ""))
     )
+    try:
+        input_image_urls = _validate_image_urls(input_image_urls)
+    except ValueError as exc:
+        flash(str(exc))
+        return redirect(url_for("materials.register_material"))
     final_image_urls = input_image_urls
 
     required_fields = ["title", "material_type", "location"]
@@ -262,7 +320,7 @@ def submit():
     if image_files:
         try:
             uploaded_image_urls = _upload_images(image_files)
-            final_image_urls = _dedupe_urls(uploaded_image_urls + input_image_urls)
+            final_image_urls = _validate_image_urls(_dedupe_urls(uploaded_image_urls + input_image_urls))
             current_app.logger.info("[materials.submit] cloudinary upload success count=%s", len(uploaded_image_urls))
         except ValueError as exc:
             flash(str(exc))
@@ -271,10 +329,6 @@ def submit():
             current_app.logger.exception("[materials.submit] cloudinary upload failed")
             flash("画像のアップロードに失敗しました。画像なしで登録するか、再度お試しください。")
             return redirect(url_for("materials.register_material"))
-
-    if not form.get("line_user_id"):
-        form["line_user_id"] = ""
-        form["display_name"] = ""
 
     form["image_url"] = final_image_urls[0] if final_image_urls else ""
     form["image_urls"] = json.dumps(final_image_urls, ensure_ascii=False)
@@ -294,12 +348,11 @@ def submit():
 def submit_demolition():
     form = request.form.to_dict()
     try:
-        line_user_id = resolve_verified_line_user_id(form.get("line_user_id", ""), allow_anonymous=True)
+        line_user_id = require_verified_line_user_id(form.get("line_user_id", ""))
     except LineAuthError:
         flash("LINE login verification failed. Please reopen this page from LINE.")
         return redirect(url_for("materials.register_demolition"))
-    if line_user_id:
-        form["line_user_id"] = line_user_id
+    form["line_user_id"] = line_user_id
 
     image_files = [
         image_file
@@ -313,6 +366,11 @@ def submit_demolition():
         _split_image_urls(form.get("building_photo_url", ""))
         + _split_image_urls(form.get("building_photo_urls_text", ""))
     )
+    try:
+        input_image_urls = _validate_image_urls(input_image_urls)
+    except ValueError as exc:
+        flash(str(exc))
+        return redirect(url_for("materials.register_demolition"))
     final_image_urls = input_image_urls
 
     required_fields = ["property_name", "location", "registrant_type"]
@@ -325,7 +383,7 @@ def submit_demolition():
     if image_files:
         try:
             uploaded_image_urls = _upload_images(image_files)
-            final_image_urls = _dedupe_urls(uploaded_image_urls + input_image_urls)
+            final_image_urls = _validate_image_urls(_dedupe_urls(uploaded_image_urls + input_image_urls))
             current_app.logger.info("[demolitions.submit] cloudinary upload success count=%s", len(uploaded_image_urls))
         except ValueError as exc:
             flash(str(exc))
@@ -334,10 +392,6 @@ def submit_demolition():
             current_app.logger.exception("[demolitions.submit] cloudinary upload failed")
             flash("画像のアップロードに失敗しました。画像なしで登録するか、再度お試しください。")
             return redirect(url_for("materials.register_demolition"))
-
-    if not form.get("line_user_id"):
-        form["line_user_id"] = ""
-        form["display_name"] = ""
 
     form["building_photo_url"] = final_image_urls[0] if final_image_urls else ""
     form["building_photo_urls"] = json.dumps(final_image_urls, ensure_ascii=False)
@@ -451,12 +505,16 @@ def update_material_entry(material_id):
         _split_image_urls(form.get("image_url", ""))
         + _split_image_urls(form.get("image_urls_text", ""))
     )
+    try:
+        input_image_urls = _validate_image_urls(input_image_urls)
+    except ValueError as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 400
     final_image_urls = input_image_urls
 
     if image_files:
         try:
             uploaded_image_urls = _upload_images(image_files)
-            final_image_urls = _dedupe_urls(uploaded_image_urls + input_image_urls)
+            final_image_urls = _validate_image_urls(_dedupe_urls(uploaded_image_urls + input_image_urls))
         except ValueError as exc:
             return jsonify({"ok": False, "message": str(exc)}), 400
         except Exception:

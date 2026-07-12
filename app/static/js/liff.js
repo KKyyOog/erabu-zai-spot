@@ -19,14 +19,124 @@ function getLiffDebugContext() {
   };
 }
 
+function getLineAuthForms() {
+  return Array.from(document.querySelectorAll("form")).filter((form) => {
+    return Boolean(form.querySelector('input[name="line_user_id"], input[name="user_id"], input[name="userid"]'));
+  });
+}
+
+function setLineAuthControls(enabled, message = "") {
+  getLineAuthForms().forEach((form) => {
+    form.dataset.lineAuthReady = enabled ? "true" : "false";
+    form.querySelectorAll('button[type="submit"], button:not([type])').forEach((button) => {
+      if (!button.dataset.defaultLabel) {
+        button.dataset.defaultLabel = button.textContent;
+      }
+      button.disabled = !enabled;
+      button.textContent = enabled ? button.dataset.defaultLabel : (message || "LINE確認中...");
+    });
+  });
+}
+
+function hasLineAuthValues(form) {
+  const userInput = form.querySelector('input[name="line_user_id"], input[name="user_id"], input[name="userid"]');
+  const tokenInput = form.querySelector('input[name="id_token"], input[name="idToken"]');
+  return Boolean(userInput && userInput.value && tokenInput && tokenInput.value);
+}
+
+function installLineAuthSubmitGuard() {
+  document.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!form || !form.matches("form") || !form.querySelector('input[name="line_user_id"], input[name="user_id"], input[name="userid"]')) {
+      return;
+    }
+    if (!hasLineAuthValues(form)) {
+      event.preventDefault();
+      setLineAuthControls(false, "LINE認証が必要です");
+      window.alert("LINEログインを確認できませんでした。LINE内で開き直してから操作してください。");
+    }
+  }, true);
+}
+
+function formatBytes(size) {
+  if (!Number.isFinite(size)) {
+    return "";
+  }
+  if (size >= 1024 * 1024) {
+    return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  }
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function renderImagePreview(input) {
+  const maxImages = 6;
+  const files = Array.from(input.files || []);
+  let preview = input.nextElementSibling;
+  if (!preview || !preview.classList.contains("image-preview")) {
+    preview = document.createElement("div");
+    preview.className = "image-preview";
+    input.insertAdjacentElement("afterend", preview);
+  }
+
+  preview.innerHTML = "";
+  const status = document.createElement("p");
+  status.className = files.length > maxImages ? "image-preview__status is-error" : "image-preview__status";
+  status.textContent = files.length
+    ? `${files.length}/${maxImages}枚を選択中`
+    : `画像は${maxImages}枚まで選択できます。`;
+  preview.appendChild(status);
+
+  if (files.length > maxImages) {
+    input.value = "";
+    status.textContent = `画像は${maxImages}枚までです。選び直してください。`;
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "image-preview__grid";
+  preview.appendChild(list);
+
+  files.forEach((file) => {
+    const item = document.createElement("figure");
+    item.className = "image-preview__item";
+
+    const image = document.createElement("img");
+    image.alt = file.name;
+    image.src = URL.createObjectURL(file);
+    image.addEventListener("load", () => URL.revokeObjectURL(image.src), { once: true });
+
+    const caption = document.createElement("figcaption");
+    caption.textContent = `${file.name} (${formatBytes(file.size)})`;
+
+    item.appendChild(image);
+    item.appendChild(caption);
+    list.appendChild(item);
+  });
+}
+
+function installImagePreviews() {
+  document.querySelectorAll('input[type="file"][accept*="image"]').forEach((input) => {
+    if (input.dataset.imagePreviewReady === "true") {
+      return;
+    }
+    input.dataset.imagePreviewReady = "true";
+    input.addEventListener("change", () => renderImagePreview(input));
+    renderImagePreview(input);
+  });
+}
+
 async function initializeLiff() {
   const liffId = window.LIFF_ID || "";
   console.log("LIFF initialization started. LIFF ID:", liffId);
+  installLineAuthSubmitGuard();
+  installImagePreviews();
+  setLineAuthControls(false, "LINE確認中...");
 
   // Flaskテンプレート外で使う場合に備えて、LIFF ID未設定でもフォーム確認は可能にする
   if (!window.liff || !liffId || liffId.includes("{{")) {
     console.warn("LIFF is not configured or not available.");
     await logToServer("LIFF is not configured or not available.");
+    setLineAuthControls(false, "LINEで開いてください");
     return;
   }
 
@@ -46,6 +156,7 @@ async function initializeLiff() {
         liff.login();
       }
 
+      setLineAuthControls(false, "LINEログインが必要です");
       return;
     }
 
@@ -102,6 +213,7 @@ async function initializeLiff() {
     setAllInputsByName("userid", profile.userId);
     setAllInputsByName("id_token", window.LINE_ID_TOKEN);
     ensureIdTokenInputs(window.LINE_ID_TOKEN);
+    setLineAuthControls(true);
 
     if (displayNameInput) {
       if (window.FILL_DISPLAY_NAME_FROM_LIFF === true && !displayNameInput.value.trim()) {

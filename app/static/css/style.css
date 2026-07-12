@@ -110,6 +110,32 @@ body {
   font-weight: 700;
 }
 
+.page-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.page-tab {
+  width: auto;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid #d8d0bd;
+  background: white;
+  color: #2f2a23;
+}
+
+.page-tab.active {
+  border-color: #466642;
+  background: #466642;
+  color: white;
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
 .entry-badge {
   display: inline-block;
   margin: 0;
@@ -124,6 +150,47 @@ body {
 .entry-badge.demolition {
   background: #e1f0f5;
   color: #2f6575;
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: #fff2c7;
+  color: #745716;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.status-badge.demolition {
+  background: #e7edf8;
+  color: #3c5576;
+}
+
+.empty-state {
+  display: grid;
+  gap: 10px;
+  align-items: start;
+  padding: 18px;
+  border: 1px dashed #c9bfac;
+  border-radius: 8px;
+  background: #fffdf7;
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.empty-state .button-link {
+  width: fit-content;
+  min-width: 160px;
 }
 
 .loading-status {
@@ -254,6 +321,53 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.image-preview {
+  margin-top: 10px;
+}
+
+.image-preview__status {
+  margin: 0 0 8px;
+  color: #5d5548;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.image-preview__status.is-error {
+  color: #a54336;
+  font-weight: 700;
+}
+
+.image-preview__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.image-preview__item {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #ded7c8;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fffdf7;
+}
+
+.image-preview__item img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: #f1eee6;
+}
+
+.image-preview__item figcaption {
+  padding: 8px;
+  color: #5d5548;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .secondary-button {
   background: #6f6759;
 }
@@ -327,6 +441,16 @@ table {
   width: 100%;
   border-collapse: collapse;
   background: white;
+}
+
+.admin-toolbar {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.admin-toolbar label {
+  margin-top: 0;
 }
 
 th,
@@ -639,6 +763,11 @@ td {
 }
 
 @media (min-width: 720px) {
+  .admin-toolbar {
+    grid-template-columns: minmax(240px, 1fr) 180px;
+    align-items: end;
+  }
+
   .profile-panels {
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
     align-items: start;

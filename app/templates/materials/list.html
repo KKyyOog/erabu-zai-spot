@@ -26,7 +26,7 @@
             {% if item.image_urls %}
               <div class="image-carousel" aria-label="{{ item.title or item.location or '登録写真' }}">
                 {% for image_url in item.image_urls %}
-                  <img src="{{ image_url }}" alt="{{ item.title or item.location or '登録写真' }}">
+                  <img src="{{ image_url }}" alt="{{ item.title or item.location or '登録写真' }}" loading="lazy" decoding="async">
                 {% endfor %}
               </div>
             {% else %}
@@ -37,7 +37,12 @@
           {% if item.entry_type == 'material' %}
             <div class="listing-card__body">
               <div class="listing-card__topline">
-                <p class="entry-badge">材登録</p>
+                <div class="badge-row">
+                  <p class="entry-badge">材登録</p>
+                  {% if item.status %}
+                    <span class="status-badge">{{ item.status }}</span>
+                  {% endif %}
+                </div>
                 {% if item.created_at %}
                   <span class="listing-date">{{ item.created_at|date_jp }}</span>
                 {% endif %}
@@ -60,6 +65,10 @@
                   <dt>状態</dt>
                   <dd>{{ item.condition or '未設定' }}</dd>
                 </div>
+                <div>
+                  <dt>期限</dt>
+                  <dd>{{ item.pickup_deadline|date_jp if item.pickup_deadline else '未設定' }}</dd>
+                </div>
               </dl>
               <div class="listing-actions">
                 <a class="button-link compact" href="{{ url_for('materials.detail', material_id=item.id) }}">詳細を見る</a>
@@ -75,7 +84,12 @@
           {% else %}
             <div class="listing-card__body">
               <div class="listing-card__topline">
-                <p class="entry-badge demolition">解体物件</p>
+                <div class="badge-row">
+                  <p class="entry-badge demolition">解体物件</p>
+                  {% if item.status %}
+                    <span class="status-badge demolition">{{ item.status }}</span>
+                  {% endif %}
+                </div>
                 {% if item.created_at %}
                   <span class="listing-date">{{ item.created_at|date_jp }}</span>
                 {% endif %}
@@ -111,7 +125,10 @@
       {% endfor %}
     </div>
   {% else %}
-    <p>現在表示できる登録情報はありません。</p>
+    <div class="empty-state">
+      <p>現在表示できる登録情報はありません。</p>
+      <a class="button-link compact" href="{{ url_for('materials.register') }}">登録する</a>
+    </div>
   {% endif %}
 </section>
 

@@ -7,7 +7,7 @@
   <form method="post" action="{{ url_for('materials.submit_demolition') }}" enctype="multipart/form-data">
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="display_name" id="display_name">
-    <p class="hint">LINE内で開くと自動的にユーザー情報が設定されます。建物の状態や見学可能期間が分かる範囲で入力してください。</p>
+    <p class="hint">登録にはLINEログインが必要です。建物の状態や見学可能期間が分かる範囲で入力してください。</p>
 
     <label>登録者 *</label>
     <select name="registrant_type" required>
@@ -64,9 +64,11 @@
 
     <label>建物写真（複数選択可）</label>
     <input type="file" name="building_image_files" accept="image/*" multiple>
+    <p class="hint">画像は6枚まで選択できます。</p>
 
     <label>建物写真URL（任意・複数可）</label>
-    <textarea name="building_photo_urls_text" rows="3" placeholder="Google Drive等の画像URL"></textarea>
+    <textarea name="building_photo_urls_text" rows="3" placeholder="https://res.cloudinary.com/..."></textarea>
+    <p class="hint">URLで登録できる画像はCloudinaryのHTTPS URLのみです。</p>
 
     <label>状態評価</label>
     <textarea name="condition_evaluation" rows="4" placeholder="例：柱や建具は再利用できそう、雨漏りあり、現地確認が必要など"></textarea>
@@ -80,6 +82,7 @@
 
 <script>
   window.FILL_DISPLAY_NAME_FROM_LIFF = true;
+  window.REQUIRE_LIFF_LOGIN = true;
   window.LIFF_ID = {{ LIFF_ID|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/liff.js') }}"></script>

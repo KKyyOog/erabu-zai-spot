@@ -7,7 +7,7 @@
   <form method="post" action="{{ url_for('materials.submit') }}" enctype="multipart/form-data">
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="display_name" id="display_name">
-    <p class="hint">LINE内で開くと自動的にユーザー情報が設定されます。通常のブラウザからは匿名登録として保存されます。</p>
+    <p class="hint">登録にはLINEログインが必要です。LINE内で開くとユーザー情報が自動で設定されます。</p>
 
     <label>材の名前 *</label>
     <input type="text" name="title" required placeholder="例：解体した木材、古い建具など">
@@ -78,9 +78,11 @@
 
     <label>写真（複数選択可）</label>
     <input type="file" name="image_files" accept="image/*" multiple>
+    <p class="hint">画像は6枚まで選択できます。</p>
 
     <label>写真URL（任意・複数可）</label>
-    <textarea name="image_urls_text" rows="3" placeholder="Google Drive等の画像URL"></textarea>
+    <textarea name="image_urls_text" rows="3" placeholder="https://res.cloudinary.com/..."></textarea>
+    <p class="hint">URLで登録できる画像はCloudinaryのHTTPS URLのみです。</p>
 
     <button type="submit">登録する</button>
   </form>
@@ -88,6 +90,7 @@
 
 <script>
   window.FILL_DISPLAY_NAME_FROM_LIFF = true;
+  window.REQUIRE_LIFF_LOGIN = true;
   window.LIFF_ID = {{ LIFF_ID|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/liff.js') }}"></script>
@@ -158,7 +161,10 @@
         try {
           const resp = await fetch('/users/me/data', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': window.CSRF_TOKEN || '',
+            },
             body: JSON.stringify({ userId, idToken: window.LINE_ID_TOKEN || '' }),
           });
           const body = await resp.json();

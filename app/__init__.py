@@ -1,9 +1,10 @@
 import os
 import logging
+import secrets
 from datetime import datetime
 
 import truststore
-from flask import Flask, render_template, request
+from flask import Flask, abort, render_template, request, session
 
 from app.routes.materials import materials_bp
 from app.routes.users import users_bp
@@ -36,9 +37,17 @@ def create_app():
 
     @app.context_processor
     def inject_liff_id():
+        def csrf_token():
+            token = session.get("_csrf_token")
+            if not token:
+                token = secrets.token_urlsafe(32)
+                session["_csrf_token"] = token
+            return token
+
         return {
             "LIFF_ID": app.config["LIFF_ID"],
             "liff_url_for": liff_url_for,
+            "csrf_token": csrf_token,
         }
 
     @app.template_filter("date_jp")
@@ -61,6 +70,36 @@ def create_app():
                 continue
 
         return text.split(" ")[0]
+
+    @app.before_request
+    def protect_from_csrf():
+        if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
+            return None
+
+        exempt_endpoints = {
+            "callback.callback",
+            "link.liff_link",
+            "link.liff_debug",
+        }
+        if request.endpoint in exempt_endpoints:
+            return None
+
+        expected_token = session.get("_csrf_token", "")
+        supplied_token = (
+            request.form.get("_csrf_token")
+            or request.headers.get("X-CSRF-Token")
+            or ""
+        )
+        if not expected_token or not supplied_token or not secrets.compare_digest(expected_token, supplied_token):
+            app.logger.warning(
+                "[CSRF] rejected method=%s path=%s endpoint=%s",
+                request.method,
+                request.path,
+                request.endpoint,
+            )
+            abort(400)
+
+        return None
 
     @app.before_request
     def log_debug_request():

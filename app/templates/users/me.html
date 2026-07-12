@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="card user-page-card">
+<nav class="page-tabs" aria-label="マイページの表示切り替え">
+  <button type="button" class="page-tab active" data-tab-target="profile-panel">プロフィール</button>
+  <button type="button" class="page-tab" data-tab-target="materials-panel">登録した材</button>
+  <button type="button" class="page-tab" data-tab-target="matches-panel">マッチング</button>
+</nav>
+
+<section class="card user-page-card tab-panel active" id="profile-panel">
   <div class="section-heading">
     <div>
       <h2 id="form-title">ユーザー情報</h2>
@@ -79,7 +85,7 @@
   </form>
 </section>
 
-<section class="card">
+<section class="card tab-panel" id="materials-panel" hidden>
   <div class="section-heading">
     <div>
       <h3>自分の材登録履歴</h3>
@@ -89,7 +95,7 @@
   <div id="materials-container"><p>読み込み中...</p></div>
 </section>
 
-<section class="card">
+<section class="card tab-panel" id="matches-panel" hidden>
   <h3>マッチング履歴</h3>
   <div id="matching-history-container"><p>読み込み中...</p></div>
 </section>
@@ -110,6 +116,22 @@
     } catch (error) {
       console.warn('Failed to clear legacy LIFF return URL:', error);
     }
+  }
+
+  function initializePageTabs() {
+    document.querySelectorAll('[data-tab-target]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const targetId = button.dataset.tabTarget;
+        document.querySelectorAll('[data-tab-target]').forEach((tab) => {
+          tab.classList.toggle('active', tab === button);
+        });
+        document.querySelectorAll('.tab-panel').forEach((panel) => {
+          const active = panel.id === targetId;
+          panel.classList.toggle('active', active);
+          panel.hidden = !active;
+        });
+      });
+    });
   }
 
   function getLiffDebugContext() {
@@ -366,7 +388,12 @@
     currentMaterials = materials || [];
     const container = document.getElementById('materials-container');
     if (!currentMaterials.length) {
-      container.innerHTML = '<p>まだ材登録がありません。</p>';
+      container.innerHTML = `
+        <div class="empty-state">
+          <p>まだ材登録がありません。</p>
+          <a class="button-link compact" href="/materials/register/material">材を登録する</a>
+        </div>
+      `;
       return;
     }
 
@@ -376,7 +403,7 @@
   function renderMaterialCard(material, userId) {
     const imageUrls = getMaterialImageUrls(material);
     const thumb = imageUrls[0]
-      ? `<img class="history-thumb" src="${escapeHtml(imageUrls[0])}" alt="${escapeHtml(material.title || '材の写真')}">`
+      ? `<img class="history-thumb" src="${escapeHtml(imageUrls[0])}" alt="${escapeHtml(material.title || '材の写真')}" loading="lazy" decoding="async">`
       : '<div class="history-thumb history-thumb--empty">写真なし</div>';
 
     return `
@@ -549,7 +576,12 @@
     const container = document.getElementById('matching-history-container');
     const currentUserId = document.getElementById('line_user_id').value;
     if (!history || history.length === 0) {
-      container.innerHTML = '<p>まだマッチング履歴はありません。</p>';
+      container.innerHTML = `
+        <div class="empty-state">
+          <p>まだマッチング履歴はありません。</p>
+          <a class="button-link compact" href="/materials/list">一覧を見る</a>
+        </div>
+      `;
       return;
     }
 
@@ -562,7 +594,7 @@
       const entryId = match.entry_id || match.material_id || match.property_id || '';
       const title = match.entry_title || entryId || 'ID未設定';
       const thumb = match.entry_image_url
-        ? `<img class="history-thumb history-thumb--small" src="${escapeHtml(match.entry_image_url)}" alt="${escapeHtml(title)}">`
+        ? `<img class="history-thumb history-thumb--small" src="${escapeHtml(match.entry_image_url)}" alt="${escapeHtml(title)}" loading="lazy" decoding="async">`
         : '<div class="history-thumb history-thumb--small history-thumb--empty">写真なし</div>';
       const shareAction = `/users/matches/${encodeURIComponent(matchType)}/${encodeURIComponent(match.match_id)}/share-contact`;
       const shareControl = shareStatus === 'shared'
@@ -694,7 +726,10 @@
 
       const resp = await fetch('/users/me/data', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': window.CSRF_TOKEN || '',
+        },
         body: JSON.stringify({ userId: profile.userId, idToken: currentIdToken }),
       });
       const body = await resp.json();
@@ -730,6 +765,7 @@
     }
   }
 
+  initializePageTabs();
   initMeFlow();
 </script>
 
