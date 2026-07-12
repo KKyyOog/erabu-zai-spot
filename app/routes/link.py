@@ -41,6 +41,12 @@ def liff_link():
     return jsonify({"ok": True})
 
 
+@link_bp.route("/session", methods=["GET"])
+def session_status():
+    line_user_id = (session.get("line_user_id") or "").strip()
+    return jsonify({"ok": bool(line_user_id), "line_user_id": line_user_id})
+
+
 @link_bp.route("/liff-debug", methods=["POST"])
 def liff_debug():
     data = request.get_json(silent=True) or {}

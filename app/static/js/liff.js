@@ -41,7 +41,43 @@ function setLineAuthControls(enabled, message = "") {
 function hasLineAuthValues(form) {
   const userInput = form.querySelector('input[name="line_user_id"], input[name="user_id"], input[name="userid"]');
   const tokenInput = form.querySelector('input[name="id_token"], input[name="idToken"]');
-  return Boolean(userInput && userInput.value && tokenInput && tokenInput.value);
+  return Boolean(
+    userInput
+    && userInput.value
+    && ((tokenInput && tokenInput.value) || window.LINE_SESSION_AUTHENTICATED === true)
+  );
+}
+
+function setAllLineUserInputs(userId) {
+  ["line_user_id", "user_id", "userid"].forEach((name) => {
+    document.querySelectorAll(`input[name="${name}"]`).forEach((input) => {
+      input.value = userId || "";
+    });
+  });
+}
+
+async function restoreLineSession() {
+  try {
+    const response = await fetch("/link/session", {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+      },
+      credentials: "same-origin",
+    });
+    const body = await response.json();
+    if (response.ok && body.ok && body.line_user_id) {
+      window.LINE_SESSION_AUTHENTICATED = true;
+      setAllLineUserInputs(body.line_user_id);
+      setLineAuthControls(true);
+      return true;
+    }
+  } catch (error) {
+    console.warn("Failed to restore LINE session:", error);
+  }
+
+  window.LINE_SESSION_AUTHENTICATED = false;
+  return false;
 }
 
 function installLineAuthSubmitGuard() {
@@ -136,6 +172,9 @@ async function initializeLiff() {
   if (!window.liff || !liffId || liffId.includes("{{")) {
     console.warn("LIFF is not configured or not available.");
     await logToServer("LIFF is not configured or not available.");
+    if (await restoreLineSession()) {
+      return;
+    }
     setLineAuthControls(false, "LINEで開いてください");
     return;
   }
@@ -154,8 +193,13 @@ async function initializeLiff() {
         console.log("Redirecting to LIFF login...");
         await logToServer("Redirecting to LIFF login without redirectUri.", getLiffDebugContext());
         liff.login();
+        setLineAuthControls(false, "LINEログインが必要です");
+        return;
       }
 
+      if (await restoreLineSession()) {
+        return;
+      }
       setLineAuthControls(false, "LINEログインが必要です");
       return;
     }

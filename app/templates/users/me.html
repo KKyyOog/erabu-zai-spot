@@ -215,6 +215,25 @@
     }
   }
 
+  async function syncLineSession(userId, idToken) {
+    if (!userId || !idToken) {
+      return false;
+    }
+
+    try {
+      const resp = await fetch('/link/liff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, idToken }),
+        keepalive: true,
+      });
+      return resp.ok;
+    } catch (error) {
+      console.warn('Failed to sync LINE session:', error);
+      return false;
+    }
+  }
+
   function escapeHtml(value) {
     return String(value ?? '')
       .replaceAll('&', '&amp;')
@@ -722,6 +741,7 @@
       document.getElementById('userid').value = profile.userId;
       document.getElementById('id_token').value = currentIdToken;
       document.getElementById('profile-note').textContent = `LINE表示名: ${profile.displayName}`;
+      await syncLineSession(profile.userId, currentIdToken);
       setLoading(true, '登録情報を読み込んでいます...');
 
       const resp = await fetch('/users/me/data', {

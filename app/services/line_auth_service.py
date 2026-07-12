@@ -3,7 +3,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from flask import current_app, request
+from flask import current_app, request, session
 
 
 VERIFY_ID_TOKEN_URL = "https://api.line.me/oauth2/v2.1/verify"
@@ -80,8 +80,15 @@ def verify_id_token(id_token, expected_user_id=""):
 
 def require_verified_line_user_id(expected_user_id=""):
     token = extract_id_token()
-    claims = verify_id_token(token, expected_user_id=expected_user_id)
-    return claims["sub"]
+    if token:
+        claims = verify_id_token(token, expected_user_id=expected_user_id)
+        return claims["sub"]
+
+    session_user_id = (session.get("line_user_id") or "").strip()
+    if session_user_id and (not expected_user_id or session_user_id == expected_user_id):
+        return session_user_id
+
+    raise LineAuthError("LINE ID token is required")
 
 
 def resolve_verified_line_user_id(expected_user_id="", allow_anonymous=False):
