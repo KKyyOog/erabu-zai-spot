@@ -453,7 +453,7 @@
         </div>
         <div class="history-actions">
           <button type="button" class="secondary-button" onclick="showMaterialEdit('${escapeHtml(material.material_id)}')">編集する</button>
-          <form method="post" action="/materials/${encodeURIComponent(material.material_id)}/delete">
+          <form method="post" action="/materials/${encodeURIComponent(material.material_id)}/delete" data-confirm-message="この材登録を削除します。元に戻せません。よろしいですか？">
             <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
             <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
             <input type="hidden" name="return_to" value="me">

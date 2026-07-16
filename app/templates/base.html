@@ -25,6 +25,11 @@
     });
     document.addEventListener("submit", function (event) {
       window.ensureCsrfToken(event.target);
+      if (event.target && event.target.dataset.confirmMessage) {
+        if (!window.confirm(event.target.dataset.confirmMessage)) {
+          event.preventDefault();
+        }
+      }
     }, true);
   </script>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>

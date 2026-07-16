@@ -119,7 +119,7 @@
             </div>
           </dl>
         </div>
-        <form method="post" action="{{ url_for('materials.delete', material_id=material.material_id) }}">
+        <form method="post" action="{{ url_for('materials.delete', material_id=material.material_id) }}" data-confirm-message="この材登録を削除します。元に戻せません。よろしいですか？">
           <input type="hidden" name="line_user_id" value="{{ user.line_user_id }}">
           <button type="submit">削除する</button>
         </form>
