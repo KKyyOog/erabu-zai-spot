@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -424,6 +424,26 @@ def append_matching_history(data, match_type="material"):
     with _engine().begin() as conn:
         conn.execute(matching_history.insert().values(**values))
     return match_id
+
+
+def has_recent_matching_request(match_type, entry_id, requester_user_id, seconds=30):
+    if match_type not in ("material", "viewing") or not entry_id or not requester_user_id:
+        return False
+
+    entry_column = (
+        matching_history.c.material_id
+        if match_type == "material"
+        else matching_history.c.property_id
+    )
+    cutoff = (datetime.now() - timedelta(seconds=seconds)).strftime("%Y-%m-%d %H:%M:%S")
+    stmt = select(matching_history.c.match_id).where(
+        matching_history.c.match_type == match_type,
+        entry_column == entry_id,
+        matching_history.c.requester_user_id == requester_user_id,
+        matching_history.c.created_at >= cutoff,
+    ).limit(1)
+    with _engine().connect() as conn:
+        return conn.execute(stmt).first() is not None
 
 
 def upsert_matching_history_record(record, match_type="material"):

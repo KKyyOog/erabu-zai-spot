@@ -15,11 +15,32 @@ from app.services.db_service import (
 from app.services.line_service import send_line_message
 from app.services.line_auth_service import LineAuthError, require_verified_line_user_id
 from app.services.liff_service import build_liff_url
+from app.validation import first_overlong_field
 
 users_bp = Blueprint("users", __name__, url_prefix="/users")
 
 ME_DATA_CACHE_SECONDS = 20
 _me_data_cache = {}
+
+USER_FIELD_LIMITS = {
+    "display_name": 100,
+    "address": 200,
+    "transport_info": 2000,
+    "contact_display_name": 100,
+    "contact_method": 50,
+    "contact_value": 300,
+    "contact_available_time": 100,
+    "contact_message": 1000,
+}
+
+
+def _reject_overlong_user_input(form):
+    invalid = first_overlong_field(form, USER_FIELD_LIMITS)
+    if not invalid:
+        return False
+    field, max_length = invalid
+    flash(f"入力が長すぎます（{field}: 最大{max_length}文字）。")
+    return True
 
 
 def _get_cached_me_data(line_user_id):
@@ -116,6 +137,8 @@ def register():
 @users_bp.route("/submit", methods=["POST"])
 def submit():
     form = request.form.to_dict()
+    if _reject_overlong_user_input(form):
+        return redirect(url_for("users.me"))
     if not form.get("line_user_id") and form.get("user_id"):
         form["line_user_id"] = form["user_id"]
     if not form.get("line_user_id") and form.get("userid"):
@@ -174,6 +197,8 @@ def edit(line_user_id):
 @users_bp.route("/<line_user_id>/update", methods=["POST"])
 def update_profile(line_user_id):
     form = request.form.to_dict()
+    if _reject_overlong_user_input(form):
+        return redirect(url_for("users.me"))
     resolved_user_id = _resolve_user_id(form, line_user_id)
     try:
         resolved_user_id = require_verified_line_user_id(resolved_user_id)
@@ -271,6 +296,8 @@ def me_data():
 @users_bp.route("/me/save", methods=["POST"])
 def me_save():
     form = request.form.to_dict()
+    if _reject_overlong_user_input(form):
+        return redirect(url_for("users.me"))
     resolved_user_id = _resolve_user_id(form)
     try:
         resolved_user_id = require_verified_line_user_id(resolved_user_id)

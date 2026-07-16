@@ -2,9 +2,10 @@ import os
 import logging
 import secrets
 from datetime import datetime
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import truststore
-from flask import Flask, abort, render_template, request, session
+from flask import Flask, abort, redirect, request, session, url_for
 
 from app.routes.materials import materials_bp
 from app.routes.users import users_bp
@@ -22,8 +23,23 @@ def create_app():
 
     app = Flask(__name__)
     app.config.from_object(Config)
-    if app.config["SECRET_KEY"] == "dev-secret":
-        app.logger.warning("FLASK_SECRET_KEY is using the development default. Set a strong secret in production.")
+    secret_key = app.config.get("SECRET_KEY") or ""
+    if (
+        (secret_key == "dev-secret" or len(secret_key) < 32)
+        and not app.config["ALLOW_INSECURE_DEV_CONFIG"]
+    ):
+        raise RuntimeError(
+            "FLASK_SECRET_KEY must be set to a random value of at least 32 characters. "
+            "Set ALLOW_INSECURE_DEV_CONFIG=true only for isolated local development."
+        )
+    if (
+        not app.config["SESSION_COOKIE_SECURE"]
+        and not app.config["ALLOW_INSECURE_DEV_CONFIG"]
+    ):
+        raise RuntimeError(
+            "SESSION_COOKIE_SECURE must be true. "
+            "Set ALLOW_INSECURE_DEV_CONFIG=true only for isolated local development."
+        )
 
     app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "static", "uploads")
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
@@ -103,7 +119,9 @@ def create_app():
 
     @app.before_request
     def log_debug_request():
-        if request.path.startswith(("/link", "/users/me", "/callback")):
+        if app.config["LIFF_DEBUG_LOGGING"] and request.path.startswith(
+            ("/link", "/users/me", "/callback")
+        ):
             app.logger.info(
                 "[REQUEST DEBUG] method=%s path=%s remote_addr=%s referer_present=%s user_agent=%s",
                 request.method,
@@ -137,6 +155,27 @@ def create_app():
 
     @app.route("/")
     def index():
-        return render_template("index.html")
+        raw_state = (request.args.get("liff.state") or "").strip()
+        if raw_state:
+            target = urlsplit(raw_state)
+            if not target.scheme and not target.netloc and target.path.startswith("/") and not target.path.startswith("//"):
+                filtered_query = [
+                    (key, value)
+                    for key, value in parse_qsl(target.query, keep_blank_values=True)
+                    if key
+                    not in {
+                        "liff.referrer",
+                        "access_token",
+                        "context_token",
+                        "feature_token",
+                        "id_token",
+                        "client_id",
+                        "mst_challenge",
+                    }
+                ]
+                filtered_query.append(("liff_entry", "1"))
+                return redirect(urlunsplit(("", "", target.path, urlencode(filtered_query), "")), code=302)
+
+        return redirect(url_for("materials.list_materials"), code=302)
 
     return app

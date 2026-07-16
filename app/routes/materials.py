@@ -14,6 +14,7 @@ from app.services.db_service import (
     get_demolition_properties,
     get_demolition_property_by_id,
     get_provider_shared_material_ids,
+    has_recent_matching_request,
     append_matching_history,
     delete_material,
     get_user_by_line_user_id,
@@ -22,10 +23,45 @@ from app.services.db_service import (
 from app.services.line_service import send_line_message
 from app.services.liff_service import liff_url_for
 from app.services.line_auth_service import LineAuthError, require_verified_line_user_id
+from app.validation import first_overlong_field
 
 materials_bp = Blueprint("materials", __name__, url_prefix="/materials")
 
 MAX_IMAGES_PER_ENTRY = 6
+
+MATERIAL_FIELD_LIMITS = {
+    "title": 200,
+    "material_type": 100,
+    "description": 5000,
+    "size": 300,
+    "quantity": 100,
+    "condition": 100,
+    "location": 300,
+    "pickup_deadline": 100,
+    "image_urls_text": 3000,
+}
+
+DEMOLITION_FIELD_LIMITS = {
+    "registrant_type": 100,
+    "property_name": 200,
+    "location": 300,
+    "owner_name": 200,
+    "demolition_contractor": 300,
+    "viewing_period": 300,
+    "building_use": 200,
+    "structure": 200,
+    "condition_evaluation": 5000,
+    "notes": 5000,
+    "building_photo_urls_text": 3000,
+}
+
+
+def _overlong_input_message(form, limits):
+    invalid = first_overlong_field(form, limits)
+    if not invalid:
+        return ""
+    field, max_length = invalid
+    return f"入力が長すぎます（{field}: 最大{max_length}文字）。"
 
 MATERIAL_TYPE_OPTIONS = [
     "木材",
@@ -288,6 +324,10 @@ def register_demolition():
 @materials_bp.route("/submit", methods=["POST"])
 def submit():
     form = request.form.to_dict()
+    validation_error = _overlong_input_message(form, MATERIAL_FIELD_LIMITS)
+    if validation_error:
+        flash(validation_error)
+        return redirect(url_for("materials.register_material"))
     try:
         line_user_id = require_verified_line_user_id(form.get("line_user_id", ""))
     except LineAuthError:
@@ -347,6 +387,10 @@ def submit():
 @materials_bp.route("/demolitions/submit", methods=["POST"])
 def submit_demolition():
     form = request.form.to_dict()
+    validation_error = _overlong_input_message(form, DEMOLITION_FIELD_LIMITS)
+    if validation_error:
+        flash(validation_error)
+        return redirect(url_for("materials.register_demolition"))
     try:
         line_user_id = require_verified_line_user_id(form.get("line_user_id", ""))
     except LineAuthError:
@@ -476,6 +520,9 @@ def delete(material_id):
 @materials_bp.route("/<material_id>/update", methods=["POST"])
 def update_material_entry(material_id):
     form = request.form.to_dict()
+    validation_error = _overlong_input_message(form, MATERIAL_FIELD_LIMITS)
+    if validation_error:
+        return jsonify({"ok": False, "message": validation_error}), 400
     line_user_id = _resolve_line_user_id(form)
     try:
         line_user_id = require_verified_line_user_id(line_user_id)
@@ -542,10 +589,20 @@ def interest():
         return redirect(url_for("materials.list_materials"))
 
     message = request.form.get("message", "")
+    if len(message) > 1000:
+        flash("メッセージは1000文字以内で入力してください。")
+        return redirect(url_for("materials.list_materials"))
 
     material = get_material_by_id(material_id)
     if not material:
         return "指定された材が見つかりません。", 404
+
+    if material.get("line_user_id") == requester_line_user_id:
+        flash("自分が登録した材には希望通知を送れません。")
+        return redirect(url_for("materials.list_materials"))
+    if has_recent_matching_request("material", material_id, requester_line_user_id):
+        flash("同じ希望通知を送信済みです。少し時間をおいてください。")
+        return redirect(url_for("materials.list_materials"))
 
     match_id = append_matching_history(
         {
@@ -601,6 +658,13 @@ def visit_interest():
     property_record = get_demolition_property_by_id(property_id)
     if not property_record:
         return "指定された解体物件が見つかりません。", 404
+
+    if property_record.get("line_user_id") == requester_line_user_id:
+        flash("自分が登録した物件には見学希望を送れません。")
+        return redirect(url_for("materials.list_materials"))
+    if has_recent_matching_request("viewing", property_id, requester_line_user_id):
+        flash("同じ見学希望を送信済みです。少し時間をおいてください。")
+        return redirect(url_for("materials.list_materials"))
 
     match_id = append_matching_history(
         {

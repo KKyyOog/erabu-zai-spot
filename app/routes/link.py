@@ -1,6 +1,6 @@
 import logging
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, abort, current_app, jsonify, request, session
 
 from app.services.line_auth_service import LineAuthError, verify_id_token
 
@@ -49,10 +49,12 @@ def session_status():
 
 @link_bp.route("/liff-debug", methods=["POST"])
 def liff_debug():
+    if not current_app.config.get("LIFF_DEBUG_LOGGING", False):
+        abort(404)
+
     data = request.get_json(silent=True) or {}
-    message = data.get("message", "")
-    timestamp = data.get("timestamp", "")
-    details = data.get("details", {})
+    message = str(data.get("message", ""))[:500].replace("\r", " ").replace("\n", " ")
+    timestamp = str(data.get("timestamp", ""))[:100].replace("\r", " ").replace("\n", " ")
 
     logger.info(
         "[LIFF DEBUG] timestamp=%s message=%s remote_addr=%s referer=%s user_agent=%s",
