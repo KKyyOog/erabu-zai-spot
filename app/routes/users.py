@@ -14,7 +14,6 @@ from app.services.db_service import (
 )
 from app.services.line_service import send_line_message
 from app.services.line_auth_service import LineAuthError, require_verified_line_user_id
-from app.services.liff_service import build_liff_url
 from app.validation import first_overlong_field
 
 users_bp = Blueprint("users", __name__, url_prefix="/users")
@@ -88,26 +87,6 @@ def _save_contact_card_if_present(line_user_id, form):
     if any(form.get(field) for field in card_fields):
         return upsert_contact_card(line_user_id, form)
     return None
-
-
-def _is_line_browser():
-    return "line/" in request.headers.get("User-Agent", "").lower()
-
-
-def _has_liff_callback_params():
-    return any(
-        name in request.args
-        for name in (
-            "liff.state",
-            "liff.referrer",
-            "access_token",
-            "context_token",
-            "feature_token",
-            "id_token",
-            "client_id",
-            "mst_challenge",
-        )
-    )
 
 
 def _format_contact_share_message(share_result):
@@ -236,13 +215,6 @@ def update_profile(line_user_id):
 
 @users_bp.route("/me", methods=["GET"])
 def me():
-    if (
-        _is_line_browser()
-        and "liff_entry" not in request.args
-        and not _has_liff_callback_params()
-    ):
-        return redirect(build_liff_url(url_for("users.me", liff_entry="1")), code=302)
-
     return render_template("users/me.html")
 
 

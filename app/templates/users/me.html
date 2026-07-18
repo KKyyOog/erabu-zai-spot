@@ -146,47 +146,6 @@
     };
   }
 
-  function currentLiffUrl() {
-    return `https://liff.line.me/${encodeURIComponent(window.LIFF_ID)}${window.location.pathname}${window.location.search}${window.location.hash}`;
-  }
-
-  function shouldReopenViaLiff() {
-    if (!window.LIFF_ID || (window.liff && liff.isInClient && liff.isInClient())) {
-      return false;
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('liff_entry') === '1') {
-      return false;
-    }
-
-    const liffCallbackParams = [
-      'liff.state',
-      'liff.referrer',
-      'access_token',
-      'context_token',
-      'feature_token',
-      'id_token',
-      'client_id',
-      'mst_challenge',
-    ];
-    if (liffCallbackParams.some((name) => params.has(name))) {
-      return false;
-    }
-
-    const redirectKey = `erabu_zai_spot_liff_reopen:${window.location.pathname}${window.location.search}`;
-    try {
-      if (window.sessionStorage.getItem(redirectKey) === '1') {
-        return false;
-      }
-      window.sessionStorage.setItem(redirectKey, '1');
-    } catch (error) {
-      console.warn('Failed to store LIFF reopen guard:', error);
-    }
-
-    return true;
-  }
-
   function logLiffDebug(message, details = {}) {
     const payload = JSON.stringify({
       message: message,
@@ -717,16 +676,6 @@
       await liff.init({ liffId: window.LIFF_ID });
       clearLegacyLiffReturnUrl();
       if (!liff.isLoggedIn()) {
-        if (shouldReopenViaLiff()) {
-          const liffUrl = currentLiffUrl();
-          logLiffDebug('users/me reopening via LIFF URL.', {
-            ...getLiffDebugContext(),
-            liffUrl: liffUrl,
-          });
-          window.location.replace(liffUrl);
-          return;
-        }
-
         logLiffDebug('users/me redirecting to LIFF login.', getLiffDebugContext());
         setLoading(true, 'LINEログインへ移動しています...');
         liff.login({ redirectUri: window.location.href });
