@@ -173,9 +173,8 @@ def create_app():
                         "mst_challenge",
                     }
                 ]
-                filtered_query.append(("liff_entry", "1"))
                 return redirect(urlunsplit(("", "", target.path, urlencode(filtered_query), "")), code=302)
 
-        return redirect(url_for("materials.list_materials"), code=302)
+        return redirect(url_for("users.me"), code=302)
 
     return app
