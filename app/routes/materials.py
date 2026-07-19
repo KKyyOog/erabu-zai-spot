@@ -316,6 +316,10 @@ def _public_user_summary(line_user_id):
     )
 
 
+def _has_registered_profile(line_user_id):
+    return bool(line_user_id and get_user_by_line_user_id(line_user_id))
+
+
 @materials_bp.route("/register", methods=["GET"])
 def register():
     return render_template("materials/register_select.html")
@@ -344,6 +348,10 @@ def submit():
         flash("LINE login verification failed. Please reopen this page from LINE.")
         return redirect(url_for("materials.register_material"))
     form["line_user_id"] = line_user_id
+
+    if not _has_registered_profile(line_user_id):
+        flash("材を登録する前に、マイページでユーザー情報を登録してください。")
+        return redirect(url_for("users.me"))
 
     image_files = [image_file for image_file in request.files.getlist("image_files") if image_file and image_file.filename]
     legacy_image_file = request.files.get("image_file")
@@ -407,6 +415,10 @@ def submit_demolition():
         flash("LINE login verification failed. Please reopen this page from LINE.")
         return redirect(url_for("materials.register_demolition"))
     form["line_user_id"] = line_user_id
+
+    if not _has_registered_profile(line_user_id):
+        flash("解体物件を登録する前に、マイページでユーザー情報を登録してください。")
+        return redirect(url_for("users.me"))
 
     image_files = [
         image_file

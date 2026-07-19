@@ -56,6 +56,67 @@ function setAllLineUserInputs(userId) {
   });
 }
 
+function setUserRegistrationState(state) {
+  if (window.REQUIRE_USER_REGISTRATION !== true) {
+    return;
+  }
+
+  const status = document.getElementById("user-registration-check-status");
+  const prompt = document.getElementById("user-registration-required");
+  const forms = document.querySelectorAll("form[data-requires-user-registration]");
+
+  if (status) {
+    status.hidden = state === "registered" || state === "unregistered";
+    if (state === "error") {
+      status.textContent = "マイページの登録状況を確認できませんでした。画面を再読み込みしてください。";
+    }
+  }
+  if (prompt) {
+    prompt.hidden = state !== "unregistered";
+    if (state === "unregistered") {
+      prompt.focus({ preventScroll: true });
+    }
+  }
+  forms.forEach((form) => {
+    form.hidden = state !== "registered";
+  });
+}
+
+async function confirmUserRegistration(userId, idToken = "") {
+  if (window.REQUIRE_USER_REGISTRATION !== true) {
+    return true;
+  }
+
+  try {
+    const headers = { "Accept": "application/json" };
+    if (idToken) {
+      headers["X-Line-ID-Token"] = idToken;
+    }
+    const response = await fetch(`/users/check/${encodeURIComponent(userId)}`, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    const body = await response.json();
+
+    if (response.ok && body.exists === true) {
+      setUserRegistrationState("registered");
+      return true;
+    }
+    if (response.ok) {
+      setUserRegistrationState("unregistered");
+      setLineAuthControls(false, "マイページ登録が必要です");
+      return false;
+    }
+  } catch (error) {
+    console.warn("Failed to check user registration:", error);
+  }
+
+  setUserRegistrationState("error");
+  setLineAuthControls(false, "登録状況を確認できません");
+  return false;
+}
+
 async function restoreLineSession() {
   try {
     const response = await fetch("/link/session", {
@@ -70,7 +131,9 @@ async function restoreLineSession() {
       window.LINE_SESSION_AUTHENTICATED = true;
       window.LINE_USER_ID = body.line_user_id;
       setAllLineUserInputs(body.line_user_id);
-      setLineAuthControls(true);
+      if (await confirmUserRegistration(body.line_user_id)) {
+        setLineAuthControls(true);
+      }
       return true;
     }
   } catch (error) {
@@ -259,7 +322,6 @@ async function initializeLiff() {
     setAllInputsByName("userid", profile.userId);
     setAllInputsByName("id_token", window.LINE_ID_TOKEN);
     ensureIdTokenInputs(window.LINE_ID_TOKEN);
-    setLineAuthControls(true);
 
     if (displayNameInput) {
       if (window.FILL_DISPLAY_NAME_FROM_LIFF === true && !displayNameInput.value.trim()) {
@@ -272,6 +334,11 @@ async function initializeLiff() {
       console.warn("display_name input not found");
       await logToServer("WARNING: display_name input not found");
     }
+
+    if (!await confirmUserRegistration(profile.userId, window.LINE_ID_TOKEN)) {
+      return;
+    }
+    setLineAuthControls(true);
 
     fetch("/link/liff", {
       method: "POST",
