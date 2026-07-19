@@ -2,10 +2,9 @@ import os
 import logging
 import secrets
 from datetime import datetime
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import truststore
-from flask import Flask, abort, redirect, request, session, url_for
+from flask import Flask, abort, render_template, request, session
 
 from app.routes.materials import materials_bp
 from app.routes.users import users_bp
@@ -155,26 +154,6 @@ def create_app():
 
     @app.route("/")
     def index():
-        raw_state = (request.args.get("liff.state") or "").strip()
-        if raw_state:
-            target = urlsplit(raw_state)
-            if not target.scheme and not target.netloc and target.path.startswith("/") and not target.path.startswith("//"):
-                filtered_query = [
-                    (key, value)
-                    for key, value in parse_qsl(target.query, keep_blank_values=True)
-                    if key
-                    not in {
-                        "liff.referrer",
-                        "access_token",
-                        "context_token",
-                        "feature_token",
-                        "id_token",
-                        "client_id",
-                        "mst_challenge",
-                    }
-                ]
-                return redirect(urlunsplit(("", "", target.path, urlencode(filtered_query), "")), code=302)
-
-        return redirect(url_for("users.me"), code=302)
+        return render_template("users/me.html")
 
     return app

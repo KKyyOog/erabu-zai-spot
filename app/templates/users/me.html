@@ -105,6 +105,8 @@
   let currentMaterials = [];
   let currentUserAddress = '';
   let currentIdToken = '';
+  const LIFF_LOGIN_ATTEMPT_KEY = 'erabu_zai_spot_liff_login_attempted_at';
+  const LIFF_LOGIN_RETRY_DELAY_MS = 60 * 1000;
 
   const materialTypeOptions = ['木材', '金属', '建具', '家具', '石材・ブロック', '設備・配管', 'その他'];
   const quantityOptions = ['少量（手持ち）', '軽トラ1台未満', '軽トラ1台分', '2tトラック1台分', 'それ以上', '要相談'];
@@ -116,6 +118,36 @@
     } catch (error) {
       console.warn('Failed to clear legacy LIFF return URL:', error);
     }
+  }
+
+  function clearLiffLoginAttempt() {
+    try {
+      window.sessionStorage.removeItem(LIFF_LOGIN_ATTEMPT_KEY);
+    } catch (error) {
+      console.warn('Failed to clear LIFF login attempt:', error);
+    }
+  }
+
+  function recentlyAttemptedLiffLogin() {
+    try {
+      const attemptedAt = Number(window.sessionStorage.getItem(LIFF_LOGIN_ATTEMPT_KEY) || 0);
+      return attemptedAt > 0 && Date.now() - attemptedAt < LIFF_LOGIN_RETRY_DELAY_MS;
+    } catch (error) {
+      console.warn('Failed to read LIFF login attempt:', error);
+      return false;
+    }
+  }
+
+  function rememberLiffLoginAttempt() {
+    try {
+      window.sessionStorage.setItem(LIFF_LOGIN_ATTEMPT_KEY, String(Date.now()));
+    } catch (error) {
+      console.warn('Failed to store LIFF login attempt:', error);
+    }
+  }
+
+  function liffLoginRedirectUrl() {
+    return `${window.location.origin}${window.location.pathname}`;
   }
 
   function initializePageTabs() {
@@ -661,6 +693,7 @@
   }
 
   async function initMeFlow() {
+    setSubmitEnabled(false);
     setLoading(true, 'LINE プロフィールを取得しています...');
     if (!window.LIFF_ID) {
       showUnavailableState('LIFF が設定されていないため、ユーザー情報を読み込めません。');
@@ -676,12 +709,25 @@
       await liff.init({ liffId: window.LIFF_ID });
       clearLegacyLiffReturnUrl();
       if (!liff.isLoggedIn()) {
+        if (liff.isInClient && liff.isInClient()) {
+          logLiffDebug('users/me LIFF client was unexpectedly logged out.', getLiffDebugContext());
+          showUnavailableState('LINEログインを確認できませんでした。画面を閉じて、LINEから開き直してください。');
+          return;
+        }
+
+        if (recentlyAttemptedLiffLogin()) {
+          logLiffDebug('users/me stopped repeated LIFF login.', getLiffDebugContext());
+          showUnavailableState('LINEログインが完了しませんでした。少し待ってから画面を開き直してください。');
+          return;
+        }
+
+        rememberLiffLoginAttempt();
         logLiffDebug('users/me redirecting to LIFF login.', getLiffDebugContext());
         setLoading(true, 'LINEログインへ移動しています...');
-        liff.login({ redirectUri: window.location.href });
+        liff.login({ redirectUri: liffLoginRedirectUrl() });
         return;
       }
-      setSubmitEnabled(true);
+      clearLiffLoginAttempt();
       logLiffDebug('users/me LIFF login confirmed.', getLiffDebugContext());
       const profile = await liff.getProfile();
       currentIdToken = liff.getIDToken() || '';
@@ -711,6 +757,7 @@
         setLoading(false, 'ユーザー情報を読み込めませんでした。新規登録として入力してください。');
         return;
       }
+      setSubmitEnabled(true);
       currentUserAddress = body.user?.address || '';
       renderMaterials(body.materials || [], profile.userId);
       renderMatchingHistory(body.matching_history || []);
