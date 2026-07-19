@@ -68,6 +68,7 @@ async function restoreLineSession() {
     const body = await response.json();
     if (response.ok && body.ok && body.line_user_id) {
       window.LINE_SESSION_AUTHENTICATED = true;
+      window.LINE_USER_ID = body.line_user_id;
       setAllLineUserInputs(body.line_user_id);
       setLineAuthControls(true);
       return true;
@@ -252,6 +253,7 @@ async function initializeLiff() {
       useridInput.value = profile.userId;
     }
 
+    window.LINE_USER_ID = profile.userId;
     setAllInputsByName("line_user_id", profile.userId);
     setAllInputsByName("user_id", profile.userId);
     setAllInputsByName("userid", profile.userId);

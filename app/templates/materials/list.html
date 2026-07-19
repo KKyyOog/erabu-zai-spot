@@ -43,35 +43,65 @@
                     <span class="status-badge">{{ item.status }}</span>
                   {% endif %}
                 </div>
-                {% if item.created_at %}
-                  <span class="listing-date">{{ item.created_at|date_jp }}</span>
-                {% endif %}
               </div>
               <h3>{{ item.title or '名称未設定' }}</h3>
               <dl class="summary-list">
                 <div>
-                  <dt>数量</dt>
-                  <dd>{{ item.quantity or '未設定' }}</dd>
-                </div>
-                <div>
                   <dt>種類</dt>
                   <dd>{{ item.material_type or '未設定' }}</dd>
-                </div>
-                <div>
-                  <dt>保管場所</dt>
-                  <dd>{{ item.location or '未設定' }}</dd>
-                </div>
-                <div>
-                  <dt>状態</dt>
-                  <dd>{{ item.condition or '未設定' }}</dd>
                 </div>
                 <div>
                   <dt>期限</dt>
                   <dd>{{ item.pickup_deadline|date_jp if item.pickup_deadline else '未設定' }}</dd>
                 </div>
               </dl>
-              <div class="listing-actions">
-                <a class="button-link compact" href="{{ url_for('materials.detail', material_id=item.id) }}">詳細を見る</a>
+              <button type="button" class="button-link compact listing-card__detail-trigger" data-listing-detail-trigger>詳細を見る</button>
+            </div>
+
+            <template class="listing-card__detail-template">
+              <div class="listing-detail__header">
+                <div class="badge-row">
+                  <p class="entry-badge">材登録</p>
+                  {% if item.status %}
+                    <span class="status-badge">{{ item.status }}</span>
+                  {% endif %}
+                </div>
+                <h3>{{ item.title or '名称未設定' }}</h3>
+                {% if item.created_at %}
+                  <p class="listing-detail__meta">登録日: {{ item.created_at|date_jp }}</p>
+                {% endif %}
+              </div>
+              <dl class="detail-list listing-detail__list">
+                <div>
+                  <dt>種類</dt>
+                  <dd>{{ item.material_type or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>状態</dt>
+                  <dd>{{ item.condition or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>数量</dt>
+                  <dd>{{ item.quantity or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>保管場所</dt>
+                  <dd>{{ item.location or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>寸法</dt>
+                  <dd>{{ item.size or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>説明</dt>
+                  <dd>{{ item.description or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>期限</dt>
+                  <dd>{{ item.pickup_deadline|date_jp if item.pickup_deadline else '未設定' }}</dd>
+                </div>
+              </dl>
+              <div class="listing-detail__actions listing-actions">
                 <form method="post" action="{{ url_for('materials.interest') }}">
                   <input type="hidden" name="material_id" value="{{ item.id }}">
                   <input type="hidden" name="line_user_id">
@@ -79,8 +109,9 @@
                   <input type="hidden" name="return_material_type" value="{{ material_type_filter }}">
                   <button type="submit">欲しい</button>
                 </form>
+                <button type="button" class="secondary-button" data-listing-detail-close>閉じる</button>
               </div>
-            </div>
+            </template>
           {% else %}
             <div class="listing-card__body">
               <div class="listing-card__topline">
@@ -90,9 +121,6 @@
                     <span class="status-badge demolition">{{ item.status }}</span>
                   {% endif %}
                 </div>
-                {% if item.created_at %}
-                  <span class="listing-date">{{ item.created_at|date_jp }}</span>
-                {% endif %}
               </div>
               <h3>{{ item.title or item.location or '物件名未設定' }}</h3>
               <dl class="summary-list">
@@ -109,8 +137,69 @@
                   <dd>{{ item.demolition_date|date_jp if item.demolition_date else '未定' }}</dd>
                 </div>
               </dl>
-              <div class="listing-actions">
-                <a class="button-link compact secondary" href="{{ url_for('materials.demolition_detail', property_id=item.id) }}">詳細を見る</a>
+              <button type="button" class="button-link compact listing-card__detail-trigger secondary-button" data-listing-detail-trigger>詳細を見る</button>
+            </div>
+
+            <template class="listing-card__detail-template">
+              <div class="listing-detail__header">
+                <div class="badge-row">
+                  <p class="entry-badge demolition">解体物件</p>
+                  {% if item.status %}
+                    <span class="status-badge demolition">{{ item.status }}</span>
+                  {% endif %}
+                </div>
+                <h3>{{ item.title or item.location or '物件名未設定' }}</h3>
+                {% if item.created_at %}
+                  <p class="listing-detail__meta">登録日: {{ item.created_at|date_jp }}</p>
+                {% endif %}
+              </div>
+              <dl class="detail-list listing-detail__list">
+                <div>
+                  <dt>所在地</dt>
+                  <dd>{{ item.location or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>登録者</dt>
+                  <dd>{{ item.registrant_name or item.registrant_type or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>解体予定日</dt>
+                  <dd>{{ item.demolition_date|date_jp if item.demolition_date else '未定' }}</dd>
+                </div>
+                <div>
+                  <dt>解体業者</dt>
+                  <dd>{{ item.demolition_contractor or '未定' }}</dd>
+                </div>
+                <div>
+                  <dt>見学期間</dt>
+                  <dd>{{ item.viewing_period or '未定' }}</dd>
+                </div>
+                <div>
+                  <dt>建物用途</dt>
+                  <dd>{{ item.building_use or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>構造</dt>
+                  <dd>{{ item.structure or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>階数</dt>
+                  <dd>{{ item.floors or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>築年数</dt>
+                  <dd>{{ item.building_age or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>状態評価</dt>
+                  <dd>{{ item.condition_evaluation or '未設定' }}</dd>
+                </div>
+                <div>
+                  <dt>備考</dt>
+                  <dd>{{ item.notes or 'なし' }}</dd>
+                </div>
+              </dl>
+              <div class="listing-detail__actions listing-actions">
                 <form method="post" action="{{ url_for('materials.visit_interest') }}">
                   <input type="hidden" name="property_id" value="{{ item.id }}">
                   <input type="hidden" name="line_user_id">
@@ -118,12 +207,21 @@
                   <input type="hidden" name="return_material_type" value="{{ material_type_filter }}">
                   <button type="submit">見学したい</button>
                 </form>
+                <button type="button" class="secondary-button" data-listing-detail-close>閉じる</button>
               </div>
-            </div>
+            </template>
           {% endif %}
         </article>
       {% endfor %}
     </div>
+
+    <dialog class="listing-detail-modal" id="listingDetailModal" aria-label="登録情報の詳細">
+      <div class="listing-detail-modal__shell">
+        <button type="button" class="listing-detail-modal__close" data-listing-detail-close aria-label="詳細を閉じる">×</button>
+        <div class="listing-detail-modal__media" data-listing-detail-media></div>
+        <div class="listing-detail-modal__content" data-listing-detail-content></div>
+      </div>
+    </dialog>
   {% else %}
     <div class="empty-state">
       <p>現在表示できる登録情報はありません。</p>
@@ -134,6 +232,92 @@
 
 <script>
   window.LIFF_ID = {{ LIFF_ID|tojson }};
+
+  (function () {
+    const modal = document.getElementById("listingDetailModal");
+    if (!modal) {
+      return;
+    }
+
+    const mediaTarget = modal.querySelector("[data-listing-detail-media]");
+    const contentTarget = modal.querySelector("[data-listing-detail-content]");
+
+    function clearModalContent() {
+      if (mediaTarget) {
+        mediaTarget.innerHTML = "";
+      }
+      if (contentTarget) {
+        contentTarget.innerHTML = "";
+      }
+    }
+
+    function hydrateModalAuthInputs() {
+      if (contentTarget && window.LINE_USER_ID) {
+        contentTarget.querySelectorAll('input[name="line_user_id"], input[name="user_id"], input[name="userid"]').forEach((input) => {
+          input.value = window.LINE_USER_ID;
+        });
+      }
+
+      if (contentTarget && window.LINE_ID_TOKEN) {
+        contentTarget.querySelectorAll("form").forEach((form) => {
+          let tokenInput = form.querySelector('input[name="id_token"]');
+          if (!tokenInput) {
+            tokenInput = document.createElement("input");
+            tokenInput.type = "hidden";
+            tokenInput.name = "id_token";
+            form.appendChild(tokenInput);
+          }
+          tokenInput.value = window.LINE_ID_TOKEN;
+        });
+      }
+    }
+
+    function openModalFromCard(card) {
+      const image = card.querySelector(".listing-card__image");
+      const template = card.querySelector(".listing-card__detail-template");
+
+      clearModalContent();
+
+      if (image && mediaTarget) {
+        mediaTarget.appendChild(image.cloneNode(true));
+      }
+
+      if (template && contentTarget) {
+        contentTarget.appendChild(template.content.cloneNode(true));
+      }
+
+      hydrateModalAuthInputs();
+
+      modal.showModal();
+      const closeButton = modal.querySelector("[data-listing-detail-close]");
+      if (closeButton) {
+        closeButton.focus();
+      }
+    }
+
+    document.querySelectorAll("[data-listing-detail-trigger]").forEach((trigger) => {
+      trigger.addEventListener("click", (event) => {
+        event.preventDefault();
+        const card = trigger.closest(".listing-card");
+        if (card) {
+          openModalFromCard(card);
+        }
+      });
+    });
+
+    modal.addEventListener("click", (event) => {
+      if (event.target.closest("[data-listing-detail-close]")) {
+        modal.close();
+        return;
+      }
+      if (event.target === modal) {
+        modal.close();
+      }
+    });
+
+    modal.addEventListener("close", clearModalContent);
+    window.addEventListener("line-authenticated", hydrateModalAuthInputs);
+  }());
 </script>
 <script src="{{ url_for('static', filename='js/liff.js') }}"></script>
 {% endblock %}

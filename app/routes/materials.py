@@ -242,6 +242,8 @@ def _build_listing_items(display_filter, material_type_filter="all"):
                     "quantity": material.get("quantity", ""),
                     "condition": material.get("condition", ""),
                     "pickup_deadline": material.get("pickup_deadline", ""),
+                    "description": material.get("description", ""),
+                    "size": material.get("size", ""),
                 }
             )
 
@@ -265,6 +267,14 @@ def _build_listing_items(display_filter, material_type_filter="all"):
                     "registrant_name": property_record.get("display_name", ""),
                     "registrant_type": property_record.get("registrant_type", ""),
                     "demolition_date": property_record.get("demolition_date", ""),
+                    "demolition_contractor": property_record.get("demolition_contractor", ""),
+                    "viewing_period": property_record.get("viewing_period", ""),
+                    "building_use": property_record.get("building_use", ""),
+                    "structure": property_record.get("structure", ""),
+                    "floors": property_record.get("floors", ""),
+                    "building_age": property_record.get("building_age", ""),
+                    "condition_evaluation": property_record.get("condition_evaluation", ""),
+                    "notes": property_record.get("notes", ""),
                 }
             )
 
