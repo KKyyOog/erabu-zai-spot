@@ -335,8 +335,11 @@ def register_demolition():
     return render_template("materials/demolition_register.html")
 
 
-@materials_bp.route("/submit", methods=["POST"])
+@materials_bp.route("/submit", methods=["GET", "POST"])
 def submit():
+    if request.method == "GET":
+        return redirect(url_for("materials.register_material"))
+
     form = request.form.to_dict()
     validation_error = _overlong_input_message(form, MATERIAL_FIELD_LIMITS)
     if validation_error:
@@ -402,8 +405,11 @@ def submit():
     return redirect(url_for("materials.list_materials"))
 
 
-@materials_bp.route("/demolitions/submit", methods=["POST"])
+@materials_bp.route("/demolitions/submit", methods=["GET", "POST"])
 def submit_demolition():
+    if request.method == "GET":
+        return redirect(url_for("materials.register_demolition"))
+
     form = request.form.to_dict()
     validation_error = _overlong_input_message(form, DEMOLITION_FIELD_LIMITS)
     if validation_error:
