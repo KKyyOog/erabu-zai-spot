@@ -80,17 +80,18 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .filter-tabs a {
   display: inline-block;
-  padding: 10px 14px;
+  padding: 9px 13px;
   border: 1px solid #d8d0bd;
-  border-radius: 8px;
+  border-radius: 999px;
   color: #2f2a23;
   text-decoration: none;
   background: white;
+  white-space: nowrap;
 }
 
 .filter-tabs a.active {
@@ -100,14 +101,33 @@ body {
 }
 
 .material-type-tabs {
-  margin-top: -8px;
+  margin-top: 0;
+  padding-bottom: 2px;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  scrollbar-width: thin;
 }
 
 .filter-label {
-  margin-right: 2px;
+  margin-right: 0;
+  padding-right: 2px;
   color: #5d5548;
   font-size: 14px;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.listing-page h2 {
+  margin-bottom: 14px;
+}
+
+.listing-filter-tabs::-webkit-scrollbar {
+  height: 8px;
+}
+
+.listing-filter-tabs::-webkit-scrollbar-thumb {
+  background: #d8d0bd;
+  border-radius: 999px;
 }
 
 .page-tabs {
@@ -663,6 +683,17 @@ td {
 
 .listing-card .summary-list div {
   grid-template-columns: 56px 1fr;
+}
+
+.listing-card .summary-list dd {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.listing-card__deadline {
+  font-size: 12px;
+  letter-spacing: -0.01em;
 }
 
 .button-link.compact,

@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section>
+<section class="listing-page">
   <h2>登録情報を見る</h2>
 
-  <nav class="filter-tabs" aria-label="一覧の絞り込み">
+  <nav class="filter-tabs listing-filter-tabs" aria-label="一覧の絞り込み">
     <a class="{{ 'active' if display_filter == 'all' else '' }}" href="{{ url_for('materials.list_materials', type='all', material_type='all') }}">全表示</a>
     <a class="{{ 'active' if display_filter == 'materials' else '' }}" href="{{ url_for('materials.list_materials', type='materials', material_type=material_type_filter) }}">材登録のみ</a>
     <a class="{{ 'active' if display_filter == 'demolitions' else '' }}" href="{{ url_for('materials.list_materials', type='demolitions', material_type='all') }}">物件登録のみ</a>
   </nav>
 
-  <nav class="filter-tabs material-type-tabs" aria-label="材の種類で絞り込み">
+  <nav class="filter-tabs material-type-tabs listing-filter-tabs" aria-label="材の種類で絞り込み">
     <span class="filter-label">材の種類</span>
     <a class="{{ 'active' if material_type_filter == 'all' else '' }}" href="{{ url_for('materials.list_materials', type='materials', material_type='all') }}">すべて</a>
     {% for material_type in material_type_options %}
@@ -52,7 +52,7 @@
                 </div>
                 <div>
                   <dt>期限</dt>
-                  <dd>{{ item.pickup_deadline|date_jp if item.pickup_deadline else '未設定' }}</dd>
+                  <dd class="listing-card__deadline">{{ item.pickup_deadline|date_jp if item.pickup_deadline else '未設定' }}</dd>
                 </div>
               </dl>
               <button type="button" class="button-link compact listing-card__detail-trigger" data-listing-detail-trigger>詳細を見る</button>
