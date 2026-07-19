@@ -13,6 +13,40 @@ class LineAuthError(Exception):
     pass
 
 
+def _safe_line_error_text(value, max_length=300):
+    return " ".join(str(value or "").split())[:max_length]
+
+
+def _log_verification_http_error(exc):
+    line_error = ""
+    description = ""
+
+    try:
+        response_body = exc.read().decode("utf-8", errors="replace")
+        error_payload = json.loads(response_body)
+        if isinstance(error_payload, dict):
+            line_error = _safe_line_error_text(error_payload.get("error"))
+            description = _safe_line_error_text(
+                error_payload.get("error_description")
+            )
+    except (AttributeError, OSError, TypeError, ValueError):
+        pass
+
+    request_id = ""
+    if exc.headers:
+        request_id = _safe_line_error_text(
+            exc.headers.get("x-line-request-id", ""), max_length=100
+        )
+
+    current_app.logger.warning(
+        "[LINE AUTH] ID token rejected status=%s error=%s description=%s request_id=%s",
+        exc.code,
+        line_error or "unknown",
+        description or "not_provided",
+        request_id or "not_provided",
+    )
+
+
 def extract_id_token(req=None):
     req = req or request
 
@@ -60,7 +94,7 @@ def verify_id_token(id_token, expected_user_id=""):
         with urlopen(verify_request, timeout=5) as response:
             response_body = response.read().decode("utf-8")
     except HTTPError as exc:
-        current_app.logger.warning("[LINE AUTH] ID token rejected status=%s", exc.code)
+        _log_verification_http_error(exc)
         raise LineAuthError("LINE ID token verification failed") from exc
     except URLError as exc:
         current_app.logger.warning("[LINE AUTH] ID token verification unavailable: %s", exc.reason)

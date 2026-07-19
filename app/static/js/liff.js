@@ -6,6 +6,76 @@ function clearLegacyLiffReturnUrl() {
   }
 }
 
+const LIFF_LOGIN_ATTEMPT_KEY = "erabu_zai_spot_liff_login_attempted_at";
+const LIFF_LOGIN_RETRY_DELAY_MS = 60 * 1000;
+
+function recentlyAttemptedLiffLogin() {
+  try {
+    const attemptedAt = Number(window.sessionStorage.getItem(LIFF_LOGIN_ATTEMPT_KEY) || 0);
+    return attemptedAt > 0 && Date.now() - attemptedAt < LIFF_LOGIN_RETRY_DELAY_MS;
+  } catch (error) {
+    console.warn("Failed to read LIFF login attempt:", error);
+    return false;
+  }
+}
+
+function rememberLiffLoginAttempt() {
+  try {
+    window.sessionStorage.setItem(LIFF_LOGIN_ATTEMPT_KEY, String(Date.now()));
+  } catch (error) {
+    console.warn("Failed to store LIFF login attempt:", error);
+  }
+}
+
+function clearLiffLoginAttempt() {
+  try {
+    window.sessionStorage.removeItem(LIFF_LOGIN_ATTEMPT_KEY);
+  } catch (error) {
+    console.warn("Failed to clear LIFF login attempt:", error);
+  }
+}
+
+function liffLoginRedirectUrl() {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+function hasFreshIdToken(idToken) {
+  if (!idToken || !liff.getDecodedIDToken) {
+    return false;
+  }
+
+  const decodedToken = liff.getDecodedIDToken();
+  const expiresAt = Number(decodedToken?.exp || 0) * 1000;
+  return expiresAt > Date.now() + 30 * 1000;
+}
+
+function restartLineAuthentication(reason) {
+  logToServer(`Restarting LINE authentication: ${reason}`, getLiffDebugContext());
+  window.LINE_ID_TOKEN = "";
+  window.LINE_SESSION_AUTHENTICATED = false;
+  setAllLineUserInputs("");
+
+  if (liff.isInClient && liff.isInClient()) {
+    setUserRegistrationState("error");
+    setLineAuthControls(false, "LINEから開き直してください");
+    return false;
+  }
+
+  if (recentlyAttemptedLiffLogin()) {
+    setUserRegistrationState("error");
+    setLineAuthControls(false, "再認証できませんでした");
+    return false;
+  }
+
+  rememberLiffLoginAttempt();
+  setLineAuthControls(false, "LINEへ再ログイン中...");
+  if (liff.isLoggedIn()) {
+    liff.logout();
+  }
+  liff.login({ redirectUri: liffLoginRedirectUrl() });
+  return true;
+}
+
 function getLiffDebugContext() {
   return {
     href: window.location.href,
@@ -106,6 +176,10 @@ async function confirmUserRegistration(userId, idToken = "") {
     if (response.ok) {
       setUserRegistrationState("unregistered");
       setLineAuthControls(false, "マイページ登録が必要です");
+      return false;
+    }
+    if (response.status === 401) {
+      restartLineAuthentication("registration check rejected ID token");
       return false;
     }
   } catch (error) {
@@ -255,9 +329,8 @@ async function initializeLiff() {
 
       if (window.REQUIRE_LIFF_LOGIN === true) {
         console.log("Redirecting to LIFF login...");
-        await logToServer("Redirecting to LIFF login without redirectUri.", getLiffDebugContext());
-        liff.login();
-        setLineAuthControls(false, "LINEログインが必要です");
+        await logToServer("Redirecting to LIFF login.", getLiffDebugContext());
+        restartLineAuthentication("LINE login required");
         return;
       }
 
@@ -272,6 +345,10 @@ async function initializeLiff() {
     const profile = await liff.getProfile();
     const idToken = liff.getIDToken();
     window.LINE_ID_TOKEN = idToken || "";
+    if (!hasFreshIdToken(window.LINE_ID_TOKEN)) {
+      restartLineAuthentication("missing or expired ID token");
+      return;
+    }
     console.log("Profile retrieved.");
     await logToServer("Profile retrieved.");
 
@@ -335,12 +412,7 @@ async function initializeLiff() {
       await logToServer("WARNING: display_name input not found");
     }
 
-    if (!await confirmUserRegistration(profile.userId, window.LINE_ID_TOKEN)) {
-      return;
-    }
-    setLineAuthControls(true);
-
-    fetch("/link/liff", {
+    const linkResponse = await fetch("/link/liff", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -350,16 +422,26 @@ async function initializeLiff() {
         idToken: window.LINE_ID_TOKEN,
       }),
       keepalive: true,
-    })
-      .then(() => {
-        console.log("LIFF link endpoint called successfully.");
-        logToServer("LIFF link endpoint called successfully.");
-        window.dispatchEvent(new Event("line-authenticated"));
-      })
-      .catch((error) => {
-        console.warn("LIFF link endpoint failed:", error);
-        logToServer("LIFF link endpoint failed: " + error.message);
-      });
+    });
+    if (!linkResponse.ok) {
+      if (linkResponse.status === 401) {
+        restartLineAuthentication("server rejected ID token");
+      } else {
+        setUserRegistrationState("error");
+        setLineAuthControls(false, "LINE認証を確認できません");
+      }
+      return;
+    }
+
+    window.LINE_SESSION_AUTHENTICATED = true;
+    clearLiffLoginAttempt();
+    if (!await confirmUserRegistration(profile.userId)) {
+      return;
+    }
+    setLineAuthControls(true);
+    console.log("LIFF link endpoint called successfully.");
+    logToServer("LIFF link endpoint called successfully.");
+    window.dispatchEvent(new Event("line-authenticated"));
   } catch (error) {
     console.error("LIFF initialization error:", error);
     await logToServer("LIFF initialization error: " + error.message);

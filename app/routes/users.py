@@ -227,7 +227,11 @@ def me_data():
     try:
         user_id = require_verified_line_user_id(user_id)
     except LineAuthError:
-        return jsonify({"ok": False, "message": "LINE authentication failed"}), 401
+        return jsonify({
+            "ok": False,
+            "code": "line_token_invalid",
+            "message": "LINE authentication failed",
+        }), 401
 
     cached = _get_cached_me_data(user_id)
     if cached:

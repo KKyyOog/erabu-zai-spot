@@ -33,8 +33,13 @@ def liff_link():
     try:
         claims = verify_id_token(id_token, expected_user_id=user_id)
     except LineAuthError as exc:
+        session.pop("line_user_id", None)
         logger.warning("[LIFF] auth rejected: %s", exc)
-        return jsonify({"ok": False, "message": "LINE authentication failed"}), 401
+        return jsonify({
+            "ok": False,
+            "code": "line_token_invalid",
+            "message": "LINE authentication failed",
+        }), 401
 
     session["line_user_id"] = claims["sub"]
     logger.info("[LIFF] auth accepted")

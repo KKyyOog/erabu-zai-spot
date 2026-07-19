@@ -153,6 +153,41 @@
     return `${window.location.origin}${window.location.pathname}`;
   }
 
+  function hasFreshIdToken(idToken) {
+    if (!idToken || !liff.getDecodedIDToken) {
+      return false;
+    }
+
+    const decodedToken = liff.getDecodedIDToken();
+    const expiresAt = Number(decodedToken?.exp || 0) * 1000;
+    return expiresAt > Date.now() + 30 * 1000;
+  }
+
+  function restartLineAuthentication(reason) {
+    logLiffDebug(`users/me restarting LINE authentication: ${reason}`, getLiffDebugContext());
+    currentIdToken = '';
+    document.getElementById('id_token').value = '';
+    setSubmitEnabled(false);
+
+    if (liff.isInClient && liff.isInClient()) {
+      showUnavailableState('LINE認証の有効期限が切れました。画面を閉じて、LINEから開き直してください。');
+      return false;
+    }
+
+    if (recentlyAttemptedLiffLogin()) {
+      showUnavailableState('LINEの再認証が完了しませんでした。少し待ってから画面を開き直してください。');
+      return false;
+    }
+
+    rememberLiffLoginAttempt();
+    setLoading(true, 'LINEへ再ログインしています...');
+    if (liff.isLoggedIn()) {
+      liff.logout();
+    }
+    liff.login({ redirectUri: liffLoginRedirectUrl() });
+    return true;
+  }
+
   function initializePageTabs() {
     document.querySelectorAll('[data-tab-target]').forEach((button) => {
       button.addEventListener('click', () => {
@@ -211,7 +246,7 @@
 
   async function syncLineSession(userId, idToken) {
     if (!userId || !idToken) {
-      return false;
+      return { ok: false, status: 0 };
     }
 
     try {
@@ -221,10 +256,10 @@
         body: JSON.stringify({ userId, idToken }),
         keepalive: true,
       });
-      return resp.ok;
+      return { ok: resp.ok, status: resp.status };
     } catch (error) {
       console.warn('Failed to sync LINE session:', error);
-      return false;
+      return { ok: false, status: 0 };
     }
   }
 
@@ -872,16 +907,28 @@
         liff.login({ redirectUri: liffLoginRedirectUrl() });
         return;
       }
-      clearLiffLoginAttempt();
       logLiffDebug('users/me LIFF login confirmed.', getLiffDebugContext());
       const profile = await liff.getProfile();
       currentIdToken = liff.getIDToken() || '';
+      if (!hasFreshIdToken(currentIdToken)) {
+        restartLineAuthentication('missing or expired ID token');
+        return;
+      }
       document.getElementById('line_user_id').value = profile.userId;
       document.getElementById('user_id').value = profile.userId;
       document.getElementById('userid').value = profile.userId;
       document.getElementById('id_token').value = currentIdToken;
       document.getElementById('profile-note').textContent = `LINE表示名: ${profile.displayName}`;
-      await syncLineSession(profile.userId, currentIdToken);
+      const sessionSync = await syncLineSession(profile.userId, currentIdToken);
+      if (!sessionSync.ok) {
+        if (sessionSync.status === 401) {
+          restartLineAuthentication('server rejected ID token');
+        } else {
+          showUnavailableState('LINE認証を確認できませんでした。通信状況を確認して、画面を開き直してください。');
+        }
+        return;
+      }
+      clearLiffLoginAttempt();
       setLoading(true, '登録情報を読み込んでいます...');
 
       const resp = await fetch('/users/me/data', {
@@ -890,9 +937,13 @@
           'Content-Type': 'application/json',
           'X-CSRF-Token': window.CSRF_TOKEN || '',
         },
-        body: JSON.stringify({ userId: profile.userId, idToken: currentIdToken }),
+        body: JSON.stringify({ userId: profile.userId }),
       });
       const body = await resp.json();
+      if (resp.status === 401) {
+        restartLineAuthentication('user data request rejected ID token');
+        return;
+      }
       if (!resp.ok || !body.ok) {
         clearUserForm();
         renderMaterials([], profile.userId);
