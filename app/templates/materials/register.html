@@ -27,8 +27,149 @@
     <label>説明</label>
     <textarea name="description" rows="4" placeholder="材の特徴、使えそうな用途など"></textarea>
 
-    <label>寸法</label>
-    <input type="text" name="size" placeholder="例：長さ180cm、幅10cm程度">
+    <fieldset class="form-fieldset size-builder" data-size-builder data-size-initial-mode="board">
+      <legend>寸法</legend>
+      <p class="hint">よく使う建築資材の書き方を選べます。合わない場合は自由記入に切り替えてください。</p>
+
+      <label>記入方法</label>
+      <div class="size-preset-tabs" aria-label="寸法の書き方を選ぶ">
+        <button type="button" class="size-preset-button" data-size-mode-button="board">板材</button>
+        <button type="button" class="size-preset-button" data-size-mode-button="square">角材</button>
+        <button type="button" class="size-preset-button" data-size-mode-button="door">建具</button>
+        <button type="button" class="size-preset-button" data-size-mode-button="round">丸物</button>
+        <button type="button" class="size-preset-button" data-size-mode-button="pipe">配管</button>
+        <button type="button" class="size-preset-button" data-size-mode-button="free">自由記入</button>
+      </div>
+      <select data-size-mode-select>
+        <option value="board">板材・一般材（L×W×t）</option>
+        <option value="square">角材（L×□）</option>
+        <option value="door">建具（W×H）</option>
+        <option value="round">丸物（φ×L）</option>
+        <option value="pipe">配管（L×φ×t）</option>
+        <option value="free">自由記入</option>
+      </select>
+
+      <div class="size-builder__panel" data-size-panel="board">
+        <div class="size-builder__grid">
+          <div>
+            <label>長さ</label>
+            <input type="text" inputmode="decimal" data-size-field="length" placeholder="1800">
+          </div>
+          <div>
+            <label>幅</label>
+            <input type="text" inputmode="decimal" data-size-field="width" placeholder="90">
+          </div>
+          <div>
+            <label>厚み</label>
+            <input type="text" inputmode="decimal" data-size-field="thickness" placeholder="30">
+          </div>
+          <div>
+            <label>単位</label>
+            <select data-size-unit>
+              <option value="mm">mm</option>
+              <option value="cm">cm</option>
+              <option value="m">m</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="size-builder__panel" data-size-panel="square" hidden>
+        <div class="size-builder__grid">
+          <div>
+            <label>長さ</label>
+            <input type="text" inputmode="decimal" data-size-field="length" placeholder="1800">
+          </div>
+          <div>
+            <label>断面一辺</label>
+            <input type="text" inputmode="decimal" data-size-field="section" placeholder="90">
+          </div>
+          <div>
+            <label>単位</label>
+            <select data-size-unit>
+              <option value="mm">mm</option>
+              <option value="cm">cm</option>
+              <option value="m">m</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="size-builder__panel" data-size-panel="door" hidden>
+        <div class="size-builder__grid">
+          <div>
+            <label>幅</label>
+            <input type="text" inputmode="decimal" data-size-field="width" placeholder="850">
+          </div>
+          <div>
+            <label>高さ</label>
+            <input type="text" inputmode="decimal" data-size-field="height" placeholder="2000">
+          </div>
+          <div>
+            <label>単位</label>
+            <select data-size-unit>
+              <option value="mm">mm</option>
+              <option value="cm">cm</option>
+              <option value="m">m</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="size-builder__panel" data-size-panel="round" hidden>
+        <div class="size-builder__grid">
+          <div>
+            <label>直径</label>
+            <input type="text" inputmode="decimal" data-size-field="diameter" placeholder="60">
+          </div>
+          <div>
+            <label>長さ</label>
+            <input type="text" inputmode="decimal" data-size-field="length" placeholder="2400">
+          </div>
+          <div>
+            <label>単位</label>
+            <select data-size-unit>
+              <option value="mm">mm</option>
+              <option value="cm">cm</option>
+              <option value="m">m</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="size-builder__panel" data-size-panel="pipe" hidden>
+        <div class="size-builder__grid">
+          <div>
+            <label>長さ</label>
+            <input type="text" inputmode="decimal" data-size-field="length" placeholder="2000">
+          </div>
+          <div>
+            <label>外径</label>
+            <input type="text" inputmode="decimal" data-size-field="outerDiameter" placeholder="27">
+          </div>
+          <div>
+            <label>肉厚</label>
+            <input type="text" inputmode="decimal" data-size-field="thickness" placeholder="2.3">
+          </div>
+          <div>
+            <label>単位</label>
+            <select data-size-unit>
+              <option value="mm">mm</option>
+              <option value="cm">cm</option>
+              <option value="m">m</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="size-builder__panel" data-size-panel="free" hidden>
+        <label>寸法をそのまま記入</label>
+        <input type="text" data-size-free placeholder="例：L1800×W90×t30mm / φ60×L2400">
+      </div>
+
+      <input type="hidden" name="size" data-size-hidden>
+      <p class="hint size-builder__preview" data-size-preview>寸法の入力形式を選ぶと、表示例がここに出ます。</p>
+    </fieldset>
 
     <label>数量</label>
     <select name="quantity">
@@ -94,7 +235,10 @@
   window.LIFF_ID = {{ LIFF_ID|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/liff.js') }}"></script>
+<script src="{{ url_for('static', filename='js/size_builder.js') }}"></script>
 <script>
+  initMaterialSizeBuilders(document);
+
   const locationMode = document.getElementById('location_mode');
   const locationInput = document.getElementById('location');
   const profileLocationNote = document.getElementById('profile-location-note');

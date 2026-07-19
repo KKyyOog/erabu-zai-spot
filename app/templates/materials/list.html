@@ -90,7 +90,7 @@
                 </div>
                 <div>
                   <dt>寸法</dt>
-                  <dd>{{ item.size or '未設定' }}</dd>
+                  <dd>{{ item.size|size_display if item.size else '未設定' }}</dd>
                 </div>
                 <div>
                   <dt>説明</dt>

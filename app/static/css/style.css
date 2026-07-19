@@ -396,6 +396,68 @@ button:disabled {
   background: #a54336;
 }
 
+.size-builder {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #ded7c8;
+  border-radius: 12px;
+  background: #fffdf7;
+}
+
+.size-builder legend {
+  padding: 0 6px;
+}
+
+.size-builder > label {
+  margin-top: 12px;
+}
+
+.size-preset-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.size-preset-button {
+  width: auto;
+  margin-top: 0;
+  padding: 9px 12px;
+  border: 1px solid #d8d0bd;
+  border-radius: 999px;
+  background: white;
+  color: #2f2a23;
+  font-weight: 700;
+}
+
+.size-preset-button.is-active {
+  border-color: #466642;
+  background: #466642;
+  color: white;
+}
+
+.size-builder__panel {
+  margin-top: 12px;
+}
+
+.size-builder__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.size-builder__grid > div {
+  min-width: 0;
+}
+
+.size-builder__grid > div label {
+  margin-top: 0;
+}
+
+.size-builder__preview {
+  margin-bottom: 0;
+}
+
 .section-heading {
   display: flex;
   align-items: flex-start;

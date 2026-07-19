@@ -23,7 +23,7 @@
     </div>
     <div>
       <dt>寸法</dt>
-      <dd>{{ material.size or '未設定' }}</dd>
+      <dd>{{ material.size|size_display if material.size else '未設定' }}</dd>
     </div>
     <div>
       <dt>数量</dt>

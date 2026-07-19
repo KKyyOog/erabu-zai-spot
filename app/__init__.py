@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 import secrets
 from datetime import datetime
 
@@ -85,6 +86,19 @@ def create_app():
                 continue
 
         return text.split(" ")[0]
+
+    @app.template_filter("size_display")
+    def size_display(value):
+        if not value:
+            return ""
+
+        text = str(value).strip()
+        text = text.replace("＊", "*").replace("✕", "x").replace("×", "x")
+        text = re.sub(r"\s*[xX*]\s*", "×", text)
+        text = re.sub(r"([A-Za-zφ□])\s+(?=\d)", r"\1", text)
+        text = re.sub(r"(?<=\d)\s+(?=[A-Za-zφ□])", "", text)
+        text = re.sub(r"\s+", " ", text)
+        return text
 
     @app.before_request
     def protect_from_csrf():
