@@ -847,6 +847,28 @@ td {
   font-weight: 700;
 }
 
+.match-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.match-actions form {
+  margin: 0;
+}
+
+.match-status-form {
+  display: grid;
+  gap: 6px;
+}
+
+.match-status-form label {
+  margin: 0;
+  color: #766e60;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .match-message {
   margin: 12px 0 0;
   padding: 10px;

@@ -1,6 +1,7 @@
 import json
 import os
-from urllib.parse import urlparse
+import re
+from urllib.parse import unquote, urlparse
 
 import cloudinary
 import cloudinary.uploader
@@ -9,6 +10,7 @@ from flask import Blueprint, current_app, flash, jsonify, redirect, render_templ
 from app.services.db_service import (
     append_material,
     append_demolition_property,
+    delete_demolition_property,
     get_materials,
     get_material_by_id,
     get_demolition_properties,
@@ -18,6 +20,7 @@ from app.services.db_service import (
     append_matching_history,
     delete_material,
     get_user_by_line_user_id,
+    update_demolition_property,
     update_material,
 )
 from app.services.line_service import send_line_message
@@ -205,6 +208,145 @@ def _collect_image_urls(record, primary_field, collection_field):
 
 def _validate_display_image_urls(urls):
     return [url for url in urls if _is_allowed_image_url(url)]
+
+
+def _cloudinary_public_id(image_url):
+    parsed = urlparse(image_url)
+    expected_cloud_name = (os.environ.get("CLOUDINARY_CLOUD_NAME") or "").strip()
+    if (
+        parsed.scheme != "https"
+        or (parsed.hostname or "").lower() != "res.cloudinary.com"
+        or not expected_cloud_name
+    ):
+        return ""
+
+    segments = [unquote(segment) for segment in parsed.path.strip("/").split("/")]
+    if len(segments) < 5 or segments[0] != expected_cloud_name:
+        return ""
+    if segments[1:3] != ["image", "upload"]:
+        return ""
+
+    version_index = next(
+        (
+            index
+            for index in range(3, len(segments))
+            if re.fullmatch(r"v\d+", segments[index])
+        ),
+        -1,
+    )
+    if version_index < 0 or version_index + 1 >= len(segments):
+        return ""
+
+    public_id_parts = segments[version_index + 1 :]
+    public_id_parts[-1] = os.path.splitext(public_id_parts[-1])[0]
+    public_id = "/".join(part for part in public_id_parts if part)
+    if not public_id.startswith("erabu-zai-spot/uploads/"):
+        return ""
+    return public_id
+
+
+def _active_cloudinary_image_urls():
+    active_urls = set()
+    for material in get_materials(include_all=True):
+        if material.get("status") == "削除済み":
+            continue
+        active_urls.update(_collect_image_urls(material, "image_url", "image_urls"))
+
+    for property_record in get_demolition_properties(include_all=True):
+        if property_record.get("status") == "削除済み":
+            continue
+        active_urls.update(
+            _collect_image_urls(
+                property_record,
+                "building_photo_url",
+                "building_photo_urls",
+            )
+        )
+    return active_urls
+
+
+def _delete_cloudinary_images(image_urls, log_context):
+    public_ids = []
+    failures = []
+    skipped_count = 0
+    seen = set()
+    active_urls = _active_cloudinary_image_urls()
+
+    for image_url in _dedupe_urls(image_urls):
+        if image_url in active_urls:
+            skipped_count += 1
+            current_app.logger.info(
+                "[%s] Cloudinary image is still referenced and will not be deleted url=%s",
+                log_context,
+                image_url,
+            )
+            continue
+        public_id = _cloudinary_public_id(image_url)
+        if not public_id:
+            failures.append(image_url)
+            current_app.logger.warning(
+                "[%s] Cloudinary public ID could not be resolved url=%s",
+                log_context,
+                image_url,
+            )
+            continue
+        if public_id not in seen:
+            public_ids.append(public_id)
+            seen.add(public_id)
+
+    deleted_count = 0
+    for public_id in public_ids:
+        try:
+            result = cloudinary.uploader.destroy(
+                public_id,
+                resource_type="image",
+                invalidate=True,
+            )
+            if result.get("result") in ("ok", "not found"):
+                deleted_count += 1
+            else:
+                failures.append(public_id)
+                current_app.logger.warning(
+                    "[%s] Cloudinary image deletion was not accepted public_id=%s result=%s",
+                    log_context,
+                    public_id,
+                    result.get("result", ""),
+                )
+        except Exception:
+            failures.append(public_id)
+            current_app.logger.exception(
+                "[%s] Cloudinary image deletion failed public_id=%s",
+                log_context,
+                public_id,
+            )
+
+    return deleted_count, failures, skipped_count
+
+
+def _flash_deleted_with_image_result(label, image_urls, log_context):
+    if not image_urls:
+        flash(f"{label}を削除しました。")
+        return
+
+    deleted_count, failures, skipped_count = _delete_cloudinary_images(
+        image_urls,
+        log_context,
+    )
+    if failures:
+        flash(
+            f"{label}は削除しましたが、画像{len(failures)}件をCloudinaryから削除できませんでした。"
+            "運営者に連絡してください。"
+        )
+        return
+
+    if skipped_count:
+        flash(
+            f"{label}を削除しました。画像{deleted_count}件をCloudinaryから削除し、"
+            f"他の登録でも使用中の画像{skipped_count}件は残しました。"
+        )
+        return
+
+    flash(f"{label}を削除し、画像{deleted_count}件もCloudinaryから削除しました。")
 
 
 def _sort_key_created_at(item):
@@ -519,6 +661,122 @@ def demolition_detail(property_id):
     return render_template("materials/demolition_detail.html", property_record=property_record)
 
 
+@materials_bp.route("/demolitions/<property_id>/edit", methods=["GET"])
+def edit_demolition(property_id):
+    property_record = get_demolition_property_by_id(property_id)
+    if not property_record or property_record.get("status") == "削除済み":
+        return "指定された解体物件が見つかりません。", 404
+
+    try:
+        require_verified_line_user_id(property_record.get("line_user_id", ""))
+    except LineAuthError:
+        flash("この解体物件を編集するにはLINE認証が必要です。")
+        return redirect(url_for("users.me"))
+
+    property_record["building_photo_urls"] = _collect_image_urls(
+        property_record,
+        "building_photo_url",
+        "building_photo_urls",
+    )
+    return render_template(
+        "materials/demolition_edit.html",
+        property_record=property_record,
+    )
+
+
+@materials_bp.route("/demolitions/<property_id>/update", methods=["POST"])
+def update_demolition_entry(property_id):
+    form = request.form.to_dict()
+    validation_error = _overlong_input_message(form, DEMOLITION_FIELD_LIMITS)
+    if validation_error:
+        flash(validation_error)
+        return redirect(url_for("materials.edit_demolition", property_id=property_id))
+
+    try:
+        line_user_id = require_verified_line_user_id(
+            _resolve_line_user_id(form)
+        )
+    except LineAuthError:
+        flash("LINE login verification failed. Please reopen this page from LINE.")
+        return redirect(url_for("users.me"))
+
+    existing = get_demolition_property_by_id(property_id)
+    if not existing or existing.get("line_user_id") != line_user_id:
+        flash("この解体物件は編集できません。")
+        return redirect(url_for("users.me"))
+
+    required_fields = ["property_name", "location", "registrant_type"]
+    if any(not form.get(field) for field in required_fields):
+        flash("必須項目が入力されていません。")
+        return redirect(url_for("materials.edit_demolition", property_id=property_id))
+
+    image_files = [
+        image_file
+        for image_file in request.files.getlist("building_image_files")
+        if image_file and image_file.filename
+    ]
+    input_image_urls = _dedupe_urls(
+        _split_image_urls(form.get("building_photo_url", ""))
+        + _split_image_urls(form.get("building_photo_urls_text", ""))
+    )
+    try:
+        final_image_urls = _validate_image_urls(input_image_urls)
+        if image_files:
+            uploaded_image_urls = _upload_images(image_files)
+            final_image_urls = _validate_image_urls(
+                _dedupe_urls(uploaded_image_urls + final_image_urls)
+            )
+    except ValueError as exc:
+        flash(str(exc))
+        return redirect(url_for("materials.edit_demolition", property_id=property_id))
+    except Exception:
+        current_app.logger.exception("[demolitions.update] cloudinary upload failed")
+        flash("画像のアップロードに失敗しました。")
+        return redirect(url_for("materials.edit_demolition", property_id=property_id))
+
+    form["building_photo_url"] = final_image_urls[0] if final_image_urls else ""
+    form["building_photo_urls"] = json.dumps(final_image_urls, ensure_ascii=False)
+    updated = update_demolition_property(property_id, line_user_id, form)
+    if not updated:
+        flash("解体物件の更新に失敗しました。")
+        return redirect(url_for("materials.edit_demolition", property_id=property_id))
+
+    flash("解体物件を更新しました。")
+    return redirect(url_for("users.me", refresh="1"))
+
+
+@materials_bp.route("/demolitions/<property_id>/delete", methods=["POST"])
+def delete_demolition(property_id):
+    try:
+        line_user_id = require_verified_line_user_id(
+            _resolve_line_user_id(request.form)
+        )
+    except LineAuthError:
+        flash("LINE login verification failed. Please reopen this page from LINE.")
+        return redirect(url_for("users.me"))
+
+    existing = get_demolition_property_by_id(property_id)
+    if not existing or existing.get("line_user_id") != line_user_id:
+        flash("この解体物件は削除できません。")
+        return redirect(url_for("users.me"))
+
+    image_urls = _collect_image_urls(
+        existing,
+        "building_photo_url",
+        "building_photo_urls",
+    )
+    if delete_demolition_property(property_id):
+        _flash_deleted_with_image_result(
+            "解体物件",
+            image_urls,
+            "demolitions.delete",
+        )
+    else:
+        flash("解体物件の削除に失敗しました。")
+
+    return redirect(url_for("users.me", refresh="1"))
+
+
 @materials_bp.route("/<material_id>/delete", methods=["POST"])
 def delete(material_id):
     line_user_id = request.form.get("line_user_id", "")
@@ -533,13 +791,18 @@ def delete(material_id):
         flash("This material cannot be deleted by the current user.")
         return redirect(url_for("users.me"))
 
+    image_urls = _collect_image_urls(existing, "image_url", "image_urls")
     if delete_material(material_id):
-        flash("材登録を削除しました。")
+        _flash_deleted_with_image_result(
+            "材登録",
+            image_urls,
+            "materials.delete",
+        )
     else:
         flash("材登録の削除に失敗しました。")
 
     if request.form.get("return_to") == "me":
-        return redirect(url_for("users.me"))
+        return redirect(url_for("users.me", refresh="1"))
     if line_user_id:
         return redirect(url_for("users.detail", line_user_id=line_user_id))
     return redirect(url_for("materials.list_materials", type=request.form.get("return_type", "all")))
@@ -645,7 +908,7 @@ def interest():
     )
 
     provider_line_user_id = material.get("line_user_id", "")
-    _send_provider_notification(
+    notification_sent = _send_provider_notification(
         provider_line_user_id,
         "\n".join(
             [
@@ -663,7 +926,13 @@ def interest():
         "materials.interest",
     )
 
-    flash("欲しい通知を送信しました。")
+    if notification_sent:
+        flash("欲しい通知を送信しました。")
+    else:
+        flash(
+            "希望はマッチング履歴に保存しましたが、登録者へのLINE通知に失敗しました。"
+            "マイページで履歴を確認し、必要に応じて運営者へ連絡してください。"
+        )
     return redirect(
         url_for(
             "materials.list_materials",
@@ -707,7 +976,7 @@ def visit_interest():
     )
 
     provider_line_user_id = property_record.get("line_user_id", "")
-    _send_provider_notification(
+    notification_sent = _send_provider_notification(
         provider_line_user_id,
         "\n".join(
             [
@@ -724,7 +993,13 @@ def visit_interest():
         "demolitions.visit_interest",
     )
 
-    flash("見学希望を送信しました。")
+    if notification_sent:
+        flash("見学希望を送信しました。")
+    else:
+        flash(
+            "見学希望はマッチング履歴に保存しましたが、登録者へのLINE通知に失敗しました。"
+            "マイページで履歴を確認し、必要に応じて運営者へ連絡してください。"
+        )
     return redirect(
         url_for(
             "materials.list_materials",

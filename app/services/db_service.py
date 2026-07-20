@@ -299,6 +299,17 @@ def get_demolition_property_by_id(property_id):
     return _select_one(demolition_properties, demolition_properties.c.property_id == property_id)
 
 
+def get_demolition_properties_by_line_user_id(line_user_id, include_all=False):
+    stmt = (
+        select(demolition_properties)
+        .where(demolition_properties.c.line_user_id == line_user_id)
+        .order_by(demolition_properties.c.created_at)
+    )
+    if not include_all:
+        stmt = stmt.where(demolition_properties.c.status != DELETED_STATUS)
+    return [_decorate_demolition_property_record(record) for record in _select_many(stmt)]
+
+
 def get_materials(include_all=False):
     stmt = select(materials).order_by(materials.c.created_at)
     if not include_all:
@@ -378,6 +389,22 @@ def _decorate_material_record(record):
     image_urls = _collect_image_urls(record, "image_url", "image_urls")
     record["image_urls"] = image_urls
     record["image_url"] = image_urls[0] if image_urls else record.get("image_url", "")
+    return record
+
+
+def _decorate_demolition_property_record(record):
+    if not record:
+        return record
+
+    image_urls = _collect_image_urls(
+        record,
+        "building_photo_url",
+        "building_photo_urls",
+    )
+    record["building_photo_urls"] = image_urls
+    record["building_photo_url"] = (
+        image_urls[0] if image_urls else record.get("building_photo_url", "")
+    )
     return record
 
 
@@ -516,6 +543,31 @@ def update_matching_contact_share_status(match_id, match_type, user_id, status):
             .values(**values)
         )
     return True
+
+
+def update_matching_status(match_id, match_type, user_id, status):
+    if match_type not in ("material", "viewing"):
+        return None
+
+    with _engine().begin() as conn:
+        result = conn.execute(
+            update(matching_history)
+            .where(
+                matching_history.c.match_id == match_id,
+                matching_history.c.match_type == match_type,
+                or_(
+                    matching_history.c.provider_user_id == user_id,
+                    matching_history.c.requester_user_id == user_id,
+                ),
+            )
+            .values(status=status, updated_at=_now())
+        )
+
+    if result.rowcount <= 0:
+        return None
+
+    _, record = get_matching_history_by_id(match_id, match_type)
+    return record
 
 
 def get_contact_card_by_user(line_user_id):
@@ -690,6 +742,16 @@ def delete_material(material_id):
     return update_material_status(material_id, DELETED_STATUS)
 
 
+def delete_demolition_property(property_id):
+    with _engine().begin() as conn:
+        result = conn.execute(
+            update(demolition_properties)
+            .where(demolition_properties.c.property_id == property_id)
+            .values(status=DELETED_STATUS)
+        )
+    return result.rowcount > 0
+
+
 def update_material(material_id, line_user_id, data):
     existing = get_material_by_id(material_id)
     if not existing or existing.get("line_user_id") != line_user_id:
@@ -717,3 +779,43 @@ def update_material(material_id, line_user_id, data):
 
     updated = get_material_by_id(material_id)
     return _decorate_material_record(updated)
+
+
+def update_demolition_property(property_id, line_user_id, data):
+    existing = get_demolition_property_by_id(property_id)
+    if not existing or existing.get("line_user_id") != line_user_id:
+        return None
+
+    allowed_fields = (
+        "registrant_type",
+        "property_name",
+        "location",
+        "owner_name",
+        "demolition_date",
+        "demolition_contractor",
+        "viewing_period",
+        "building_use",
+        "structure",
+        "floors",
+        "building_age",
+        "building_photo_url",
+        "building_photo_urls",
+        "condition_evaluation",
+        "notes",
+    )
+    values = {
+        field: data.get(field, existing.get(field, "")) for field in allowed_fields
+    }
+
+    with _engine().begin() as conn:
+        result = conn.execute(
+            update(demolition_properties)
+            .where(demolition_properties.c.property_id == property_id)
+            .values(**values)
+        )
+
+    if result.rowcount <= 0:
+        return None
+
+    updated = get_demolition_property_by_id(property_id)
+    return _decorate_demolition_property_record(updated)

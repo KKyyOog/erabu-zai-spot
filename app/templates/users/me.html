@@ -3,7 +3,7 @@
 {% block content %}
 <nav class="page-tabs" aria-label="マイページの表示切り替え">
   <button type="button" class="page-tab active" data-tab-target="profile-panel">プロフィール</button>
-  <button type="button" class="page-tab" data-tab-target="materials-panel">登録した材</button>
+  <button type="button" class="page-tab" data-tab-target="materials-panel">登録した情報</button>
   <button type="button" class="page-tab" data-tab-target="matches-panel">マッチング</button>
 </nav>
 
@@ -88,11 +88,14 @@
 <section class="card tab-panel" id="materials-panel" hidden>
   <div class="section-heading">
     <div>
-      <h3>自分の材登録履歴</h3>
-      <p class="hint">登録した材はここから内容を編集できます。</p>
+      <h3>自分の登録履歴</h3>
+      <p class="hint">登録した材と解体物件をここから編集・削除できます。</p>
     </div>
   </div>
+  <h4>材</h4>
   <div id="materials-container"><p>読み込み中...</p></div>
+  <h4>解体物件</h4>
+  <div id="demolitions-container"><p>読み込み中...</p></div>
 </section>
 
 <section class="card tab-panel" id="matches-panel" hidden>
@@ -106,6 +109,7 @@
 <script src="{{ url_for('static', filename='js/size_builder.js') }}"></script>
 <script>
   let currentMaterials = [];
+  let currentDemolitionProperties = [];
   let currentUserAddress = '';
   let currentIdToken = '';
   const LIFF_LOGIN_ATTEMPT_KEY = 'erabu_zai_spot_liff_login_attempted_at';
@@ -114,6 +118,7 @@
   const materialTypeOptions = ['木材', '金属', '建具', '家具', '石材・ブロック', '設備・配管', 'その他'];
   const quantityOptions = ['少量（手持ち）', '軽トラ1台未満', '軽トラ1台分', '2tトラック1台分', 'それ以上', '要相談'];
   const conditionOptions = ['★☆☆☆☆', '★★☆☆☆', '★★★☆☆', '★★★★☆', '★★★★★'];
+  const matchStatusOptions = ['未対応', '連絡・調整中', '成立', '辞退'];
 
   function clearLegacyLiffReturnUrl() {
     try {
@@ -323,6 +328,12 @@
     return [...new Set([...urls, ...primary])];
   }
 
+  function getDemolitionImageUrls(propertyRecord) {
+    const urls = parseImageUrls(propertyRecord.building_photo_urls);
+    const primary = parseImageUrls(propertyRecord.building_photo_url);
+    return [...new Set([...urls, ...primary])];
+  }
+
   function renderOptions(options, selectedValue, emptyLabel = '') {
     const emptyOption = emptyLabel ? `<option value="">${escapeHtml(emptyLabel)}</option>` : '';
     const optionValues = [...options];
@@ -491,6 +502,65 @@
         </div>
       </div>
     `;
+  }
+
+  function renderDemolitionProperties(properties, userId) {
+    currentDemolitionProperties = properties || [];
+    const container = document.getElementById('demolitions-container');
+    if (!currentDemolitionProperties.length) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <p>まだ解体物件の登録がありません。</p>
+          <a class="button-link compact" href="/materials/register/demolition">解体物件を登録する</a>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = currentDemolitionProperties.map((propertyRecord) => {
+      const imageUrls = getDemolitionImageUrls(propertyRecord);
+      const thumb = imageUrls[0]
+        ? `<img class="history-thumb" src="${escapeHtml(imageUrls[0])}" alt="${escapeHtml(propertyRecord.property_name || '建物写真')}" loading="lazy" decoding="async">`
+        : '<div class="history-thumb history-thumb--empty">写真なし</div>';
+      const propertyId = propertyRecord.property_id || '';
+
+      return `
+        <div class="history-card demolition-history-item">
+          <div class="history-card__header">
+            <div class="history-card__title">
+              <span class="entry-badge demolition">解体物件</span>
+              <h4>${escapeHtml(propertyRecord.property_name || '物件名未設定')}</h4>
+            </div>
+            <span class="listing-date">${escapeHtml(formatDateJp(propertyRecord.created_at))}</span>
+          </div>
+          <div class="history-card__bodyline">
+            ${thumb}
+            <dl class="summary-list compact-list">
+              <div>
+                <dt>所在地</dt>
+                <dd>${escapeHtml(propertyRecord.location || '未設定')}</dd>
+              </div>
+              <div>
+                <dt>解体予定日</dt>
+                <dd>${escapeHtml(formatDateJp(propertyRecord.demolition_date) || '未定')}</dd>
+              </div>
+              <div>
+                <dt>状態</dt>
+                <dd>${escapeHtml(propertyRecord.status || '未設定')}</dd>
+              </div>
+            </dl>
+          </div>
+          <div class="history-actions">
+            <a class="button-link secondary-button" href="/materials/demolitions/${encodeURIComponent(propertyId)}/edit">編集する</a>
+            <form method="post" action="/materials/demolitions/${encodeURIComponent(propertyId)}/delete" data-confirm-message="この解体物件を削除します。元に戻せません。よろしいですか？">
+              <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
+              <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
+              <button type="submit" class="danger-button">削除する</button>
+            </form>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   function showMaterialEdit(materialId) {
@@ -787,6 +857,7 @@
         ? `<img class="history-thumb history-thumb--small" src="${escapeHtml(match.entry_image_url)}" alt="${escapeHtml(title)}" loading="lazy" decoding="async">`
         : '<div class="history-thumb history-thumb--small history-thumb--empty">写真なし</div>';
       const shareAction = `/users/matches/${encodeURIComponent(matchType)}/${encodeURIComponent(match.match_id)}/share-contact`;
+      const statusAction = `/users/matches/${encodeURIComponent(matchType)}/${encodeURIComponent(match.match_id)}/status`;
       const shareControl = shareStatus === 'shared'
         ? '<p class="share-status shared">連絡先カード共有済み</p>'
         : `
@@ -796,6 +867,17 @@
             <button type="submit">連絡先カードを共有する</button>
           </form>
         `;
+      const statusControl = `
+        <form class="match-status-form" method="post" action="${statusAction}" data-confirm-message="マッチング状態を変更します。よろしいですか？">
+          <input type="hidden" name="line_user_id" value="${escapeHtml(currentUserId)}">
+          <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
+          <label>マッチング状態</label>
+          <select name="status">
+            ${renderOptions(matchStatusOptions, match.status || '未対応')}
+          </select>
+          <button type="submit" class="secondary-button">状態を更新する</button>
+        </form>
+      `;
 
       return `
         <div class="history-card matching-history-item">
@@ -815,7 +897,10 @@
                 <span>${escapeHtml(match.status || '状態未設定')}</span>
               </div>
               ${match.message ? `<p class="match-message">${escapeHtml(match.message)}</p>` : ''}
-              ${shareControl}
+              <div class="match-actions">
+                ${statusControl}
+                ${shareControl}
+              </div>
             </div>
           </div>
         </div>
@@ -861,6 +946,7 @@
   function showUnavailableState(message) {
     clearUserForm();
     renderMaterials([], '');
+    renderDemolitionProperties([], '');
     renderMatchingHistory([]);
     document.getElementById('form-title').textContent = 'ユーザー情報';
     document.getElementById('profile-note').textContent = '';
@@ -937,7 +1023,10 @@
           'Content-Type': 'application/json',
           'X-CSRF-Token': window.CSRF_TOKEN || '',
         },
-        body: JSON.stringify({ userId: profile.userId }),
+        body: JSON.stringify({
+          userId: profile.userId,
+          refresh: new URLSearchParams(window.location.search).get('refresh') === '1',
+        }),
       });
       const body = await resp.json();
       if (resp.status === 401) {
@@ -947,6 +1036,7 @@
       if (!resp.ok || !body.ok) {
         clearUserForm();
         renderMaterials([], profile.userId);
+        renderDemolitionProperties([], profile.userId);
         renderMatchingHistory([]);
         document.getElementById('form-title').textContent = 'ユーザー情報（新規登録）';
         document.getElementById('submit-button').textContent = '登録する';
@@ -956,6 +1046,7 @@
       setSubmitEnabled(true);
       currentUserAddress = body.user?.address || '';
       renderMaterials(body.materials || [], profile.userId);
+      renderDemolitionProperties(body.demolition_properties || [], profile.userId);
       renderMatchingHistory(body.matching_history || []);
       fillContactCard(body.contact_card || {}, body.user || {});
       if (body.ok && body.exists) {

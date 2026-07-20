@@ -4,12 +4,14 @@ from flask import Blueprint, jsonify, render_template, request, redirect, url_fo
 
 from app.services.db_service import (
     append_user,
+    get_demolition_properties_by_line_user_id,
     get_user_by_line_user_id,
     get_materials_by_line_user_id,
     get_matching_history_by_user,
     get_contact_card_by_user,
     record_contact_share,
     upsert_contact_card,
+    update_matching_status,
     update_user,
 )
 from app.services.line_service import send_line_message
@@ -31,6 +33,8 @@ USER_FIELD_LIMITS = {
     "contact_available_time": 100,
     "contact_message": 1000,
 }
+
+MATCH_STATUS_OPTIONS = ("未対応", "連絡・調整中", "成立", "辞退")
 
 
 def _reject_overlong_user_input(form):
@@ -233,12 +237,14 @@ def me_data():
             "message": "LINE authentication failed",
         }), 401
 
-    cached = _get_cached_me_data(user_id)
+    force_refresh = data.get("refresh") is True
+    cached = None if force_refresh else _get_cached_me_data(user_id)
     if cached:
         return jsonify(cached)
 
     user = get_user_by_line_user_id(user_id)
     materials = get_materials_by_line_user_id(user_id)
+    demolition_properties = get_demolition_properties_by_line_user_id(user_id)
     matching_history = get_matching_history_by_user(user_id)
     contact_card = get_contact_card_by_user(user_id) or {}
     if user:
@@ -248,6 +254,7 @@ def me_data():
             "user": user,
             "contact_card": contact_card,
             "materials": materials,
+            "demolition_properties": demolition_properties,
             "matching_history": matching_history,
         }
     else:
@@ -262,6 +269,7 @@ def me_data():
             },
             "contact_card": contact_card,
             "materials": materials,
+            "demolition_properties": demolition_properties,
             "matching_history": matching_history,
         }
 
@@ -338,14 +346,89 @@ def share_contact(match_type, match_id):
         flash("連絡先カードの共有に失敗しました。")
         return redirect(url_for("users.me"))
 
-    _clear_me_data_cache(line_user_id)
-
     to_user_id = share_result.get("to_user_id", "")
+    _clear_me_data_cache(line_user_id)
+    _clear_me_data_cache(to_user_id)
+
+    notification_sent = False
     if to_user_id and not to_user_id.startswith("anon_"):
         try:
-            send_line_message(to_user_id, _format_contact_share_message(share_result))
+            notification_sent = send_line_message(
+                to_user_id,
+                _format_contact_share_message(share_result),
+            )
         except Exception:
-            pass
+            notification_sent = False
 
-    flash("連絡先カードを共有しました。")
+    if notification_sent:
+        flash("連絡先カードを共有し、相手へLINE通知を送信しました。")
+    else:
+        flash(
+            "連絡先カードは共有履歴に保存しましたが、相手へのLINE通知に失敗しました。"
+            "必要に応じて運営者へ連絡してください。"
+        )
+    return redirect(url_for("users.me", refresh="1"))
+
+
+@users_bp.route("/matches/<match_type>/<match_id>/status", methods=["POST"])
+def update_match_status(match_type, match_id):
+    if match_type not in ("material", "viewing"):
+        flash("マッチ種別が不正です。")
+        return redirect(url_for("users.me", refresh="1"))
+
+    status = (request.form.get("status") or "").strip()
+    if status not in MATCH_STATUS_OPTIONS:
+        flash("マッチング状態が不正です。")
+        return redirect(url_for("users.me", refresh="1"))
+
+    line_user_id = _resolve_user_id(request.form)
+    try:
+        line_user_id = require_verified_line_user_id(line_user_id)
+    except LineAuthError:
+        flash("LINE login verification failed. Please reopen this page from LINE.")
+        return redirect(url_for("users.me"))
+
+    updated_match = update_matching_status(
+        match_id,
+        match_type,
+        line_user_id,
+        status,
+    )
+    if not updated_match:
+        flash("このマッチングの状態は変更できません。")
+        return redirect(url_for("users.me", refresh="1"))
+
+    provider_user_id = updated_match.get("provider_user_id", "")
+    requester_user_id = updated_match.get("requester_user_id", "")
+    to_user_id = (
+        requester_user_id
+        if provider_user_id == line_user_id
+        else provider_user_id
+    )
+    _clear_me_data_cache(provider_user_id)
+    _clear_me_data_cache(requester_user_id)
+
+    notification_sent = False
+    if to_user_id and not to_user_id.startswith("anon_"):
+        try:
+            notification_sent = send_line_message(
+                to_user_id,
+                "\n".join(
+                    [
+                        "【えらぶ材すぽっと】",
+                        f"「{updated_match.get('entry_title') or updated_match.get('entry_id') or 'マッチング'}」の状態が「{status}」に更新されました。",
+                        "マイページのマッチング履歴をご確認ください。",
+                    ]
+                ),
+            )
+        except Exception:
+            notification_sent = False
+
+    if notification_sent:
+        flash(f"マッチング状態を「{status}」に更新し、相手へLINE通知を送信しました。")
+    else:
+        flash(
+            f"マッチング状態は「{status}」に更新しましたが、相手へのLINE通知に失敗しました。"
+            "必要に応じて運営者へ連絡してください。"
+        )
     return redirect(url_for("users.me"))
