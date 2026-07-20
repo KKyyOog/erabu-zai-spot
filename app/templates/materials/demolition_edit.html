@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+  <div class="section-heading">
+    <div>
+      <p class="entry-badge demolition">解体物件</p>
+      <h2>解体物件を編集する</h2>
+    </div>
+  </div>
+
+  <form method="post" action="{{ url_for('materials.update_demolition_entry', property_id=property_record.property_id) }}" enctype="multipart/form-data" data-requires-user-registration hidden>
+    <input type="hidden" name="line_user_id" id="line_user_id">
+    <input type="hidden" name="user_id" id="user_id">
+
+    <label>登録者 *</label>
+    <select name="registrant_type" required>
+      {% for option in ('家主', '解体業者', '管理者・代理人', 'その他') %}
+        <option value="{{ option }}" {{ 'selected' if property_record.registrant_type == option else '' }}>{{ option }}</option>
+      {% endfor %}
+    </select>
+
+    <label>物件名 *</label>
+    <input type="text" name="property_name" value="{{ property_record.property_name }}" required>
+
+    <label>所在地 *</label>
+    <input type="text" name="location" value="{{ property_record.location }}" required>
+
+    <label>所有者</label>
+    <input type="text" name="owner_name" value="{{ property_record.owner_name }}">
+
+    <label>解体予定日</label>
+    <input type="date" name="demolition_date" value="{{ property_record.demolition_date }}">
+
+    <label>解体業者</label>
+    <input type="text" name="demolition_contractor" value="{{ property_record.demolition_contractor }}">
+
+    <label>見学期間</label>
+    <input type="text" name="viewing_period" value="{{ property_record.viewing_period }}">
+
+    <label>建物用途</label>
+    <select name="building_use">
+      <option value="">選択してください</option>
+      {% for option in ('住宅', '店舗', '倉庫', '事務所', 'その他') %}
+        <option value="{{ option }}" {{ 'selected' if property_record.building_use == option else '' }}>{{ option }}</option>
+      {% endfor %}
+    </select>
+
+    <label>構造</label>
+    <select name="structure">
+      <option value="">選択してください</option>
+      {% for option in ('木造', '鉄骨造', '鉄筋コンクリート造', 'ブロック造', 'その他') %}
+        <option value="{{ option }}" {{ 'selected' if property_record.structure == option else '' }}>{{ option }}</option>
+      {% endfor %}
+    </select>
+
+    <label>階数</label>
+    <input type="text" name="floors" value="{{ property_record.floors }}">
+
+    <label>築年数</label>
+    <input type="text" name="building_age" value="{{ property_record.building_age }}">
+
+    {% if property_record.building_photo_urls %}
+      <div class="detail-carousel" aria-label="登録済みの建物写真">
+        {% for image_url in property_record.building_photo_urls %}
+          <img class="detail-image" src="{{ image_url }}" alt="{{ property_record.property_name or '建物写真' }}" loading="lazy" decoding="async">
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <label>登録済み写真URL</label>
+    <textarea name="building_photo_urls_text" rows="5">{{ property_record.building_photo_urls|join('\n') }}</textarea>
+    <p class="hint">表示から外したい写真はURLをこの欄から取り除いてください。写真は合計6枚までです。</p>
+
+    <label>写真を追加</label>
+    <input type="file" name="building_image_files" accept="image/*" multiple>
+
+    <label>状態評価</label>
+    <textarea name="condition_evaluation" rows="4">{{ property_record.condition_evaluation }}</textarea>
+
+    <label>備考</label>
+    <textarea name="notes" rows="3">{{ property_record.notes }}</textarea>
+
+    <div class="history-actions">
+      <button type="submit">保存する</button>
+      <a class="button-link secondary-button" href="{{ liff_url_for('users.me') }}">キャンセル</a>
+    </div>
+  </form>
+</section>
+
+<script>
+  window.REQUIRE_LIFF_LOGIN = true;
+  window.REQUIRE_USER_REGISTRATION = true;
+  window.LIFF_ID = {{ LIFF_ID|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/liff.js') }}"></script>
+{% endblock %}
