@@ -249,25 +249,6 @@
     }
   }
 
-  async function syncLineSession(userId, idToken) {
-    if (!userId || !idToken) {
-      return { ok: false, status: 0 };
-    }
-
-    try {
-      const resp = await fetch('/link/liff', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, idToken }),
-        keepalive: true,
-      });
-      return { ok: resp.ok, status: resp.status };
-    } catch (error) {
-      console.warn('Failed to sync LINE session:', error);
-      return { ok: false, status: 0 };
-    }
-  }
-
   function escapeHtml(value) {
     return String(value ?? '')
       .replaceAll('&', '&amp;')
@@ -958,6 +939,40 @@
     window.alert('ユーザー情報がまだ登録されていません。続けてユーザー情報を登録してください。');
   }
 
+  async function loadMeActivity(userId, forceRefresh) {
+    try {
+      const resp = await fetch('/users/me/data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': window.CSRF_TOKEN || '',
+        },
+        body: JSON.stringify({
+          userId,
+          scope: 'activity',
+          refresh: forceRefresh,
+        }),
+      });
+      const body = await resp.json();
+      if (resp.status === 401) {
+        restartLineAuthentication('activity request rejected LINE session');
+        return;
+      }
+      if (!resp.ok || !body.ok) {
+        throw new Error(body.message || 'activity request failed');
+      }
+      renderMaterials(body.materials || [], userId);
+      renderDemolitionProperties(body.demolition_properties || [], userId);
+      renderMatchingHistory(body.matching_history || []);
+    } catch (error) {
+      console.warn('Failed to load user activity:', error);
+      const message = '<p class="hint">一覧の読み込みに失敗しました。画面を開き直してください。</p>';
+      document.getElementById('materials-container').innerHTML = message;
+      document.getElementById('demolitions-container').innerHTML = message;
+      document.getElementById('matching-history-container').innerHTML = message;
+    }
+  }
+
   async function initMeFlow() {
     setSubmitEnabled(false);
     setLoading(true, 'LINE プロフィールを取得しています...');
@@ -993,30 +1008,31 @@
         liff.login({ redirectUri: liffLoginRedirectUrl() });
         return;
       }
-      logLiffDebug('users/me LIFF login confirmed.', getLiffDebugContext());
-      const profile = await liff.getProfile();
       currentIdToken = liff.getIDToken() || '';
       if (!hasFreshIdToken(currentIdToken)) {
         restartLineAuthentication('missing or expired ID token');
         return;
       }
+      logLiffDebug('users/me LIFF login confirmed.', getLiffDebugContext());
+      const decodedToken = liff.getDecodedIDToken ? liff.getDecodedIDToken() : null;
+      let profile = {
+        userId: decodedToken?.sub || '',
+        displayName: decodedToken?.name || '',
+      };
+      if (!profile.userId) {
+        profile = await liff.getProfile();
+      }
       document.getElementById('line_user_id').value = profile.userId;
       document.getElementById('user_id').value = profile.userId;
       document.getElementById('userid').value = profile.userId;
       document.getElementById('id_token').value = currentIdToken;
-      document.getElementById('profile-note').textContent = `LINE表示名: ${profile.displayName}`;
-      const sessionSync = await syncLineSession(profile.userId, currentIdToken);
-      if (!sessionSync.ok) {
-        if (sessionSync.status === 401) {
-          restartLineAuthentication('server rejected ID token');
-        } else {
-          showUnavailableState('LINE認証を確認できませんでした。通信状況を確認して、画面を開き直してください。');
-        }
-        return;
-      }
+      document.getElementById('profile-note').textContent = profile.displayName
+        ? `LINE表示名: ${profile.displayName}`
+        : '';
       clearLiffLoginAttempt();
       setLoading(true, '登録情報を読み込んでいます...');
 
+      const forceRefresh = new URLSearchParams(window.location.search).get('refresh') === '1';
       const resp = await fetch('/users/me/data', {
         method: 'POST',
         headers: {
@@ -1025,7 +1041,9 @@
         },
         body: JSON.stringify({
           userId: profile.userId,
-          refresh: new URLSearchParams(window.location.search).get('refresh') === '1',
+          idToken: currentIdToken,
+          scope: 'profile',
+          refresh: forceRefresh,
         }),
       });
       const body = await resp.json();
@@ -1045,9 +1063,6 @@
       }
       setSubmitEnabled(true);
       currentUserAddress = body.user?.address || '';
-      renderMaterials(body.materials || [], profile.userId);
-      renderDemolitionProperties(body.demolition_properties || [], profile.userId);
-      renderMatchingHistory(body.matching_history || []);
       fillContactCard(body.contact_card || {}, body.user || {});
       if (body.ok && body.exists) {
         document.getElementById('form-title').textContent = 'ユーザー情報（更新）';
@@ -1056,11 +1071,15 @@
         setLoading(false, '登録済みの情報を読み込みました。');
       } else {
         clearUserForm();
+        renderMaterials([], profile.userId);
+        renderDemolitionProperties([], profile.userId);
+        renderMatchingHistory([]);
         document.getElementById('form-title').textContent = 'ユーザー情報（新規登録）';
         document.getElementById('submit-button').textContent = '登録する';
         setLoading(false, '新規登録用の空フォームです。');
         setTimeout(showRegistrationPrompt, 0);
       }
+      loadMeActivity(profile.userId, forceRefresh);
     } catch (e) {
       console.error(e);
       logLiffDebug('users/me LIFF error: ' + e.message, getLiffDebugContext());

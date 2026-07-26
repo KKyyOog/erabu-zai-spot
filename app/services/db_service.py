@@ -13,8 +13,10 @@ from sqlalchemy import (
     Table,
     Text,
     create_engine,
+    literal,
     or_,
     select,
+    true,
     update,
 )
 
@@ -576,6 +578,69 @@ def get_contact_card_by_user(line_user_id):
     )
     records = _select_many(stmt)
     return records[0] if records else None
+
+
+def get_me_profile_by_line_user_id(line_user_id):
+    """Load the profile and contact card in one database round trip."""
+    user_record = (
+        select(users)
+        .where(
+            or_(
+                users.c.line_user_id == line_user_id,
+                users.c.user_id == line_user_id,
+                users.c.userid == line_user_id,
+            )
+        )
+        .limit(1)
+        .cte("me_user")
+    )
+    contact_record = (
+        select(contact_cards)
+        .where(
+            or_(
+                contact_cards.c.line_user_id == line_user_id,
+                contact_cards.c.user_id == line_user_id,
+            )
+        )
+        .limit(1)
+        .cte("me_contact")
+    )
+    anchor = select(literal(1).label("value")).cte("me_anchor")
+    stmt = (
+        select(
+            *(
+                user_record.c[column.name].label(f"user__{column.name}")
+                for column in users.columns
+            ),
+            *(
+                contact_record.c[column.name].label(f"contact__{column.name}")
+                for column in contact_cards.columns
+            ),
+        )
+        .select_from(
+            anchor.outerjoin(user_record, true()).outerjoin(contact_record, true())
+        )
+    )
+
+    with _engine().connect() as conn:
+        row = conn.execute(stmt).first()
+
+    values = _row_to_dict(row) or {}
+    user = None
+    if values.get("user__line_user_id") is not None:
+        user = {
+            column.name: values.get(f"user__{column.name}")
+            for column in users.columns
+        }
+
+    contact_card = None
+    if values.get("contact__contact_card_id") is not None:
+        contact_card = {
+            column.name: values.get(f"contact__{column.name}")
+            for column in contact_cards.columns
+        }
+
+    return user, contact_card
 
 
 def upsert_contact_card(line_user_id, data):

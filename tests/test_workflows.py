@@ -3,6 +3,8 @@ import os
 import unittest
 from unittest.mock import patch
 
+from sqlalchemy import event
+
 from app import create_app
 from app.config import Config
 from app.services import db_service
@@ -52,6 +54,79 @@ class WorkflowTestCase(unittest.TestCase):
                     "transport_info": "軽トラック",
                 }
             )
+
+    def test_profile_scope_authenticates_and_uses_one_database_query(self):
+        self.add_user("fast-profile-user", "高速表示ユーザー")
+        with self.app.app_context():
+            db_service.upsert_contact_card(
+                "fast-profile-user",
+                {
+                    "contact_display_name": "連絡先名",
+                    "contact_method": "電話",
+                    "contact_value": "090-0000-0000",
+                },
+            )
+
+        with self.client.session_transaction() as session:
+            session["_csrf_token"] = self.csrf_token
+
+        engine = self.app.extensions["database_engine"]
+        select_statements = []
+
+        def record_statement(conn, cursor, statement, parameters, context, executemany):
+            if statement.lstrip().upper().startswith(("SELECT", "WITH")):
+                select_statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record_statement)
+        try:
+            with patch(
+                "app.services.line_auth_service.verify_id_token",
+                return_value={"sub": "fast-profile-user"},
+            ):
+                response = self.client.post(
+                    "/users/me/data",
+                    json={
+                        "userId": "fast-profile-user",
+                        "idToken": "valid-id-token",
+                        "scope": "profile",
+                        "refresh": True,
+                    },
+                    headers={"X-CSRF-Token": self.csrf_token},
+                )
+        finally:
+            event.remove(engine, "before_cursor_execute", record_statement)
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertTrue(body["exists"])
+        self.assertEqual(body["user"]["display_name"], "高速表示ユーザー")
+        self.assertEqual(body["contact_card"]["display_name"], "連絡先名")
+        self.assertNotIn("materials", body)
+        self.assertEqual(len(select_statements), 1)
+        with self.client.session_transaction() as session:
+            self.assertEqual(session["line_user_id"], "fast-profile-user")
+
+    def test_profile_scope_reuses_verified_session_without_token_verification(self):
+        self.add_user("session-profile-user", "セッション利用者")
+        self.authenticate("session-profile-user")
+
+        with patch(
+            "app.services.line_auth_service.verify_id_token"
+        ) as verify_id_token:
+            response = self.client.post(
+                "/users/me/data",
+                json={
+                    "userId": "session-profile-user",
+                    "idToken": "already-verified-token",
+                    "scope": "profile",
+                    "refresh": True,
+                },
+                headers={"X-CSRF-Token": self.csrf_token},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["user"]["display_name"], "セッション利用者")
+        verify_id_token.assert_not_called()
 
     def test_demolition_can_be_edited_and_deleted_by_owner(self):
         self.add_user("owner-user", "登録者")

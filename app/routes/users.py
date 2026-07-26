@@ -1,6 +1,6 @@
 import time
 
-from flask import Blueprint, jsonify, render_template, request, redirect, url_for, flash
+from flask import Blueprint, jsonify, render_template, request, redirect, url_for, flash, session
 
 from app.services.db_service import (
     append_user,
@@ -9,6 +9,7 @@ from app.services.db_service import (
     get_materials_by_line_user_id,
     get_matching_history_by_user,
     get_contact_card_by_user,
+    get_me_profile_by_line_user_id,
     record_contact_share,
     upsert_contact_card,
     update_matching_status,
@@ -46,26 +47,28 @@ def _reject_overlong_user_input(form):
     return True
 
 
-def _get_cached_me_data(line_user_id):
-    cached = _me_data_cache.get(line_user_id)
+def _get_cached_me_data(line_user_id, scope):
+    cached = _me_data_cache.get((line_user_id, scope))
     if not cached:
         return None
 
     expires_at, payload = cached
     if expires_at <= time.time():
-        _me_data_cache.pop(line_user_id, None)
+        _me_data_cache.pop((line_user_id, scope), None)
         return None
 
     return payload
 
 
-def _set_cached_me_data(line_user_id, payload):
-    _me_data_cache[line_user_id] = (time.time() + ME_DATA_CACHE_SECONDS, payload)
+def _set_cached_me_data(line_user_id, scope, payload):
+    _me_data_cache[(line_user_id, scope)] = (time.time() + ME_DATA_CACHE_SECONDS, payload)
 
 
 def _clear_me_data_cache(line_user_id):
     if line_user_id:
-        _me_data_cache.pop(line_user_id, None)
+        for cache_key in list(_me_data_cache):
+            if isinstance(cache_key, tuple) and cache_key[0] == line_user_id:
+                _me_data_cache.pop(cache_key, None)
 
 
 def _resolve_user_id(form, route_user_id=""):
@@ -237,43 +240,46 @@ def me_data():
             "message": "LINE authentication failed",
         }), 401
 
+    # A request carrying an ID token also bootstraps the authenticated session,
+    # so the browser does not need a separate session-sync request first.
+    session["line_user_id"] = user_id
+    scope = (data.get("scope") or "all").strip().lower()
+    if scope not in ("all", "profile", "activity"):
+        return jsonify({"ok": False, "message": "invalid scope"}), 400
+
     force_refresh = data.get("refresh") is True
-    cached = None if force_refresh else _get_cached_me_data(user_id)
+    cached = None if force_refresh else _get_cached_me_data(user_id, scope)
     if cached:
         return jsonify(cached)
 
-    user = get_user_by_line_user_id(user_id)
-    materials = get_materials_by_line_user_id(user_id)
-    demolition_properties = get_demolition_properties_by_line_user_id(user_id)
-    matching_history = get_matching_history_by_user(user_id)
-    contact_card = get_contact_card_by_user(user_id) or {}
-    if user:
+    if scope == "activity":
         payload = {
             "ok": True,
-            "exists": True,
-            "user": user,
-            "contact_card": contact_card,
-            "materials": materials,
-            "demolition_properties": demolition_properties,
-            "matching_history": matching_history,
+            "materials": get_materials_by_line_user_id(user_id),
+            "demolition_properties": get_demolition_properties_by_line_user_id(user_id),
+            "matching_history": get_matching_history_by_user(user_id),
         }
     else:
+        user, contact_card = get_me_profile_by_line_user_id(user_id)
         payload = {
             "ok": True,
-            "exists": False,
-            "user": {
+            "exists": user is not None,
+            "user": user or {
                 "line_user_id": user_id,
                 "display_name": "",
                 "address": "",
                 "transport_info": "",
             },
-            "contact_card": contact_card,
-            "materials": materials,
-            "demolition_properties": demolition_properties,
-            "matching_history": matching_history,
+            "contact_card": contact_card or {},
         }
+        if scope == "all":
+            payload.update({
+                "materials": get_materials_by_line_user_id(user_id),
+                "demolition_properties": get_demolition_properties_by_line_user_id(user_id),
+                "matching_history": get_matching_history_by_user(user_id),
+            })
 
-    _set_cached_me_data(user_id, payload)
+    _set_cached_me_data(user_id, scope, payload)
     return jsonify(payload)
 
 

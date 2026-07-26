@@ -113,14 +113,14 @@ def verify_id_token(id_token, expected_user_id=""):
 
 
 def require_verified_line_user_id(expected_user_id=""):
+    session_user_id = (session.get("line_user_id") or "").strip()
+    if session_user_id and (not expected_user_id or session_user_id == expected_user_id):
+        return session_user_id
+
     token = extract_id_token()
     if token:
         claims = verify_id_token(token, expected_user_id=expected_user_id)
         return claims["sub"]
-
-    session_user_id = (session.get("line_user_id") or "").strip()
-    if session_user_id and (not expected_user_id or session_user_id == expected_user_id):
-        return session_user_id
 
     raise LineAuthError("LINE ID token is required")
 
