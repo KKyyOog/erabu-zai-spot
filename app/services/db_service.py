@@ -194,6 +194,15 @@ def init_database(app):
 
     if app.config.get("AUTO_CREATE_TABLES", True):
         metadata.create_all(engine)
+    else:
+        metadata.create_all(
+            engine,
+            tables=[
+                line_notification_links,
+                line_notification_link_codes,
+            ],
+            checkfirst=True,
+        )
 
 
 def _engine():
