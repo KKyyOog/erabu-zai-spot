@@ -6,7 +6,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from sqlalchemy import event
+from sqlalchemy import event, inspect
 
 from app import create_app
 from app.config import Config
@@ -110,6 +110,26 @@ class WorkflowTestCase(unittest.TestCase):
             data=body.encode("utf-8"),
             content_type="application/json",
             headers={"X-Line-Signature": signature},
+        )
+
+    def test_notification_tables_exist_when_auto_create_is_disabled(self):
+        Config.AUTO_CREATE_TABLES = False
+        isolated_app = None
+        try:
+            isolated_app = create_app()
+            engine = isolated_app.extensions["database_engine"]
+            table_names = set(inspect(engine).get_table_names())
+        finally:
+            Config.AUTO_CREATE_TABLES = True
+            if isolated_app is not None:
+                isolated_app.extensions["database_engine"].dispose()
+
+        self.assertEqual(
+            table_names,
+            {
+                "line_notification_link_codes",
+                "line_notification_links",
+            },
         )
 
     def test_guest_links_line_notifications_by_sending_one_time_code(self):
