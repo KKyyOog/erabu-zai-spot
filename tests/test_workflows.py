@@ -55,6 +55,21 @@ class WorkflowTestCase(unittest.TestCase):
                 }
             )
 
+    def test_registration_forms_use_photo_picker_without_url_inputs(self):
+        material_page = self.client.get("/materials/register/material").get_data(
+            as_text=True
+        )
+        self.assertIn("写真を撮る・ライブラリから選ぶ", material_page)
+        self.assertIn('name="image_files"', material_page)
+        self.assertNotIn('name="image_urls_text"', material_page)
+
+        demolition_page = self.client.get(
+            "/materials/register/demolition"
+        ).get_data(as_text=True)
+        self.assertIn("建物写真を撮る・ライブラリから選ぶ", demolition_page)
+        self.assertIn('name="building_image_files"', demolition_page)
+        self.assertNotIn('name="building_photo_urls_text"', demolition_page)
+
     def test_profile_scope_authenticates_and_uses_one_database_query(self):
         self.add_user("fast-profile-user", "高速表示ユーザー")
         with self.app.app_context():
