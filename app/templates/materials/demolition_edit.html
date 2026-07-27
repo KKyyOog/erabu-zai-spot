@@ -83,7 +83,7 @@
 
     <div class="history-actions">
       <button type="submit">保存する</button>
-      <a class="button-link secondary-button" href="{{ liff_url_for('users.me') }}">キャンセル</a>
+      <a class="button-link secondary-button" href="{{ url_for('users.me') }}">キャンセル</a>
     </div>
   </form>
 </section>
@@ -93,5 +93,5 @@
   window.REQUIRE_USER_REGISTRATION = true;
   window.LIFF_ID = {{ LIFF_ID|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/liff.js') }}"></script>
+<script src="{{ url_for('static', filename='js/liff.js', v='20260727-guest-mode') }}"></script>
 {% endblock %}

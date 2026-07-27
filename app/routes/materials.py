@@ -16,6 +16,7 @@ from app.services.db_service import (
     get_demolition_properties,
     get_demolition_property_by_id,
     get_provider_shared_material_ids,
+    get_notification_line_user_id,
     has_recent_matching_request,
     append_matching_history,
     delete_material,
@@ -432,11 +433,14 @@ def _resolve_line_user_id(form):
 
 
 def _send_provider_notification(provider_line_user_id, message, log_context):
-    if not provider_line_user_id or provider_line_user_id.startswith("anon_"):
+    notification_line_user_id = get_notification_line_user_id(
+        provider_line_user_id
+    )
+    if not notification_line_user_id:
         return False
 
     try:
-        sent = send_line_message(provider_line_user_id, message)
+        sent = send_line_message(notification_line_user_id, message)
         if not sent:
             current_app.logger.warning("[%s] LINE notification was not sent", log_context)
         return sent

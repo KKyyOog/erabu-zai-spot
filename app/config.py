@@ -1,4 +1,6 @@
 import os
+from datetime import timedelta
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,6 +19,15 @@ class Config:
     LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
     LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
     LINE_CHANNEL_ID = os.getenv("LINE_CHANNEL_ID", "")
+    LINE_LOGIN_ENABLED = os.getenv("LINE_LOGIN_ENABLED", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    LINE_OFFICIAL_ACCOUNT_ID = os.getenv("LINE_OFFICIAL_ACCOUNT_ID", "")
+    LINE_NOTIFICATION_LINK_TTL_MINUTES = int(
+        os.getenv("LINE_NOTIFICATION_LINK_TTL_MINUTES", "10")
+    )
     LIFF_ID = os.getenv("LIFF_ID", "")
     GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
     GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "service_account.json")
@@ -31,4 +42,7 @@ class Config:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
     SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() in ("1", "true", "yes")
+    PERMANENT_SESSION_LIFETIME = timedelta(
+        days=int(os.getenv("GUEST_SESSION_DAYS", "365"))
+    )
     LIFF_DEBUG_LOGGING = os.getenv("LIFF_DEBUG_LOGGING", "false").lower() in ("1", "true", "yes")

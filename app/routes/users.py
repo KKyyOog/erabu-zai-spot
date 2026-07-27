@@ -8,6 +8,7 @@ from app.services.db_service import (
     get_user_by_line_user_id,
     get_materials_by_line_user_id,
     get_matching_history_by_user,
+    get_notification_line_user_id,
     get_contact_card_by_user,
     get_me_profile_by_line_user_id,
     record_contact_share,
@@ -357,10 +358,11 @@ def share_contact(match_type, match_id):
     _clear_me_data_cache(to_user_id)
 
     notification_sent = False
-    if to_user_id and not to_user_id.startswith("anon_"):
+    notification_line_user_id = get_notification_line_user_id(to_user_id)
+    if notification_line_user_id:
         try:
             notification_sent = send_line_message(
-                to_user_id,
+                notification_line_user_id,
                 _format_contact_share_message(share_result),
             )
         except Exception:
@@ -415,10 +417,11 @@ def update_match_status(match_type, match_id):
     _clear_me_data_cache(requester_user_id)
 
     notification_sent = False
-    if to_user_id and not to_user_id.startswith("anon_"):
+    notification_line_user_id = get_notification_line_user_id(to_user_id)
+    if notification_line_user_id:
         try:
             notification_sent = send_line_message(
-                to_user_id,
+                notification_line_user_id,
                 "\n".join(
                     [
                         "【えらぶ材すぽっと】",
