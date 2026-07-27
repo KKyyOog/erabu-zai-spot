@@ -24,6 +24,9 @@
       <div>
         <strong>ログインなしで利用中です</strong>
         <p>入力内容はこのブラウザに紐づきます。Cookieの削除や別端末への変更では自動で引き継げません。通知を受け取る場合は、公式アカウントへ連携メッセージを一度送信してください。</p>
+        <p id="interest-notification-link-guidance" role="alert" hidden>
+          「欲しい」「見学したい」を送るには、下の「LINE通知を受け取る」を押して通知連携してください。
+        </p>
       </div>
       <div class="guest-mode-notice__actions">
         <button type="button" id="notification-link-button">
@@ -965,8 +968,19 @@
   }
 
   function setGuestMode(enabled) {
-    document.getElementById('guest-mode-notice').hidden = !enabled;
+    const notice = document.getElementById('guest-mode-notice');
+    notice.hidden = !enabled;
     if (enabled) {
+      const notificationLinkRequired = (
+        new URLSearchParams(window.location.search).get('notification_link_required') === '1'
+      );
+      document.getElementById('interest-notification-link-guidance').hidden = !notificationLinkRequired;
+      if (notificationLinkRequired) {
+        setTimeout(() => {
+          notice.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          document.getElementById('notification-link-button').focus();
+        }, 0);
+      }
       refreshNotificationStatus();
     }
   }

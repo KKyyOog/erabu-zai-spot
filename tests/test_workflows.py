@@ -339,6 +339,107 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertEqual(profile["user"]["display_name"], "ログインなし利用者")
         self.assertEqual(profile["materials"][0]["title"], "ゲスト登録の材")
 
+    def test_unlinked_guest_is_sent_to_notification_setup_before_interest(self):
+        guest_user_id = self.start_guest_session()["line_user_id"]
+        self.add_user("interest-provider", "提供者")
+        with self.app.app_context():
+            material_id = db_service.append_material(
+                {
+                    "line_user_id": "interest-provider",
+                    "title": "通知連携が必要な材",
+                    "material_type": "木材",
+                    "location": "和泊町",
+                }
+            )
+            property_id = db_service.append_demolition_property(
+                {
+                    "line_user_id": "interest-provider",
+                    "property_name": "通知連携が必要な物件",
+                    "location": "知名町",
+                }
+            )
+
+        with patch("app.routes.materials.send_line_message") as send:
+            material_response = self.post_form(
+                "/materials/interest",
+                {
+                    "line_user_id": guest_user_id,
+                    "material_id": material_id,
+                    "message": "欲しいです",
+                },
+            )
+            viewing_response = self.post_form(
+                "/materials/demolitions/visit-interest",
+                {
+                    "line_user_id": guest_user_id,
+                    "property_id": property_id,
+                },
+                follow_redirects=True,
+            )
+
+        self.assertEqual(material_response.status_code, 302)
+        self.assertIn(
+            "/users/me?notification_link_required=1#notification-link-button",
+            material_response.headers["Location"],
+        )
+        self.assertEqual(viewing_response.status_code, 200)
+        page = viewing_response.get_data(as_text=True)
+        self.assertIn(
+            "先にユーザー情報ページの"
+            "「LINE通知を受け取る」を押して通知連携してください。",
+            page,
+        )
+        self.assertIn('id="interest-notification-link-guidance"', page)
+        send.assert_not_called()
+        with self.app.app_context():
+            history = db_service.get_matching_history_by_user(guest_user_id)
+        self.assertEqual(history, [])
+
+    def test_notification_linked_guest_can_send_interest(self):
+        guest_user_id = self.start_guest_session()["line_user_id"]
+        self.add_user("linked-interest-provider", "提供者")
+        code = "ABCDEFGH23"
+        code_hash = hashlib.sha256(code.encode("utf-8")).hexdigest()
+        with self.app.app_context():
+            db_service.create_line_notification_link_code(
+                guest_user_id,
+                code_hash,
+                "2999-01-01 00:00:00",
+            )
+            _, link_status = db_service.consume_line_notification_link_code(
+                code_hash,
+                "U1234567890abcdef1234567890abcdef",
+            )
+            material_id = db_service.append_material(
+                {
+                    "line_user_id": "linked-interest-provider",
+                    "title": "通知連携後に希望できる材",
+                    "material_type": "木材",
+                    "location": "和泊町",
+                }
+            )
+        self.assertEqual(link_status, "linked")
+
+        with patch(
+            "app.routes.materials.send_line_message",
+            return_value=True,
+        ) as send:
+            response = self.post_form(
+                "/materials/interest",
+                {
+                    "line_user_id": guest_user_id,
+                    "material_id": material_id,
+                    "message": "欲しいです",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        send.assert_called_once()
+        with self.app.app_context():
+            history = db_service.get_matching_history_by_user(guest_user_id)
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["material_id"], material_id)
+
     def test_guest_session_cannot_access_another_user(self):
         self.add_user("other-user", "別の利用者")
         self.start_guest_session()

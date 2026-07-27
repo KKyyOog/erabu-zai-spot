@@ -449,6 +449,26 @@ def _send_provider_notification(provider_line_user_id, message, log_context):
         return False
 
 
+def _redirect_unlinked_guest_to_notification_setup(line_user_id):
+    if (
+        not line_user_id.startswith("anon_")
+        or get_notification_line_user_id(line_user_id)
+    ):
+        return None
+
+    flash(
+        "「欲しい」「見学したい」を送るには、先にユーザー情報ページの"
+        "「LINE通知を受け取る」を押して通知連携してください。"
+    )
+    return redirect(
+        url_for(
+            "users.me",
+            notification_link_required="1",
+            _anchor="notification-link-button",
+        )
+    )
+
+
 def _public_user_summary(line_user_id):
     user = get_user_by_line_user_id(line_user_id)
     if not user:
@@ -883,6 +903,14 @@ def interest():
         flash("LINE login verification failed. Please reopen this page from LINE.")
         return redirect(url_for("materials.list_materials"))
 
+    notification_setup_redirect = (
+        _redirect_unlinked_guest_to_notification_setup(
+            requester_line_user_id
+        )
+    )
+    if notification_setup_redirect:
+        return notification_setup_redirect
+
     message = request.form.get("message", "")
     if len(message) > 1000:
         flash("メッセージは1000文字以内で入力してください。")
@@ -955,6 +983,14 @@ def visit_interest():
     except LineAuthError:
         flash("LINE login verification failed. Please reopen this page from LINE.")
         return redirect(url_for("materials.list_materials"))
+
+    notification_setup_redirect = (
+        _redirect_unlinked_guest_to_notification_setup(
+            requester_line_user_id
+        )
+    )
+    if notification_setup_redirect:
+        return notification_setup_redirect
 
     property_record = get_demolition_property_by_id(property_id)
     if not property_record:
