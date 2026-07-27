@@ -82,6 +82,7 @@ function getLiffDebugContext() {
     origin: window.location.origin,
     pathname: window.location.pathname,
     search: window.location.search,
+    loginEnabled: window.LINE_LOGIN_ENABLED === true,
     requireLogin: window.REQUIRE_LIFF_LOGIN === true,
     hasLiff: Boolean(window.liff),
     inClient: Boolean(window.liff && liff.isInClient && liff.isInClient()),
@@ -204,6 +205,9 @@ async function restoreLineSession() {
     if (response.ok && body.ok && body.line_user_id) {
       window.LINE_SESSION_AUTHENTICATED = true;
       window.LINE_USER_ID = body.line_user_id;
+      window.AUTH_MODE = body.auth_mode || (
+        body.line_user_id.startsWith("anon_") ? "guest" : "line"
+      );
       setAllLineUserInputs(body.line_user_id);
       if (await confirmUserRegistration(body.line_user_id)) {
         setLineAuthControls(true);
@@ -216,6 +220,36 @@ async function restoreLineSession() {
 
   window.LINE_SESSION_AUTHENTICATED = false;
   return false;
+}
+
+async function startGuestSession() {
+  try {
+    const response = await fetch("/link/guest", {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "X-CSRF-Token": window.CSRF_TOKEN || "",
+      },
+      credentials: "same-origin",
+    });
+    const body = await response.json();
+    if (!response.ok || !body.ok || !body.line_user_id) {
+      return false;
+    }
+
+    window.LINE_ID_TOKEN = "";
+    window.LINE_SESSION_AUTHENTICATED = true;
+    window.LINE_USER_ID = body.line_user_id;
+    window.AUTH_MODE = body.auth_mode || "guest";
+    setAllLineUserInputs(body.line_user_id);
+    if (await confirmUserRegistration(body.line_user_id)) {
+      setLineAuthControls(true);
+    }
+    return true;
+  } catch (error) {
+    console.warn("Failed to start guest session:", error);
+    return false;
+  }
 }
 
 function installLineAuthSubmitGuard() {
@@ -304,6 +338,19 @@ async function initializeLiff() {
   console.log("LIFF initialization started. LIFF ID:", liffId);
   installLineAuthSubmitGuard();
   installImagePreviews();
+
+  if (window.LINE_LOGIN_ENABLED !== true) {
+    clearLiffLoginAttempt();
+    if (await restoreLineSession()) {
+      return;
+    }
+    if (await startGuestSession()) {
+      return;
+    }
+    setLineAuthControls(false);
+    return;
+  }
+
   setLineAuthControls(false, "LINE確認中...");
 
   // Flaskテンプレート外で使う場合に備えて、LIFF ID未設定でもフォーム確認は可能にする
@@ -327,6 +374,10 @@ async function initializeLiff() {
       console.log("Not logged in.");
       await logToServer("Not logged in.");
 
+      if (await restoreLineSession()) {
+        return;
+      }
+
       if (window.REQUIRE_LIFF_LOGIN === true) {
         console.log("Redirecting to LIFF login...");
         await logToServer("Redirecting to LIFF login.", getLiffDebugContext());
@@ -334,9 +385,6 @@ async function initializeLiff() {
         return;
       }
 
-      if (await restoreLineSession()) {
-        return;
-      }
       setLineAuthControls(false, "LINEログインが必要です");
       return;
     }

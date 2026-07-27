@@ -7,13 +7,13 @@
   <p id="user-registration-check-status" class="hint">マイページの登録状況を確認しています...</p>
   <div id="user-registration-required" class="flash" role="alert" tabindex="-1" hidden>
     <p>解体物件を登録するには、先にマイページでユーザー情報を登録してください。</p>
-    <p><a class="button-link" href="{{ liff_url_for('users.me') }}">マイページで登録する</a></p>
+    <p><a class="button-link" href="{{ url_for('users.me') }}">マイページで登録する</a></p>
   </div>
 
   <form method="post" action="{{ url_for('materials.submit_demolition') }}" enctype="multipart/form-data" data-requires-user-registration hidden>
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="display_name" id="display_name">
-    <p class="hint">登録にはLINEログインが必要です。建物の状態や見学可能期間が分かる範囲で入力してください。</p>
+    <p class="hint">登録にはマイページ登録が必要です。建物の状態や見学可能期間が分かる範囲で入力してください。</p>
 
     <label>登録者 *</label>
     <select name="registrant_type" required>
@@ -88,5 +88,5 @@
   window.REQUIRE_USER_REGISTRATION = true;
   window.LIFF_ID = {{ LIFF_ID|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/liff.js') }}"></script>
+<script src="{{ url_for('static', filename='js/liff.js', v='20260727-guest-mode') }}"></script>
 {% endblock %}

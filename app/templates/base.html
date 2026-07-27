@@ -4,9 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>えらぶ材すぽっと</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260719-list-detail-modal') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260727-guest-mode') }}">
   <script>
     window.CSRF_TOKEN = {{ csrf_token()|tojson }};
+    window.LINE_LOGIN_ENABLED = {{ LINE_LOGIN_ENABLED|tojson }};
     window.ensureCsrfToken = function ensureCsrfToken(form) {
       if (!form || !window.CSRF_TOKEN) {
         return;
@@ -32,7 +33,9 @@
       }
     }, true);
   </script>
+  {% if LINE_LOGIN_ENABLED %}
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  {% endif %}
 </head>
 <body>
   <header class="site-header">

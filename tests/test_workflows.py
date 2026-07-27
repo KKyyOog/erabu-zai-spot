@@ -1,3 +1,6 @@
+import base64
+import hashlib
+import hmac
 import json
 import os
 import unittest
@@ -20,6 +23,10 @@ class WorkflowTestCase(unittest.TestCase):
         Config.ALLOW_INSECURE_DEV_CONFIG = True
         Config.SESSION_COOKIE_SECURE = False
         Config.LIFF_ID = "test-liff-id"
+        Config.LINE_LOGIN_ENABLED = False
+        Config.LINE_CHANNEL_SECRET = "test-line-channel-secret"
+        Config.LINE_CHANNEL_ACCESS_TOKEN = "test-line-channel-access-token"
+        Config.LINE_OFFICIAL_ACCOUNT_ID = "@test-account"
 
     def setUp(self):
         self.app = create_app()
@@ -54,6 +61,308 @@ class WorkflowTestCase(unittest.TestCase):
                     "transport_info": "軽トラック",
                 }
             )
+
+    def start_guest_session(self):
+        with self.client.session_transaction() as session:
+            session["_csrf_token"] = self.csrf_token
+        response = self.post_form("/link/guest", {})
+        self.assertEqual(response.status_code, 200)
+        return response.get_json()
+
+    def post_line_text_webhook(self, line_user_id, text):
+        payload = {
+            "destination": "U00000000000000000000000000000000",
+            "events": [
+                {
+                    "type": "message",
+                    "message": {
+                        "type": "text",
+                        "id": "123456789012345678",
+                        "quoteToken": "test-quote-token",
+                        "text": text,
+                    },
+                    "webhookEventId": "01TESTWEBHOOK000000000000000",
+                    "deliveryContext": {"isRedelivery": False},
+                    "timestamp": 1750000000000,
+                    "source": {
+                        "type": "user",
+                        "userId": line_user_id,
+                    },
+                    "replyToken": "test-reply-token",
+                    "mode": "active",
+                }
+            ],
+        }
+        body = json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        signature = base64.b64encode(
+            hmac.new(
+                Config.LINE_CHANNEL_SECRET.encode("utf-8"),
+                body.encode("utf-8"),
+                hashlib.sha256,
+            ).digest()
+        ).decode("ascii")
+        return self.client.post(
+            "/callback",
+            data=body.encode("utf-8"),
+            content_type="application/json",
+            headers={"X-Line-Signature": signature},
+        )
+
+    def test_guest_links_line_notifications_by_sending_one_time_code(self):
+        guest_user_id = self.start_guest_session()["line_user_id"]
+        code_response = self.post_form("/link/notification-code", {})
+        self.assertEqual(code_response.status_code, 200)
+        code_body = code_response.get_json()
+        self.assertTrue(code_body["message"].startswith("通知連携 "))
+        self.assertIn("%40test-account", code_body["deep_link"])
+
+        initial_status = self.client.get(
+            "/link/notification-status"
+        ).get_json()
+        self.assertFalse(initial_status["linked"])
+
+        line_user_id = "U1234567890abcdef1234567890abcdef"
+        with patch(
+            "app.routes.callback.reply_line_message",
+            return_value=True,
+        ) as reply:
+            webhook_response = self.post_line_text_webhook(
+                line_user_id,
+                code_body["message"],
+            )
+        self.assertEqual(webhook_response.status_code, 200)
+        self.assertIn("連携が完了", reply.call_args.args[1])
+
+        with self.app.app_context():
+            notification_user_id = (
+                db_service.get_notification_line_user_id(guest_user_id)
+            )
+        self.assertEqual(notification_user_id, line_user_id)
+        with patch(
+            "app.routes.link.get_line_user_profile",
+            return_value={
+                "display_name": "Linked LINE user",
+                "picture_url": "https://example.com/profile.jpg",
+            },
+        ):
+            linked_status = self.client.get(
+                "/link/notification-status?include_profile=1"
+            ).get_json()
+        self.assertTrue(linked_status["linked"])
+        self.assertEqual(
+            linked_status["profile"]["display_name"],
+            "Linked LINE user",
+        )
+
+        with patch(
+            "app.routes.callback.reply_line_message",
+            return_value=True,
+        ) as repeated_reply:
+            repeated_response = self.post_line_text_webhook(
+                line_user_id,
+                code_body["message"],
+            )
+        self.assertEqual(repeated_response.status_code, 200)
+        self.assertIn("すでに連携済み", repeated_reply.call_args.args[1])
+
+        self.add_user("notification-requester", "通知希望者")
+        with self.app.app_context():
+            db_service.append_user(
+                {
+                    "line_user_id": guest_user_id,
+                    "display_name": "通知を受けるゲスト",
+                    "address": "和泊町",
+                    "transport_info": "軽トラック",
+                }
+            )
+            material_id = db_service.append_material(
+                {
+                    "line_user_id": guest_user_id,
+                    "title": "通知テスト材",
+                    "material_type": "木材",
+                    "location": "和泊町",
+                }
+            )
+
+        self.authenticate("notification-requester")
+        with patch(
+            "app.routes.materials.send_line_message",
+            return_value=True,
+        ) as send:
+            interest_response = self.post_form(
+                "/materials/interest",
+                {
+                    "line_user_id": "notification-requester",
+                    "material_id": material_id,
+                    "message": "受け取りを希望します",
+                },
+            )
+        self.assertEqual(interest_response.status_code, 302)
+        self.assertEqual(send.call_args.args[0], line_user_id)
+
+    def test_expired_notification_link_code_is_rejected(self):
+        self.start_guest_session()
+        code = "ABCDEFGH23"
+        with self.client.session_transaction() as session:
+            guest_user_id = session["line_user_id"]
+        with self.app.app_context():
+            db_service.create_line_notification_link_code(
+                guest_user_id,
+                hashlib.sha256(code.encode("utf-8")).hexdigest(),
+                "2000-01-01 00:00:00",
+            )
+
+        with patch(
+            "app.routes.callback.reply_line_message",
+            return_value=True,
+        ) as reply:
+            response = self.post_line_text_webhook(
+                "Uabcdef1234567890abcdef1234567890",
+                f"通知連携 {code}",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("期限が切れて", reply.call_args.args[1])
+        with self.app.app_context():
+            self.assertEqual(
+                db_service.get_notification_line_user_id(guest_user_id),
+                "",
+            )
+
+    def test_notification_link_code_rejects_invalid_signature(self):
+        response = self.client.post(
+            "/callback",
+            data=b'{"events":[]}',
+            content_type="application/json",
+            headers={"X-Line-Signature": "invalid"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_guest_session_is_stable_and_does_not_replace_line_session(self):
+        guest = self.start_guest_session()
+        self.assertTrue(guest["line_user_id"].startswith("anon_"))
+        self.assertEqual(guest["auth_mode"], "guest")
+
+        repeated = self.post_form("/link/guest", {}).get_json()
+        self.assertEqual(repeated["line_user_id"], guest["line_user_id"])
+
+        status = self.client.get("/link/session").get_json()
+        self.assertTrue(status["ok"])
+        self.assertEqual(status["auth_mode"], "guest")
+        with self.client.session_transaction() as session:
+            self.assertTrue(session.permanent)
+
+        self.authenticate("existing-line-user")
+        preserved = self.post_form("/link/guest", {}).get_json()
+        self.assertEqual(preserved["line_user_id"], "existing-line-user")
+        self.assertEqual(preserved["auth_mode"], "line")
+
+    def test_line_login_endpoint_is_disabled_during_guest_flow_trial(self):
+        response = self.client.post(
+            "/link/liff",
+            json={
+                "userId": "U1234567890abcdef1234567890abcdef",
+                "idToken": "test-token",
+            },
+        )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.get_json()["code"],
+            "line_login_disabled",
+        )
+
+    def test_line_login_can_be_restored_with_the_feature_flag(self):
+        self.app.config["LINE_LOGIN_ENABLED"] = True
+        line_user_id = "U1234567890abcdef1234567890abcdef"
+        with patch(
+            "app.routes.link.verify_id_token",
+            return_value={"sub": line_user_id},
+        ):
+            response = self.client.post(
+                "/link/liff",
+                json={
+                    "userId": line_user_id,
+                    "idToken": "test-token",
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        with self.client.session_transaction() as session:
+            self.assertEqual(session["line_user_id"], line_user_id)
+        page = self.client.get("/users/me").get_data(as_text=True)
+        self.assertIn(
+            "https://static.line-scdn.net/liff/edge/2/sdk.js",
+            page,
+        )
+
+    def test_guest_can_save_profile_and_register_material(self):
+        guest_user_id = self.start_guest_session()["line_user_id"]
+
+        save_response = self.post_form(
+            "/users/me/save",
+            {
+                "line_user_id": guest_user_id,
+                "display_name": "ログインなし利用者",
+                "address": "知名町",
+                "transport_info": "軽トラック",
+                "contact_method": "電話",
+                "contact_value": "0997-00-0000",
+            },
+        )
+        self.assertEqual(save_response.status_code, 302)
+
+        material_response = self.post_form(
+            "/materials/submit",
+            {
+                "line_user_id": guest_user_id,
+                "title": "ゲスト登録の材",
+                "material_type": "木材",
+                "location": "知名町",
+            },
+        )
+        self.assertEqual(material_response.status_code, 302)
+
+        profile_response = self.client.post(
+            "/users/me/data",
+            json={
+                "userId": guest_user_id,
+                "scope": "all",
+                "refresh": True,
+            },
+            headers={"X-CSRF-Token": self.csrf_token},
+        )
+        self.assertEqual(profile_response.status_code, 200)
+        profile = profile_response.get_json()
+        self.assertTrue(profile["exists"])
+        self.assertEqual(profile["user"]["display_name"], "ログインなし利用者")
+        self.assertEqual(profile["materials"][0]["title"], "ゲスト登録の材")
+
+    def test_guest_session_cannot_access_another_user(self):
+        self.add_user("other-user", "別の利用者")
+        self.start_guest_session()
+
+        response = self.client.post(
+            "/users/me/data",
+            json={"userId": "other-user", "scope": "profile"},
+            headers={"X-CSRF-Token": self.csrf_token},
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_my_page_exposes_guest_mode_without_removing_line_linking(self):
+        page = self.client.get("/users/me").get_data(as_text=True)
+        self.assertIn("ログインなしで利用中です", page)
+        self.assertIn("LINE通知を受け取る", page)
+        self.assertIn("LINEログインで自動入力する", page)
+        self.assertIn("startGuestIdentity", page)
+        self.assertIn("connectLineIdentity", page)
+        self.assertIn("applyLinkedLineProfile", page)
+        self.assertIn("window.LINE_LOGIN_ENABLED = false", page)
+        self.assertNotIn(
+            "https://static.line-scdn.net/liff/edge/2/sdk.js",
+            page,
+        )
 
     def test_registration_forms_use_photo_picker_without_url_inputs(self):
         material_page = self.client.get("/materials/register/material").get_data(

@@ -145,6 +145,25 @@ contact_share_logs = Table(
     Column("updated_at", String(32), nullable=False, default=""),
 )
 
+line_notification_links = Table(
+    "line_notification_links",
+    metadata,
+    Column("app_user_id", String(255), primary_key=True),
+    Column("line_user_id", String(255), unique=True, index=True, nullable=False),
+    Column("created_at", String(32), nullable=False, default=""),
+    Column("updated_at", String(32), nullable=False, default=""),
+)
+
+line_notification_link_codes = Table(
+    "line_notification_link_codes",
+    metadata,
+    Column("code_hash", String(64), primary_key=True),
+    Column("app_user_id", String(255), index=True, nullable=False),
+    Column("expires_at", String(32), index=True, nullable=False),
+    Column("used_at", String(32), nullable=False, default=""),
+    Column("created_at", String(32), nullable=False, default=""),
+)
+
 Index("ix_matching_history_member_created", matching_history.c.provider_user_id, matching_history.c.created_at)
 Index("ix_matching_history_requester_created", matching_history.c.requester_user_id, matching_history.c.created_at)
 
@@ -236,6 +255,136 @@ def _select_one(table, condition):
 def _select_many(stmt):
     with _engine().connect() as conn:
         return [_row_to_dict(row) for row in conn.execute(stmt).all()]
+
+
+def create_line_notification_link_code(app_user_id, code_hash, expires_at):
+    if not app_user_id or not code_hash or not expires_at:
+        return False
+
+    now = _now()
+    with _engine().begin() as conn:
+        conn.execute(
+            update(line_notification_link_codes)
+            .where(
+                line_notification_link_codes.c.app_user_id == app_user_id,
+                line_notification_link_codes.c.used_at == "",
+            )
+            .values(used_at=now)
+        )
+        conn.execute(
+            line_notification_link_codes.insert().values(
+                code_hash=code_hash,
+                app_user_id=app_user_id,
+                expires_at=expires_at,
+                used_at="",
+                created_at=now,
+            )
+        )
+    return True
+
+
+def consume_line_notification_link_code(code_hash, line_user_id):
+    if not code_hash or not line_user_id:
+        return None, "invalid"
+
+    now = _now()
+    with _engine().begin() as conn:
+        row = conn.execute(
+            select(line_notification_link_codes).where(
+                line_notification_link_codes.c.code_hash == code_hash
+            )
+        ).first()
+        code_record = _row_to_dict(row)
+        if not code_record:
+            return None, "invalid"
+
+        existing_link = conn.execute(
+            select(line_notification_links).where(
+                line_notification_links.c.app_user_id
+                == code_record["app_user_id"]
+            )
+        ).first()
+        existing_link = _row_to_dict(existing_link)
+
+        if code_record.get("used_at"):
+            if (
+                existing_link
+                and existing_link.get("line_user_id") == line_user_id
+            ):
+                return existing_link, "already_linked"
+            return None, "used"
+        if code_record.get("expires_at", "") < now:
+            return None, "expired"
+
+        line_owner = conn.execute(
+            select(line_notification_links).where(
+                line_notification_links.c.line_user_id == line_user_id
+            )
+        ).first()
+        line_owner = _row_to_dict(line_owner)
+        if (
+            line_owner
+            and line_owner.get("app_user_id") != code_record["app_user_id"]
+        ):
+            return None, "line_already_linked"
+
+        claimed = conn.execute(
+            update(line_notification_link_codes)
+            .where(
+                line_notification_link_codes.c.code_hash == code_hash,
+                line_notification_link_codes.c.used_at == "",
+                line_notification_link_codes.c.expires_at >= now,
+            )
+            .values(used_at=now)
+        )
+        if claimed.rowcount <= 0:
+            return None, "used"
+
+        values = {
+            "line_user_id": line_user_id,
+            "updated_at": now,
+        }
+        if existing_link:
+            conn.execute(
+                update(line_notification_links)
+                .where(
+                    line_notification_links.c.app_user_id
+                    == code_record["app_user_id"]
+                )
+                .values(**values)
+            )
+        else:
+            conn.execute(
+                line_notification_links.insert().values(
+                    app_user_id=code_record["app_user_id"],
+                    created_at=now,
+                    **values,
+                )
+            )
+
+        return {
+            "app_user_id": code_record["app_user_id"],
+            "line_user_id": line_user_id,
+        }, "linked"
+
+
+def get_line_notification_link(app_user_id):
+    if not app_user_id:
+        return None
+    return _select_one(
+        line_notification_links,
+        line_notification_links.c.app_user_id == app_user_id,
+    )
+
+
+def get_notification_line_user_id(app_user_id):
+    if not app_user_id:
+        return ""
+    if not app_user_id.startswith("anon_"):
+        return app_user_id
+
+    link = get_line_notification_link(app_user_id)
+    return link.get("line_user_id", "") if link else ""
 
 
 def append_material(data):

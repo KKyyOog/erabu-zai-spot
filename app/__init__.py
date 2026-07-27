@@ -62,6 +62,7 @@ def create_app():
 
         return {
             "LIFF_ID": app.config["LIFF_ID"],
+            "LINE_LOGIN_ENABLED": app.config["LINE_LOGIN_ENABLED"],
             "liff_url_for": liff_url_for,
             "csrf_token": csrf_token,
         }

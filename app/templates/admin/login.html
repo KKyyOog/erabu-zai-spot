@@ -3,10 +3,15 @@
 {% block content %}
 <section class="card">
   <h2>Admin login</h2>
+  {% if LINE_LOGIN_ENABLED %}
   <p class="hint">Please open this page from LINE and sign in with the configured admin account.</p>
   <p id="admin-auth-status" class="hint">Checking LINE login...</p>
+  {% else %}
+  <p class="hint">LINE login is temporarily disabled during the guest-flow test.</p>
+  {% endif %}
 </section>
 
+{% if LINE_LOGIN_ENABLED %}
 <script>
   window.LIFF_ID = {{ LIFF_ID|tojson }};
   window.REQUIRE_LIFF_LOGIN = true;
@@ -21,4 +26,5 @@
   }, 5000);
 </script>
 <script src="{{ url_for('static', filename='js/liff.js') }}"></script>
+{% endif %}
 {% endblock %}
