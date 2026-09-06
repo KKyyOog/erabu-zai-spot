@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card post-form-card request-form-card">
+  <p class="entry-badge request">材を探しています</p>
+  <h2>探している材を知らせる</h2>
+  <p class="hint">用途や必要な形が伝わる程度で大丈夫です。参考写真はなくても投稿できます。</p>
+
+  <p id="user-registration-check-status" class="hint">マイページの登録状況を確認しています...</p>
+  <div id="user-registration-required" class="flash" role="alert" tabindex="-1" hidden>
+    <p>投稿するには、先にマイページでユーザー情報を登録してください。</p>
+    <p><a class="button-link" href="{{ url_for('users.me') }}">マイページで登録する</a></p>
+  </div>
+
+  <form method="post" action="{{ url_for('materials.submit_request') }}" enctype="multipart/form-data" data-requires-user-registration hidden>
+    <input type="hidden" name="line_user_id" id="line_user_id">
+    <input type="hidden" name="display_name" id="display_name">
+
+    <label>探している材の種類 *</label>
+    <select name="material_type" required>
+      <option value="">選択してください</option>
+      {% for material_type in material_type_options %}
+        <option value="{{ material_type }}">{{ material_type }}</option>
+      {% endfor %}
+    </select>
+
+    <label>欲しい内容 *</label>
+    <textarea name="description" rows="5" required placeholder="例：2m程度の角材を5本ほど探しています"></textarea>
+
+    <label>希望受け取りエリア</label>
+    <select name="location">
+      <option value="">指定なし</option>
+      {% for area in area_options %}
+        <option value="{{ area }}">{{ area }}</option>
+      {% endfor %}
+    </select>
+
+    <details class="optional-fields">
+      <summary>詳しい希望を追加する（任意）</summary>
+      <div class="optional-fields__body">
+        <label>希望数量</label>
+        <input type="text" name="quantity" placeholder="例：5本ほど">
+
+        <label>希望寸法</label>
+        <input type="text" name="size" placeholder="例：約2m、幅90mm程度">
+
+        <label>使用目的</label>
+        <select name="usage_purpose">
+          <option value="">選択してください</option>
+          {% for purpose in usage_purpose_options %}
+            <option value="{{ purpose }}">{{ purpose }}</option>
+          {% endfor %}
+        </select>
+
+        <label>参考写真（任意・複数選択可）</label>
+        <input type="file" name="image_files" accept="image/*" multiple data-max-files="6">
+        <p class="hint">探している形や使用例の写真を6枚まで添付できます。</p>
+      </div>
+    </details>
+
+    <button type="submit">この内容で投稿する</button>
+    <p class="hint">投稿は30日後に通常一覧から自動的に非表示になります。</p>
+  </form>
+</section>
+
+<script>
+  window.FILL_DISPLAY_NAME_FROM_LIFF = true;
+  window.REQUIRE_LIFF_LOGIN = true;
+  window.REQUIRE_USER_REGISTRATION = true;
+  window.LIFF_ID = {{ LIFF_ID|tojson }};
+
+  document.querySelectorAll('[data-max-files]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const maxFiles = Number(input.dataset.maxFiles || 6);
+      if (input.files.length > maxFiles) {
+        window.alert(`画像は${maxFiles}枚まで選択できます。`);
+        input.value = '';
+      }
+    });
+  });
+</script>
+<script src="{{ url_for('static', filename='js/liff.js', v='20260906-posts-v2') }}"></script>
+{% endblock %}

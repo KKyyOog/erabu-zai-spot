@@ -1,20 +1,27 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="card">
-  <h2>登録する情報を選ぶ</h2>
-  <p class="hint">材そのものを登録するか、これから解体される物件の情報を登録するかを選んでください。</p>
+<section class="card post-type-select">
+  <h2>投稿する内容を選ぶ</h2>
+  <p class="hint">正確な在庫情報でなくても大丈夫です。今ある材、探している材を気軽に投稿してください。</p>
 
-  <div class="choice-grid">
-    <a class="choice-card" href="{{ url_for('materials.register_demolition') }}">
-      <span class="choice-title">解体物件を登録</span>
-      <span class="choice-text">物件名、所在地、解体予定日、見学期間、建物写真などを登録します。</span>
+  <div class="choice-grid post-type-choice-grid">
+    <a class="choice-card offer-choice" href="{{ url_for('materials.register_material') }}">
+      <span class="choice-kicker">提供する人</span>
+      <span class="choice-title">材があります</span>
+      <span class="choice-text">写真、材の種類、量の目安、受け渡しエリアだけで投稿できます。</span>
     </a>
 
-    <a class="choice-card" href="{{ url_for('materials.register_material') }}">
-      <span class="choice-title">材を登録</span>
-      <span class="choice-text">取り出し済み、または提供できる材の種類、寸法、数量、写真などを登録します。</span>
+    <a class="choice-card request-choice" href="{{ url_for('materials.register_request') }}">
+      <span class="choice-kicker">探している人</span>
+      <span class="choice-title">材を探しています</span>
+      <span class="choice-text">探している材の種類と内容を投稿し、島内からの情報を待ちます。</span>
     </a>
+  </div>
+
+  <div class="secondary-registration-link">
+    <p>これから解体する建物の情報を共有する場合</p>
+    <a class="button-link compact secondary-button" href="{{ url_for('materials.register_demolition') }}">解体予定物件を登録する</a>
   </div>
 </section>
 {% endblock %}

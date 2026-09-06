@@ -27,6 +27,9 @@ _me_data_cache = {}
 
 USER_FIELD_LIMITS = {
     "display_name": 100,
+    "business_name": 200,
+    "user_category": 100,
+    "area": 100,
     "address": 200,
     "transport_info": 2000,
     "contact_display_name": 100,
@@ -100,7 +103,11 @@ def _save_contact_card_if_present(line_user_id, form):
 def _format_contact_share_message(share_result):
     card = share_result["card"]
     match = share_result["match"]
-    entry_label = "材" if match.get("match_type") == "material" else "見学"
+    entry_label = {
+        "material": "材",
+        "request": "探している材",
+        "viewing": "見学",
+    }.get(match.get("match_type"), "投稿")
     lines = [
         "【えらぶ材すぽっと】",
         f"{entry_label}のマッチ相手が連絡先カードを共有しました。",
@@ -268,6 +275,9 @@ def me_data():
             "user": user or {
                 "line_user_id": user_id,
                 "display_name": "",
+                "business_name": "",
+                "user_category": "",
+                "area": "",
                 "address": "",
                 "transport_info": "",
             },
@@ -327,7 +337,7 @@ def me_save():
 
 @users_bp.route("/matches/<match_type>/<match_id>/share-contact", methods=["POST"])
 def share_contact(match_type, match_id):
-    if match_type not in ("material", "viewing"):
+    if match_type not in ("material", "request", "viewing"):
         flash("マッチ種別が不正です。")
         return redirect(url_for("users.me"))
 
@@ -380,7 +390,7 @@ def share_contact(match_type, match_id):
 
 @users_bp.route("/matches/<match_type>/<match_id>/status", methods=["POST"])
 def update_match_status(match_type, match_id):
-    if match_type not in ("material", "viewing"):
+    if match_type not in ("material", "request", "viewing"):
         flash("マッチ種別が不正です。")
         return redirect(url_for("users.me", refresh="1"))
 

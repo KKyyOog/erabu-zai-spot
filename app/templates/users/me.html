@@ -62,11 +62,31 @@
       <section class="profile-panel profile-panel--primary">
         <div class="panel-heading">
           <span class="entry-badge">基本情報</span>
-          <h3>名前・拠点・運搬情報</h3>
+          <h3>名前・区分・拠点情報</h3>
         </div>
 
         <label>名前 *</label>
         <input type="text" name="display_name" id="display_name" required placeholder="例：山田太郎">
+
+        <label>事業者名</label>
+        <input type="text" name="business_name" id="business_name" placeholder="例：○○建設（個人利用の場合は空欄）">
+
+        <label>ユーザー区分</label>
+        <select name="user_category" id="user_category">
+          <option value="">選択してください</option>
+          <option value="島内事業者">島内事業者</option>
+          <option value="島民">島民</option>
+          <option value="設計・施工関係者">設計・施工関係者</option>
+          <option value="その他">その他</option>
+        </select>
+
+        <label>主なエリア</label>
+        <select name="area" id="area">
+          <option value="">選択してください</option>
+          <option value="和泊町">和泊町</option>
+          <option value="知名町">知名町</option>
+          <option value="その他">その他</option>
+        </select>
 
         <label>拠点住所 *</label>
         <input type="text" name="address" id="address" required placeholder="例：知名町、和泊町、現場名など">
@@ -139,11 +159,9 @@
 <script>
   window.LIFF_ID = {{ LIFF_ID|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/size_builder.js') }}"></script>
 <script>
   let currentMaterials = [];
   let currentDemolitionProperties = [];
-  let currentUserAddress = '';
   let currentIdToken = '';
   let currentAuthMode = '';
   let linkedLineProfile = null;
@@ -151,9 +169,10 @@
   const LIFF_LOGIN_ATTEMPT_KEY = 'erabu_zai_spot_liff_login_attempted_at';
   const LIFF_LOGIN_RETRY_DELAY_MS = 60 * 1000;
 
-  const materialTypeOptions = ['木材', '金属', '建具', '家具', '石材・ブロック', '設備・配管', 'その他'];
-  const quantityOptions = ['少量（手持ち）', '軽トラ1台未満', '軽トラ1台分', '2tトラック1台分', 'それ以上', '要相談'];
-  const conditionOptions = ['★☆☆☆☆', '★★☆☆☆', '★★★☆☆', '★★★★☆', '★★★★★'];
+  const materialTypeOptions = ['木材', '合板・ボード', '建具', 'トタン・金属材', 'タイル・石材', 'コンクリート・ブロック', '金物', 'その他'];
+  const quantityLevelOptions = ['少量', 'まとまってあります', '大量', '不明'];
+  const conditionOptions = ['比較的きれい', '使用感あり', '傷・汚れあり', '現物確認推奨', '不明'];
+  const usagePurposeOptions = ['DIY', '修繕', '建築・施工', '家具製作', 'その他'];
   const matchStatusOptions = ['未対応', '連絡・調整中', '成立', '辞退'];
 
   function clearLegacyLiffReturnUrl() {
@@ -363,111 +382,14 @@
     }).join('');
   }
 
-  function renderConditionStars(selectedValue) {
-    const optionValues = [...conditionOptions];
-    if (selectedValue && !optionValues.includes(selectedValue)) {
-      optionValues.unshift(selectedValue);
-    }
-    return optionValues.map((option, index) => {
-      const id = `condition_${index + 1}_${Math.random().toString(36).slice(2)}`;
-      const checked = option === selectedValue || (!selectedValue && option === '★★★☆☆') ? ' checked' : '';
-      return `
-        <input type="radio" name="condition" id="${id}" value="${escapeHtml(option)}"${checked}>
-        <label for="${id}">${escapeHtml(option)}</label>
-      `;
-    }).join('');
-  }
-
-  function formatDateInput(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
-  function deadlineDateAfter({ days = 0, months = 0 }) {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    if (days) {
-      date.setDate(date.getDate() + days);
-    }
-    if (months) {
-      date.setMonth(date.getMonth() + months);
-    }
-    return formatDateInput(date);
-  }
-
-  function getInitialDeadlineMode(value) {
-    if (value === '無期限') {
-      return 'unlimited';
-    }
-    if (value) {
-      return 'custom';
-    }
-    return 'one_week';
-  }
-
-  function dateInputValue(value) {
-    const match = String(value || '').match(/^(\d{4}-\d{2}-\d{2})/);
-    return match ? match[1] : '';
-  }
-
-  function updateEditDeadlineValue(form) {
-    const mode = form.querySelector('[data-deadline-mode]').value;
-    const customInput = form.querySelector('[data-custom-deadline]');
-    const hiddenInput = form.querySelector('[name="pickup_deadline"]');
-    customInput.hidden = mode !== 'custom';
-
-    if (mode === 'one_week') {
-      hiddenInput.value = deadlineDateAfter({ days: 7 });
-    } else if (mode === 'two_weeks') {
-      hiddenInput.value = deadlineDateAfter({ days: 14 });
-    } else if (mode === 'one_month') {
-      hiddenInput.value = deadlineDateAfter({ months: 1 });
-    } else if (mode === 'unlimited') {
-      hiddenInput.value = '無期限';
-    } else {
-      hiddenInput.value = customInput.value;
-    }
-  }
-
-  function updateEditLocationValue(form) {
-    const mode = form.querySelector('[data-location-mode]').value;
-    const locationInput = form.querySelector('[name="location"]');
-    const note = form.querySelector('[data-location-note]');
-
-    if (mode === 'profile' && currentUserAddress) {
-      locationInput.value = currentUserAddress;
-      locationInput.readOnly = true;
-      note.textContent = `ユーザー情報の拠点住所: ${currentUserAddress}`;
-    } else {
-      locationInput.readOnly = false;
-      note.textContent = mode === 'profile'
-        ? 'ユーザー情報の拠点住所が未登録のため、住所を入力してください。'
-        : 'この材だけ別の保管場所を登録します。';
-    }
-  }
-
-  function initializeMaterialEditForm(form) {
-    const deadlineMode = form.querySelector('[data-deadline-mode]');
-    const customDeadline = form.querySelector('[data-custom-deadline]');
-    const locationMode = form.querySelector('[data-location-mode]');
-
-    deadlineMode.addEventListener('change', () => updateEditDeadlineValue(form));
-    customDeadline.addEventListener('input', () => updateEditDeadlineValue(form));
-    locationMode.addEventListener('change', () => updateEditLocationValue(form));
-    updateEditDeadlineValue(form);
-    updateEditLocationValue(form);
-  }
-
   function renderMaterials(materials, userId) {
     currentMaterials = materials || [];
     const container = document.getElementById('materials-container');
     if (!currentMaterials.length) {
       container.innerHTML = `
         <div class="empty-state">
-          <p>まだ材登録がありません。</p>
-          <a class="button-link compact" href="/materials/register/material">材を登録する</a>
+          <p>まだ材の投稿がありません。</p>
+          <a class="button-link compact" href="/materials/register">投稿する</a>
         </div>
       `;
       return;
@@ -478,18 +400,39 @@
 
   function renderMaterialCard(material, userId) {
     const imageUrls = getMaterialImageUrls(material);
+    const isRequest = material.post_type === 'request';
+    const effectiveStatus = material.effective_status || 'active';
+    const statusLabel = material.status_label || (effectiveStatus === 'active' ? '受付中' : '終了');
     const thumb = imageUrls[0]
-      ? `<img class="history-thumb" src="${escapeHtml(imageUrls[0])}" alt="${escapeHtml(material.title || '材の写真')}" loading="lazy" decoding="async">`
-      : '<div class="history-thumb history-thumb--empty">写真なし</div>';
+      ? `<img class="history-thumb" src="${escapeHtml(imageUrls[0])}" alt="${escapeHtml(material.title || '投稿写真')}" loading="lazy" decoding="async">`
+      : `<div class="history-thumb history-thumb--empty">${isRequest ? '参考写真なし' : '写真なし'}</div>`;
+    const closeOrRenew = effectiveStatus === 'active'
+      ? `
+        <form method="post" action="/materials/${encodeURIComponent(material.material_id)}/close" data-confirm-message="この投稿の受付を終了します。よろしいですか？">
+          <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
+          <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
+          <button type="submit" class="secondary-button">${isRequest ? '見つかりました・終了' : '譲渡済み・終了'}</button>
+        </form>
+      `
+      : `
+        <form method="post" action="/materials/${encodeURIComponent(material.material_id)}/renew">
+          <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
+          <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
+          <button type="submit" class="secondary-button">30日間再掲載する</button>
+        </form>
+      `;
 
     return `
       <div class="history-card material-history-item" id="material-card-${escapeHtml(material.material_id)}">
         <div class="history-card__header">
           <div class="history-card__title">
-            <span class="entry-badge">材登録</span>
+            <span class="entry-badge ${isRequest ? 'request' : 'offer'}">${isRequest ? '探しています' : '材があります'}</span>
             <h4>${escapeHtml(material.title || '名称未設定')}</h4>
           </div>
-          <span class="listing-date">${escapeHtml(formatDateJp(material.created_at))}</span>
+          <div>
+            <span class="status-badge">${escapeHtml(statusLabel)}</span>
+            <span class="listing-date">${escapeHtml(formatDateJp(material.created_at))}</span>
+          </div>
         </div>
         <div class="history-card__bodyline">
           ${thumb}
@@ -499,17 +442,18 @@
               <dd>${escapeHtml(material.material_type || '未設定')}</dd>
             </div>
             <div>
-              <dt>保管場所</dt>
-              <dd>${escapeHtml(material.location || '未設定')}</dd>
+              <dt>${isRequest ? '希望エリア' : 'エリア'}</dt>
+              <dd>${escapeHtml(material.location || (isRequest ? '指定なし' : '未設定'))}</dd>
             </div>
             <div>
-              <dt>状態</dt>
-              <dd>${escapeHtml(material.condition || '未設定')}</dd>
+              <dt>${isRequest ? '内容' : '量の目安'}</dt>
+              <dd>${escapeHtml(isRequest ? (material.description || '未設定') : (material.quantity_level || material.quantity || '不明'))}</dd>
             </div>
           </dl>
         </div>
         <div class="history-actions">
           <button type="button" class="secondary-button" onclick="showMaterialEdit('${escapeHtml(material.material_id)}')">編集する</button>
+          ${closeOrRenew}
           <form method="post" action="/materials/${encodeURIComponent(material.material_id)}/delete" data-confirm-message="この材登録を削除します。元に戻せません。よろしいですか？">
             <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
             <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
@@ -587,18 +531,87 @@
     }
 
     const userId = document.getElementById('line_user_id').value;
-    const imageText = getMaterialImageUrls(material).join('\n');
+    const imageUrls = getMaterialImageUrls(material);
     const card = document.getElementById(`material-card-${materialId}`);
-    const locationMode = currentUserAddress && material.location === currentUserAddress ? 'profile' : 'custom';
-    const deadlineMode = getInitialDeadlineMode(material.pickup_deadline || '');
-    const customDeadlineValue = deadlineMode === 'custom' ? dateInputValue(material.pickup_deadline) : '';
+    const isRequest = material.post_type === 'request';
+    const generatedTitleSuffix = isRequest ? 'を探しています' : 'があります';
+    const customTitle = String(material.title || '').endsWith(generatedTitleSuffix)
+      ? ''
+      : (material.title || '');
+    const existingImageControls = imageUrls.length
+      ? `
+        <fieldset class="form-fieldset edit-grid__full">
+          <legend>現在の写真</legend>
+          <p class="hint">残す写真にチェックを付けてください。</p>
+          <div class="image-keep-grid">
+            ${imageUrls.map((url, index) => `
+              <label class="image-keep-item">
+                <img src="${escapeHtml(url)}" alt="現在の写真${index + 1}" loading="lazy" decoding="async">
+                <span><input type="checkbox" name="keep_image_urls" value="${escapeHtml(url)}" checked> この写真を残す</span>
+              </label>
+            `).join('')}
+          </div>
+        </fieldset>
+      `
+      : '<p class="hint edit-grid__full">現在登録されている写真はありません。</p>';
+    const typeSpecificFields = isRequest
+      ? `
+          <div class="edit-grid__full">
+            <label>欲しい内容 *</label>
+            <textarea name="description" rows="4" required>${escapeHtml(material.description || '')}</textarea>
+          </div>
+          <div>
+            <label>希望数量</label>
+            <input type="text" name="quantity" value="${escapeHtml(material.quantity || '')}">
+          </div>
+          <div>
+            <label>希望寸法</label>
+            <input type="text" name="size" value="${escapeHtml(material.size || '')}">
+          </div>
+          <div>
+            <label>使用目的</label>
+            <select name="usage_purpose">${renderOptions(usagePurposeOptions, material.usage_purpose || '', '選択してください')}</select>
+          </div>
+          <div>
+            <label>希望エリア</label>
+            <select name="location">${renderOptions(['和泊町', '知名町', '島内どこでも可', 'その他'], material.location || '', '指定なし')}</select>
+          </div>
+        `
+      : `
+          <div>
+            <label>量の目安 *</label>
+            <select name="quantity_level" required>${renderOptions(quantityLevelOptions, material.quantity_level || '', '選択してください')}</select>
+          </div>
+          <div>
+            <label>受け渡しエリア *</label>
+            <select name="location" required>${renderOptions(['和泊町', '知名町', 'その他'], material.location || '', '選択してください')}</select>
+          </div>
+          <div>
+            <label>寸法</label>
+            <input type="text" name="size" value="${escapeHtml(material.size || '')}">
+          </div>
+          <div>
+            <label>数量</label>
+            <input type="text" name="quantity" value="${escapeHtml(material.quantity || '')}">
+          </div>
+          <div>
+            <label>状態</label>
+            <select name="condition">${renderOptions(conditionOptions, material.condition || '', '選択してください')}</select>
+          </div>
+          <div class="edit-grid__full">
+            <label>コメント</label>
+            <textarea name="description" rows="3">${escapeHtml(material.description || '')}</textarea>
+          </div>
+        `;
     card.innerHTML = `
       <form class="material-edit-form" onsubmit="submitMaterialEdit(event, '${escapeHtml(material.material_id)}')" enctype="multipart/form-data">
         <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
         <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
+        <input type="hidden" name="post_type" value="${isRequest ? 'request' : 'offer'}">
+        <input type="hidden" name="keep_image_urls_present" value="1">
         <div class="history-card__header">
           <div class="history-card__title">
-            <span class="entry-badge">編集中</span>
+            <span class="entry-badge ${isRequest ? 'request' : 'offer'}">編集中</span>
             <h4>${escapeHtml(material.title || '名称未設定')}</h4>
           </div>
           <span class="listing-date">${escapeHtml(formatDateJp(material.created_at))}</span>
@@ -606,206 +619,21 @@
 
         <div class="edit-grid">
           <div>
-            <label>材の名前 *</label>
-            <input type="text" name="title" value="${escapeHtml(material.title || '')}" required>
-          </div>
-          <div>
             <label>材の種類 *</label>
             <select name="material_type" required>
               ${renderOptions(materialTypeOptions, material.material_type || '', '選択してください')}
             </select>
           </div>
           <div>
-            <label>保管場所 *</label>
-            <select data-location-mode>
-              <option value="profile"${locationMode === 'profile' ? ' selected' : ''}>ユーザー情報の拠点を使う</option>
-              <option value="custom"${locationMode === 'custom' ? ' selected' : ''}>別の住所を入力する</option>
-            </select>
-            <input type="text" name="location" value="${escapeHtml(material.location || '')}" required>
-            <p class="hint" data-location-note></p>
+            <label>投稿タイトル（任意）</label>
+            <input type="text" name="title" value="${escapeHtml(customTitle)}" placeholder="空欄の場合は材種から自動作成">
           </div>
+          ${typeSpecificFields}
+          ${existingImageControls}
           <div class="edit-grid__full">
-            <fieldset class="form-fieldset size-builder" data-size-builder data-size-initial-mode="${material.size ? 'free' : 'board'}">
-              <legend>寸法</legend>
-              <p class="hint">建築資材でよく使う書き方を選べます。既存の値は自由記入でそのまま残せます。</p>
-
-              <label>記入方法</label>
-              <div class="size-preset-tabs" aria-label="寸法の書き方を選ぶ">
-                <button type="button" class="size-preset-button" data-size-mode-button="board">板材</button>
-                <button type="button" class="size-preset-button" data-size-mode-button="square">角材</button>
-                <button type="button" class="size-preset-button" data-size-mode-button="door">建具</button>
-                <button type="button" class="size-preset-button" data-size-mode-button="round">丸物</button>
-                <button type="button" class="size-preset-button" data-size-mode-button="pipe">配管</button>
-                <button type="button" class="size-preset-button" data-size-mode-button="free">自由記入</button>
-              </div>
-              <select data-size-mode-select>
-                <option value="board">板材・一般材（L×W×t）</option>
-                <option value="square">角材（L×□）</option>
-                <option value="door">建具（W×H）</option>
-                <option value="round">丸物（φ×L）</option>
-                <option value="pipe">配管（L×φ×t）</option>
-                <option value="free">自由記入</option>
-              </select>
-
-              <div class="size-builder__panel" data-size-panel="board">
-                <div class="size-builder__grid">
-                  <div>
-                    <label>長さ</label>
-                    <input type="text" inputmode="decimal" data-size-field="length" placeholder="1800">
-                  </div>
-                  <div>
-                    <label>幅</label>
-                    <input type="text" inputmode="decimal" data-size-field="width" placeholder="90">
-                  </div>
-                  <div>
-                    <label>厚み</label>
-                    <input type="text" inputmode="decimal" data-size-field="thickness" placeholder="30">
-                  </div>
-                  <div>
-                    <label>単位</label>
-                    <select data-size-unit>
-                      <option value="mm">mm</option>
-                      <option value="cm">cm</option>
-                      <option value="m">m</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div class="size-builder__panel" data-size-panel="square" hidden>
-                <div class="size-builder__grid">
-                  <div>
-                    <label>長さ</label>
-                    <input type="text" inputmode="decimal" data-size-field="length" placeholder="1800">
-                  </div>
-                  <div>
-                    <label>断面一辺</label>
-                    <input type="text" inputmode="decimal" data-size-field="section" placeholder="90">
-                  </div>
-                  <div>
-                    <label>単位</label>
-                    <select data-size-unit>
-                      <option value="mm">mm</option>
-                      <option value="cm">cm</option>
-                      <option value="m">m</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div class="size-builder__panel" data-size-panel="door" hidden>
-                <div class="size-builder__grid">
-                  <div>
-                    <label>幅</label>
-                    <input type="text" inputmode="decimal" data-size-field="width" placeholder="850">
-                  </div>
-                  <div>
-                    <label>高さ</label>
-                    <input type="text" inputmode="decimal" data-size-field="height" placeholder="2000">
-                  </div>
-                  <div>
-                    <label>単位</label>
-                    <select data-size-unit>
-                      <option value="mm">mm</option>
-                      <option value="cm">cm</option>
-                      <option value="m">m</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div class="size-builder__panel" data-size-panel="round" hidden>
-                <div class="size-builder__grid">
-                  <div>
-                    <label>直径</label>
-                    <input type="text" inputmode="decimal" data-size-field="diameter" placeholder="60">
-                  </div>
-                  <div>
-                    <label>長さ</label>
-                    <input type="text" inputmode="decimal" data-size-field="length" placeholder="2400">
-                  </div>
-                  <div>
-                    <label>単位</label>
-                    <select data-size-unit>
-                      <option value="mm">mm</option>
-                      <option value="cm">cm</option>
-                      <option value="m">m</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div class="size-builder__panel" data-size-panel="pipe" hidden>
-                <div class="size-builder__grid">
-                  <div>
-                    <label>長さ</label>
-                    <input type="text" inputmode="decimal" data-size-field="length" placeholder="2000">
-                  </div>
-                  <div>
-                    <label>外径</label>
-                    <input type="text" inputmode="decimal" data-size-field="outerDiameter" placeholder="27">
-                  </div>
-                  <div>
-                    <label>肉厚</label>
-                    <input type="text" inputmode="decimal" data-size-field="thickness" placeholder="2.3">
-                  </div>
-                  <div>
-                    <label>単位</label>
-                    <select data-size-unit>
-                      <option value="mm">mm</option>
-                      <option value="cm">cm</option>
-                      <option value="m">m</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div class="size-builder__panel" data-size-panel="free" hidden>
-                <label>寸法をそのまま記入</label>
-                <input type="text" data-size-free value="${escapeHtml(material.size || '')}" placeholder="例：L1800×W90×t30mm / φ60×L2400">
-              </div>
-
-              <input type="hidden" name="size" data-size-hidden value="${escapeHtml(material.size || '')}">
-              <p class="hint size-builder__preview" data-size-preview>寸法の入力形式を選ぶと、表示例がここに出ます。</p>
-            </fieldset>
-          </div>
-          <div>
-            <label>数量</label>
-            <select name="quantity">
-              ${renderOptions(quantityOptions, material.quantity || '', '選択してください')}
-            </select>
-          </div>
-          <div class="edit-grid__full">
-            <fieldset class="form-fieldset">
-              <legend>状態</legend>
-              <div class="star-rating" role="radiogroup" aria-label="状態の五段階評価">
-                ${renderConditionStars(material.condition || '')}
-              </div>
-            </fieldset>
-          </div>
-          <div>
-            <label>取引期限</label>
-            <select data-deadline-mode>
-              <option value="one_week"${deadlineMode === 'one_week' ? ' selected' : ''}>1週間</option>
-              <option value="two_weeks"${deadlineMode === 'two_weeks' ? ' selected' : ''}>2週間</option>
-              <option value="one_month"${deadlineMode === 'one_month' ? ' selected' : ''}>一カ月</option>
-              <option value="unlimited"${deadlineMode === 'unlimited' ? ' selected' : ''}>無期限</option>
-              <option value="custom"${deadlineMode === 'custom' ? ' selected' : ''}>カスタム</option>
-            </select>
-            <input type="date" data-custom-deadline class="conditional-input" value="${escapeHtml(customDeadlineValue)}">
-            <input type="hidden" name="pickup_deadline" value="${escapeHtml(material.pickup_deadline || '')}">
-          </div>
-          <div class="edit-grid__full">
-            <label>説明</label>
-            <textarea name="description" rows="3">${escapeHtml(material.description || '')}</textarea>
-          </div>
-          <div class="edit-grid__full">
-            <label>写真URL（複数可）</label>
-            <textarea name="image_urls_text" rows="3">${escapeHtml(imageText)}</textarea>
-          </div>
-          <div class="edit-grid__full">
-            <label>写真を追加</label>
-            <input type="file" name="image_files" accept="image/*" multiple>
+            <label>${isRequest ? '参考写真を追加' : '写真を追加'}</label>
+            <input type="file" name="image_files" accept="image/*" multiple data-max-files="6">
+            <p class="hint">既存の写真を含めて最大6枚です。</p>
           </div>
         </div>
 
@@ -816,8 +644,6 @@
         <p class="form-error" aria-live="polite"></p>
       </form>
     `;
-    initMaterialSizeBuilders(card);
-    initializeMaterialEditForm(card.querySelector('form'));
   }
 
   async function submitMaterialEdit(event, materialId) {
@@ -866,8 +692,10 @@
       const isProvider = match.provider_user_id === currentUserId;
       const shareStatus = isProvider ? match.provider_contact_share_status : match.requester_contact_share_status;
       const matchType = match.match_type || 'material';
-      const entryLabel = matchType === 'viewing' ? '見学' : '材';
-      const roleLabel = isProvider ? '登録者側' : '希望者側';
+      const entryLabel = matchType === 'viewing' ? '見学' : (matchType === 'request' ? '探している材' : '材');
+      const roleLabel = matchType === 'request'
+        ? (isProvider ? '提供を申し出た側' : '探している側')
+        : (isProvider ? '登録者側' : '希望者側');
       const entryId = match.entry_id || match.material_id || match.property_id || '';
       const title = match.entry_title || entryId || 'ID未設定';
       const thumb = match.entry_image_url
@@ -900,7 +728,7 @@
         <div class="history-card matching-history-item">
           <div class="history-card__header">
             <div class="history-card__title">
-              <span class="entry-badge ${matchType === 'viewing' ? 'demolition' : ''}">${entryLabel}マッチング</span>
+              <span class="entry-badge ${matchType === 'viewing' ? 'demolition' : (matchType === 'request' ? 'request' : 'offer')}">${entryLabel}マッチング</span>
               <h4>${escapeHtml(title)}</h4>
             </div>
             <span class="listing-date">${escapeHtml(formatDateJp(match.created_at))}</span>
@@ -926,8 +754,10 @@
   }
 
   function fillUserForm(user) {
-    currentUserAddress = user.address || '';
     document.getElementById('display_name').value = user.display_name || '';
+    document.getElementById('business_name').value = user.business_name || '';
+    document.getElementById('user_category').value = user.user_category || '';
+    document.getElementById('area').value = user.area || '';
     document.getElementById('address').value = user.address || '';
     document.getElementById('transport_info').value = user.transport_info || '';
   }
@@ -1193,7 +1023,6 @@
     }
 
     setSubmitEnabled(true);
-    currentUserAddress = body.user?.address || '';
     if (body.exists) {
       if (currentAuthMode === 'guest') {
         document.getElementById('line-connect-button').hidden = true;
