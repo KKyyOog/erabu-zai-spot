@@ -27,7 +27,7 @@ def update_status():
     material_id = request.form.get("material_id")
     status = request.form.get("status")
 
-    if not material_id or not status:
+    if not material_id or status not in ("active", "closed"):
         flash("material_id または status が不足しています。")
         return redirect(url_for("admin.index"))
 

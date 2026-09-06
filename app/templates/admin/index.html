@@ -13,10 +13,9 @@
       状態
       <select id="admin-status-filter">
         <option value="">すべて</option>
-        <option value="募集中">募集中</option>
-        <option value="交渉中">交渉中</option>
-        <option value="引取済み">引取済み</option>
-        <option value="廃棄予定">廃棄予定</option>
+        <option value="active">受付中</option>
+        <option value="closed">終了</option>
+        <option value="expired">掲載期限切れ</option>
       </select>
     </label>
   </div>
@@ -25,6 +24,7 @@
     <thead>
       <tr>
         <th>材ID</th>
+        <th>投稿種別</th>
         <th>名前</th>
         <th>種類</th>
         <th>場所</th>
@@ -34,20 +34,19 @@
     </thead>
     <tbody>
       {% for material in materials %}
-        <tr data-admin-row data-status="{{ material.status }}" data-search="{{ [material.material_id, material.title, material.material_type, material.location, material.status]|join(' ') }}">
+        <tr data-admin-row data-status="{{ material.effective_status }}" data-search="{{ [material.material_id, material.title, material.material_type, material.location, material.status_label]|join(' ') }}">
           <td>{{ material.material_id }}</td>
+          <td>{{ '探しています' if material.post_type == 'request' else '材があります' }}</td>
           <td>{{ material.title }}</td>
           <td>{{ material.material_type }}</td>
           <td>{{ material.location }}</td>
-          <td>{{ material.status }}</td>
+          <td>{{ material.status_label }}</td>
           <td>
             <form method="post" action="{{ url_for('admin.update_status') }}">
               <input type="hidden" name="material_id" value="{{ material.material_id }}">
               <select name="status">
-                <option value="募集中" {{ 'selected' if material.status == '募集中' else '' }}>募集中</option>
-                <option value="交渉中" {{ 'selected' if material.status == '交渉中' else '' }}>交渉中</option>
-                <option value="引取済み" {{ 'selected' if material.status == '引取済み' else '' }}>引取済み</option>
-                <option value="廃棄予定" {{ 'selected' if material.status == '廃棄予定' else '' }}>廃棄予定</option>
+                <option value="active" {{ 'selected' if material.effective_status == 'active' else '' }}>受付中</option>
+                <option value="closed" {{ 'selected' if material.effective_status in ('closed', 'expired') else '' }}>終了</option>
               </select>
               <button type="submit">更新</button>
             </form>

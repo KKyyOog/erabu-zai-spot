@@ -62,6 +62,55 @@ body {
   border-color: #466642;
 }
 
+.choice-card.offer-choice {
+  border-width: 2px;
+  border-color: #7ba06f;
+  background: #f2f8ee;
+}
+
+.choice-card.request-choice {
+  border-width: 2px;
+  border-color: #d99a4e;
+  background: #fff7ea;
+}
+
+.choice-card.request-choice .choice-title {
+  color: #9a5918;
+}
+
+.choice-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: #6f6759;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.secondary-registration-link {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid #ded7c8;
+  text-align: center;
+}
+
+.optional-fields {
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid #d8d0bd;
+  border-radius: 10px;
+  background: #fffdf7;
+}
+
+.optional-fields summary {
+  cursor: pointer;
+  color: #466642;
+  font-weight: 700;
+}
+
+.optional-fields__body {
+  padding-top: 6px;
+}
+
 .choice-title {
   display: block;
   font-size: 20px;
@@ -170,6 +219,26 @@ body {
 .entry-badge.demolition {
   background: #e1f0f5;
   color: #2f6575;
+}
+
+.entry-badge.offer {
+  background: #e2f1db;
+  color: #365f32;
+}
+
+.entry-badge.request {
+  background: #ffead0;
+  color: #8a4a0e;
+}
+
+.filter-tabs a.offer-filter.active {
+  border-color: #466642;
+  background: #466642;
+}
+
+.filter-tabs a.request-filter.active {
+  border-color: #b8681d;
+  background: #b8681d;
 }
 
 .badge-row {
@@ -437,6 +506,41 @@ button:disabled {
   gap: 10px;
 }
 
+.image-keep-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.image-keep-item {
+  margin-top: 0;
+  padding: 8px;
+  border: 1px solid #d8d0bd;
+  border-radius: 8px;
+  background: white;
+}
+
+.image-keep-item img {
+  display: block;
+  width: 100%;
+  height: 110px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.image-keep-item span {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+.image-keep-item input {
+  width: auto;
+  margin: 0;
+}
+
 .image-preview__item {
   min-width: 0;
   margin: 0;
@@ -640,6 +744,14 @@ td {
 .listing-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 28px rgba(47, 42, 35, 0.12);
+}
+
+.listing-card.offer-card {
+  border-top: 4px solid #6f965f;
+}
+
+.listing-card.request-card {
+  border-top: 4px solid #d78331;
 }
 
 .listing-card__image {
@@ -1158,6 +1270,7 @@ td {
   }
 
   .listing-grid {
+    column-count: 1;
     column-gap: 10px;
   }
 

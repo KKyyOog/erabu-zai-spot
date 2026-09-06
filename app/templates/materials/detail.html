@@ -1,68 +1,111 @@
 {% extends "base.html" %}
 
 {% block content %}
-<article class="card">
+<article class="card {{ 'request-post' if material.post_type == 'request' else 'offer-post' }}">
+  <div class="badge-row">
+    <p class="entry-badge {{ 'request' if material.post_type == 'request' else 'offer' }}">
+      {{ '材を探しています' if material.post_type == 'request' else '材があります' }}
+    </p>
+    <span class="status-badge">{{ material.status_label }}</span>
+  </div>
   <h2>{{ material.title }}</h2>
 
   {% if material.image_urls %}
-    <div class="detail-carousel" aria-label="{{ material.title or '材の写真' }}">
+    <div class="detail-carousel" aria-label="{{ material.title or '投稿写真' }}">
       {% for image_url in material.image_urls %}
-        <img class="detail-image" src="{{ image_url }}" alt="{{ material.title or '材の写真' }}" loading="lazy" decoding="async">
+        <img class="detail-image" src="{{ image_url }}" alt="{{ material.title or '投稿写真' }}" loading="lazy" decoding="async">
       {% endfor %}
     </div>
   {% endif %}
 
   <dl class="detail-list">
     <div>
-      <dt>種類</dt>
+      <dt>材の種類</dt>
       <dd>{{ material.material_type or '未設定' }}</dd>
     </div>
+    {% if material.post_type == 'request' %}
+      <div>
+        <dt>欲しい内容</dt>
+        <dd>{{ material.description or '未設定' }}</dd>
+      </div>
+      <div>
+        <dt>希望数量</dt>
+        <dd>{{ material.quantity or '詳細は投稿者へお問い合わせください' }}</dd>
+      </div>
+      <div>
+        <dt>希望寸法</dt>
+        <dd>{{ material.size|size_display if material.size else '詳細は投稿者へお問い合わせください' }}</dd>
+      </div>
+      <div>
+        <dt>使用目的</dt>
+        <dd>{{ material.usage_purpose or '未設定' }}</dd>
+      </div>
+      <div>
+        <dt>希望エリア</dt>
+        <dd>{{ material.location or '指定なし' }}</dd>
+      </div>
+    {% else %}
+      <div>
+        <dt>量の目安</dt>
+        <dd>{{ material.quantity_level or material.quantity or '不明' }}</dd>
+      </div>
+      <div>
+        <dt>寸法</dt>
+        <dd>{{ material.size|size_display if material.size else '詳細は提供者へお問い合わせください' }}</dd>
+      </div>
+      <div>
+        <dt>数量</dt>
+        <dd>{{ material.quantity or '詳細は提供者へお問い合わせください' }}</dd>
+      </div>
+      <div>
+        <dt>状態</dt>
+        <dd>{{ material.condition or '現物確認推奨' }}</dd>
+      </div>
+      <div>
+        <dt>受け渡しエリア</dt>
+        <dd>{{ material.location or '未設定' }}</dd>
+      </div>
+      <div>
+        <dt>コメント</dt>
+        <dd>{{ material.description or 'なし' }}</dd>
+      </div>
+    {% endif %}
     <div>
-      <dt>説明</dt>
-      <dd>{{ material.description or '未設定' }}</dd>
-    </div>
-    <div>
-      <dt>寸法</dt>
-      <dd>{{ material.size|size_display if material.size else '未設定' }}</dd>
-    </div>
-    <div>
-      <dt>数量</dt>
-      <dd>{{ material.quantity or '未設定' }}</dd>
-    </div>
-    <div>
-      <dt>状態</dt>
-      <dd>{{ material.condition or '未設定' }}</dd>
-    </div>
-    <div>
-      <dt>保管場所</dt>
-      <dd>{{ material.location or '未設定' }}</dd>
-    </div>
-    <div>
-      <dt>取引期限</dt>
-      <dd>{{ material.pickup_deadline|date_jp if material.pickup_deadline else '未設定' }}</dd>
+      <dt>投稿者</dt>
+      <dd>{{ material.display_name or '登録ユーザー' }}</dd>
     </div>
     {% if material.created_at %}
       <div>
-        <dt>登録日</dt>
+        <dt>投稿日</dt>
         <dd>{{ material.created_at|date_jp }}</dd>
       </div>
     {% endif %}
+    <div>
+      <dt>掲載状態</dt>
+      <dd>{{ material.status_label }}</dd>
+    </div>
   </dl>
 
-  <form method="post" action="{{ url_for('materials.interest') }}">
-    <input type="hidden" name="material_id" value="{{ material.material_id }}">
-    <input type="hidden" name="line_user_id" id="line_user_id">
-    <input type="hidden" name="user_id" id="user_id">
+  {% if material.effective_status == 'active' %}
+    <form method="post" action="{{ url_for('materials.interest') }}">
+      <input type="hidden" name="material_id" value="{{ material.material_id }}">
+      <input type="hidden" name="line_user_id" id="line_user_id">
+      <input type="hidden" name="user_id" id="user_id">
 
-    <label>メッセージ</label>
-    <textarea name="message" rows="3" placeholder="例：この材を使ってみたいです。引取可能日を相談したいです。"></textarea>
+      <label>問い合わせメッセージ</label>
+      <textarea name="message" rows="3" placeholder="{{ '提供できそうな材があります。' if material.post_type == 'request' else '受け渡し方法や現物確認について相談したいです。' }}"></textarea>
 
-    <button type="submit">この材が欲しい</button>
-  </form>
+      <button type="submit">
+        {{ '提供できます・問い合わせる' if material.post_type == 'request' else 'この材について問い合わせる' }}
+      </button>
+    </form>
+  {% else %}
+    <p class="empty-state">この投稿は受付を終了しています。</p>
+  {% endif %}
 </article>
 
 <script>
   window.LIFF_ID = {{ LIFF_ID|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/liff.js', v='20260727-guest-mode') }}"></script>
+<script src="{{ url_for('static', filename='js/liff.js', v='20260906-posts-v2') }}"></script>
 {% endblock %}

@@ -4,13 +4,15 @@ import hmac
 import json
 import os
 import unittest
+from io import BytesIO
 from unittest.mock import patch
 
-from sqlalchemy import event, inspect
+from sqlalchemy import create_engine, event, inspect, text
 
 from app import create_app
 from app.config import Config
 from app.services import db_service
+from scripts.migrate_posts_v2 import migrate as migrate_posts_v2
 
 
 class WorkflowTestCase(unittest.TestCase):
@@ -339,7 +341,9 @@ class WorkflowTestCase(unittest.TestCase):
                 "line_user_id": guest_user_id,
                 "title": "ゲスト登録の材",
                 "material_type": "木材",
+                "quantity_level": "少量",
                 "location": "知名町",
+                "image_url": "https://res.cloudinary.com/test-cloud/image/upload/v1/erabu-zai-spot/uploads/guest.jpg",
             },
         )
         self.assertEqual(material_response.status_code, 302)
@@ -499,6 +503,21 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertIn("建物写真を撮る・ライブラリから選ぶ", demolition_page)
         self.assertIn('name="building_image_files"', demolition_page)
         self.assertNotIn('name="building_photo_urls_text"', demolition_page)
+
+        request_page = self.client.get(
+            "/materials/register/request"
+        ).get_data(as_text=True)
+        self.assertIn("材を探しています", request_page)
+        self.assertIn('name="description"', request_page)
+        self.assertIn('name="image_files"', request_page)
+        self.assertNotIn('name="image_urls_text"', request_page)
+
+        selection_page = self.client.get("/materials/register").get_data(
+            as_text=True
+        )
+        self.assertIn("材があります", selection_page)
+        self.assertIn("材を探しています", selection_page)
+        self.assertIn("解体予定物件を登録する", selection_page)
 
     def test_profile_scope_authenticates_and_uses_one_database_query(self):
         self.add_user("fast-profile-user", "高速表示ユーザー")
@@ -800,6 +819,377 @@ class WorkflowTestCase(unittest.TestCase):
             history = db_service.get_matching_history_by_user("requester-user")
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["material_id"], material_id)
+
+    def test_offer_creation_saves_post_type_expiry_and_multiple_images(self):
+        self.add_user("offer-owner", "提供者")
+        self.authenticate("offer-owner")
+        uploaded_urls = [
+            "https://res.cloudinary.com/test-cloud/image/upload/v1/erabu-zai-spot/uploads/offer-1.jpg",
+            "https://res.cloudinary.com/test-cloud/image/upload/v1/erabu-zai-spot/uploads/offer-2.jpg",
+        ]
+
+        with patch(
+            "app.routes.materials._upload_images",
+            return_value=uploaded_urls,
+        ):
+            response = self.post_form(
+                "/materials/submit",
+                {
+                    "line_user_id": "offer-owner",
+                    "material_type": "木材",
+                    "quantity_level": "少量",
+                    "location": "和泊町",
+                    "image_files": [
+                        (BytesIO(b"first"), "first.jpg"),
+                        (BytesIO(b"second"), "second.jpg"),
+                    ],
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            records = db_service.get_materials_by_line_user_id("offer-owner")
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["post_type"], "offer")
+        self.assertEqual(records[0]["status"], "active")
+        self.assertEqual(records[0]["effective_status"], "active")
+        self.assertEqual(records[0]["quantity_level"], "少量")
+        self.assertEqual(records[0]["title"], "木材があります")
+        self.assertEqual(records[0]["image_urls"], uploaded_urls)
+        self.assertTrue(records[0]["expires_at"])
+
+    def test_offer_requires_at_least_one_photo(self):
+        self.add_user("offer-without-photo", "提供者")
+        self.authenticate("offer-without-photo")
+
+        response = self.post_form(
+            "/materials/submit",
+            {
+                "line_user_id": "offer-without-photo",
+                "material_type": "木材",
+                "quantity_level": "少量",
+                "location": "和泊町",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertIn("写真を1枚以上登録してください", response.get_data(as_text=True))
+        with self.app.app_context():
+            records = db_service.get_materials_by_line_user_id("offer-without-photo")
+        self.assertEqual(records, [])
+
+    def test_offer_edit_keeps_selected_existing_images(self):
+        first_url = "https://res.cloudinary.com/test-cloud/image/upload/v1/erabu-zai-spot/uploads/keep.jpg"
+        second_url = "https://res.cloudinary.com/test-cloud/image/upload/v1/erabu-zai-spot/uploads/remove.jpg"
+        with self.app.app_context():
+            material_id = db_service.append_material(
+                {
+                    "line_user_id": "image-edit-owner",
+                    "title": "画像編集用",
+                    "post_type": "offer",
+                    "material_type": "木材",
+                    "quantity_level": "少量",
+                    "location": "和泊町",
+                    "image_url": first_url,
+                    "image_urls": json.dumps([first_url, second_url]),
+                }
+            )
+        self.authenticate("image-edit-owner")
+
+        response = self.post_form(
+            f"/materials/{material_id}/update",
+            {
+                "line_user_id": "image-edit-owner",
+                "post_type": "offer",
+                "title": "画像編集用",
+                "material_type": "木材",
+                "quantity_level": "少量",
+                "location": "和泊町",
+                "keep_image_urls_present": "1",
+                "keep_image_urls": first_url,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        with self.app.app_context():
+            record = db_service.get_material_by_id(material_id)
+        self.assertEqual(record["image_urls"], [first_url])
+
+    def test_request_creation_allows_no_photo(self):
+        self.add_user("request-owner", "探している人")
+        self.authenticate("request-owner")
+
+        response = self.post_form(
+            "/materials/requests/submit",
+            {
+                "line_user_id": "request-owner",
+                "material_type": "建具",
+                "description": "古い木製建具を探しています",
+                "quantity": "2枚",
+                "size": "高さ2m程度",
+                "usage_purpose": "修繕",
+                "location": "島内どこでも可",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            records = db_service.get_materials_by_line_user_id("request-owner")
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["post_type"], "request")
+        self.assertEqual(records[0]["title"], "建具を探しています")
+        self.assertEqual(records[0]["image_urls"], [])
+        self.assertEqual(records[0]["usage_purpose"], "修繕")
+
+    def test_offer_and_request_list_filters(self):
+        with self.app.app_context():
+            db_service.append_material(
+                {
+                    "line_user_id": "offer-filter-owner",
+                    "title": "フィルター用提供投稿",
+                    "post_type": "offer",
+                    "material_type": "木材",
+                    "location": "和泊町",
+                }
+            )
+            db_service.append_material(
+                {
+                    "line_user_id": "request-filter-owner",
+                    "title": "フィルター用募集投稿",
+                    "post_type": "request",
+                    "material_type": "木材",
+                    "description": "角材を探しています",
+                }
+            )
+
+        offer_page = self.client.get(
+            "/materials/list?type=offer"
+        ).get_data(as_text=True)
+        request_page = self.client.get(
+            "/materials/list?type=request"
+        ).get_data(as_text=True)
+        self.assertIn("フィルター用提供投稿", offer_page)
+        self.assertNotIn("フィルター用募集投稿", offer_page)
+        self.assertIn("フィルター用募集投稿", request_page)
+        self.assertNotIn("フィルター用提供投稿", request_page)
+
+    def test_legacy_material_is_read_as_active_offer_without_expiry(self):
+        with self.app.app_context():
+            db_service.upsert_material_record(
+                {
+                    "material_id": "legacy-material",
+                    "line_user_id": "legacy-owner",
+                    "title": "既存の材",
+                    "material_type": "家具",
+                    "location": "知名町",
+                    "status": "募集中",
+                    "created_at": "2026-01-01 00:00:00",
+                }
+            )
+            record = db_service.get_material_by_id("legacy-material")
+            public_ids = {
+                item["material_id"] for item in db_service.get_materials()
+            }
+
+        self.assertEqual(record["post_type"], "offer")
+        self.assertEqual(record["effective_status"], "active")
+        self.assertEqual(record["expires_at"], "")
+        self.assertIn("legacy-material", public_ids)
+
+    def test_posts_v2_migration_is_idempotent_and_preserves_legacy_rows(self):
+        engine = create_engine("sqlite://", future=True)
+        try:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "CREATE TABLE materials ("
+                        "material_id VARCHAR(64) PRIMARY KEY, status VARCHAR(64))"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "CREATE TABLE users ("
+                        "line_user_id VARCHAR(255) PRIMARY KEY, display_name TEXT)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO materials (material_id, status) "
+                        "VALUES ('legacy-row', '募集中')"
+                    )
+                )
+
+            first_added = migrate_posts_v2(engine)
+            second_added = migrate_posts_v2(engine)
+            material_columns = {
+                column["name"] for column in inspect(engine).get_columns("materials")
+            }
+            user_columns = {
+                column["name"] for column in inspect(engine).get_columns("users")
+            }
+            with engine.connect() as connection:
+                legacy_row = connection.execute(
+                    text(
+                        "SELECT post_type, expires_at FROM materials "
+                        "WHERE material_id = 'legacy-row'"
+                    )
+                ).one()
+        finally:
+            engine.dispose()
+
+        self.assertIn("materials.post_type", first_added)
+        self.assertEqual(second_added, [])
+        self.assertTrue(
+            {"post_type", "quantity_level", "usage_purpose", "expires_at"}
+            <= material_columns
+        )
+        self.assertTrue(
+            {"business_name", "user_category", "area"} <= user_columns
+        )
+        self.assertEqual(legacy_row.post_type, "offer")
+        self.assertEqual(legacy_row.expires_at, "")
+
+    def test_optional_user_profile_fields_are_saved(self):
+        self.authenticate("profile-fields-user")
+        response = self.post_form(
+            "/users/me/save",
+            {
+                "line_user_id": "profile-fields-user",
+                "display_name": "山田",
+                "business_name": "山田木工",
+                "user_category": "島内事業者",
+                "area": "和泊町",
+                "address": "和泊町手々知名",
+                "transport_info": "軽トラック",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            user = db_service.get_user_by_line_user_id("profile-fields-user")
+        self.assertEqual(user["business_name"], "山田木工")
+        self.assertEqual(user["user_category"], "島内事業者")
+        self.assertEqual(user["area"], "和泊町")
+
+    def test_owner_can_close_and_renew_post(self):
+        self.add_user("status-owner", "投稿者")
+        with self.app.app_context():
+            material_id = db_service.append_material(
+                {
+                    "line_user_id": "status-owner",
+                    "title": "終了確認用",
+                    "post_type": "offer",
+                    "material_type": "木材",
+                    "location": "和泊町",
+                }
+            )
+        self.authenticate("status-owner")
+
+        close_response = self.post_form(
+            f"/materials/{material_id}/close",
+            {"line_user_id": "status-owner"},
+        )
+        self.assertEqual(close_response.status_code, 302)
+        with self.app.app_context():
+            closed = db_service.get_material_by_id(material_id)
+            public_ids = {
+                item["material_id"] for item in db_service.get_materials()
+            }
+        self.assertEqual(closed["effective_status"], "closed")
+        self.assertNotIn(material_id, public_ids)
+
+        renew_response = self.post_form(
+            f"/materials/{material_id}/renew",
+            {"line_user_id": "status-owner"},
+        )
+        self.assertEqual(renew_response.status_code, 302)
+        with self.app.app_context():
+            renewed = db_service.get_material_by_id(material_id)
+        self.assertEqual(renewed["effective_status"], "active")
+        self.assertTrue(renewed["expires_at"])
+
+    def test_non_owner_cannot_close_post(self):
+        with self.app.app_context():
+            material_id = db_service.append_material(
+                {
+                    "line_user_id": "real-owner",
+                    "title": "所有者確認用",
+                    "post_type": "request",
+                    "material_type": "木材",
+                    "description": "木材を探しています",
+                }
+            )
+        self.authenticate("other-user")
+
+        response = self.post_form(
+            f"/materials/{material_id}/close",
+            {"line_user_id": "other-user"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            record = db_service.get_material_by_id(material_id)
+        self.assertEqual(record["effective_status"], "active")
+
+    def test_expired_post_is_hidden_but_remains_on_my_page(self):
+        with self.app.app_context():
+            material_id = db_service.append_material(
+                {
+                    "line_user_id": "expired-owner",
+                    "title": "期限切れ投稿",
+                    "post_type": "request",
+                    "material_type": "木材",
+                    "description": "材を探しています",
+                    "expires_at": "2000-01-01 00:00:00",
+                }
+            )
+            public_ids = {
+                item["material_id"] for item in db_service.get_materials()
+            }
+            own_records = db_service.get_materials_by_line_user_id(
+                "expired-owner"
+            )
+
+        self.assertNotIn(material_id, public_ids)
+        self.assertEqual(len(own_records), 1)
+        self.assertEqual(own_records[0]["effective_status"], "expired")
+
+    def test_request_inquiry_records_supplier_and_notifies_request_owner(self):
+        self.add_user("wanted-owner", "探している人")
+        self.add_user("supplier-user", "提供できる人")
+        with self.app.app_context():
+            material_id = db_service.append_material(
+                {
+                    "line_user_id": "wanted-owner",
+                    "title": "角材を探しています",
+                    "post_type": "request",
+                    "material_type": "木材",
+                    "description": "2m程度の角材",
+                }
+            )
+        self.authenticate("supplier-user")
+
+        with patch(
+            "app.routes.materials.send_line_message",
+            return_value=True,
+        ) as send:
+            response = self.post_form(
+                "/materials/interest",
+                {
+                    "line_user_id": "supplier-user",
+                    "material_id": material_id,
+                    "message": "提供できる材があります",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(send.call_args.args[0], "wanted-owner")
+        with self.app.app_context():
+            history = db_service.get_matching_history_by_user("wanted-owner")
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["match_type"], "request")
+        self.assertEqual(history[0]["provider_user_id"], "supplier-user")
+        self.assertEqual(history[0]["requester_user_id"], "wanted-owner")
 
 
 if __name__ == "__main__":
