@@ -7,7 +7,10 @@ from flask import Blueprint, abort, current_app, jsonify, request, session
 
 from app.services.db_service import (
     create_line_notification_link_code,
+    get_line_friendship,
     get_line_notification_link,
+    migrate_guest_identity,
+    set_line_friendship,
 )
 from app.services.line_auth_service import LineAuthError, verify_id_token
 from app.services.line_service import (
@@ -48,9 +51,6 @@ def liff_link():
         request.headers.get("User-Agent", ""),
     )
 
-    if not user_id:
-        logger.warning("[LIFF] auth rejected because userId is missing")
-        return jsonify({"ok": False, "message": "userId is required"}), 400
     if not id_token:
         logger.warning("[LIFF] auth rejected because idToken is missing")
         return jsonify({"ok": False, "message": "idToken is required"}), 400
@@ -66,14 +66,43 @@ def liff_link():
             "message": "LINE authentication failed",
         }), 401
 
-    session["line_user_id"] = claims["sub"]
+    verified_user_id = (claims.get("sub") or "").strip()
+    if not verified_user_id or (user_id and user_id != verified_user_id):
+        session.pop("line_user_id", None)
+        logger.warning("[LIFF] auth rejected because verified user ID did not match")
+        return jsonify({
+            "ok": False,
+            "code": "line_user_mismatch",
+            "message": "LINE authentication failed",
+        }), 401
+
+    legacy_guest_user_id = (session.get("line_user_id") or "").strip()
+    migrated = False
+    if legacy_guest_user_id.startswith("anon_"):
+        migrated = migrate_guest_identity(
+            legacy_guest_user_id,
+            verified_user_id,
+        )
+
+    session["line_user_id"] = verified_user_id
     session.permanent = False
     logger.info("[LIFF] auth accepted")
-    return jsonify({"ok": True})
+    return jsonify({
+        "ok": True,
+        "line_user_id": verified_user_id,
+        "migrated_guest_data": migrated,
+    })
 
 
 @link_bp.route("/guest", methods=["POST"])
 def guest_link():
+    if current_app.config.get("LINE_LOGIN_ENABLED", True):
+        return jsonify({
+            "ok": False,
+            "code": "line_login_required",
+            "message": "LINE login is required",
+        }), 503
+
     current_user_id = (session.get("line_user_id") or "").strip()
     if current_user_id:
         return jsonify({
@@ -153,9 +182,10 @@ def notification_status():
             "message": "利用者情報を確認できませんでした。",
         }), 401
     if not app_user_id.startswith("anon_"):
+        friendship = get_line_friendship(app_user_id)
         return jsonify({
             "ok": True,
-            "linked": True,
+            "linked": bool(friendship and friendship.get("is_friend")),
             "auth_mode": "line",
         })
 
@@ -171,6 +201,33 @@ def notification_status():
         "linked": link is not None,
         "auth_mode": "guest",
         "profile": profile,
+    })
+
+
+@link_bp.route("/friendship", methods=["GET", "POST"])
+def friendship_status():
+    line_user_id = (session.get("line_user_id") or "").strip()
+    if not line_user_id or line_user_id.startswith("anon_"):
+        return jsonify({
+            "ok": False,
+            "message": "LINE authentication is required",
+        }), 401
+
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data.get("friendFlag"), bool):
+            return jsonify({
+                "ok": False,
+                "message": "friendFlag must be a boolean",
+            }), 400
+        set_line_friendship(line_user_id, data["friendFlag"])
+
+    friendship = get_line_friendship(line_user_id)
+    return jsonify({
+        "ok": True,
+        "line_user_id": line_user_id,
+        "friend": bool(friendship and friendship.get("is_friend")),
+        "updated_at": friendship.get("updated_at", "") if friendship else "",
     })
 
 

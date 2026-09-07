@@ -37,9 +37,12 @@ AUTO_CREATE_TABLES=false
 after the initial tables exist.
 
 When automatic table creation is disabled, the app still creates the
-`line_notification_links` and `line_notification_link_codes` tables when
-missing. These tables are required by the guest LINE notification-linking
-flow and are created with SQLAlchemy's `checkfirst` protection.
+`line_friendships`, `line_notification_links`, and
+`line_notification_link_codes` tables when missing. `line_friendships`
+stores the current friend/block state used by the LINE-ID-based flow. The
+two notification-link tables remain available for migration from the legacy
+guest flow. These tables are created with SQLAlchemy's `checkfirst`
+protection.
 
 ## 5. Copy existing Google Sheets data
 

@@ -19,37 +19,20 @@
     </div>
   </div>
 
-  <aside id="guest-mode-notice" class="guest-mode-notice" hidden>
-    <div class="guest-mode-notice__header">
-      <div>
-        <strong>ログインなしで利用中です</strong>
-        <p>入力内容はこのブラウザに紐づきます。Cookieの削除や別端末への変更では自動で引き継げません。通知を受け取る場合は、公式アカウントへ連携メッセージを一度送信してください。</p>
-        <p id="interest-notification-link-guidance" role="alert" hidden>
-          「欲しい」「見学したい」を送るには、下の「LINE通知を受け取る」を押して通知連携してください。
-        </p>
-      </div>
-      <div class="guest-mode-notice__actions">
-        <button type="button" id="notification-link-button">
-          LINE通知を受け取る
-        </button>
-        <button type="button" id="line-connect-button" class="secondary-button"{% if not LINE_LOGIN_ENABLED %} hidden{% endif %}>
-          LINEログインで自動入力する
-        </button>
-      </div>
+  <aside id="notification-readiness" class="readiness-card">
+    <strong>利用状況</strong>
+    <div class="readiness-list">
+      <p id="identity-readiness" class="readiness-item is-checking">LINE本人確認　確認中</p>
+      <p id="notification-readiness-status" class="readiness-item is-checking" role="status" aria-live="polite">
+        LINE通知　確認中
+      </p>
     </div>
-
-    <div id="notification-link-panel" class="notification-link-panel">
-      <p id="notification-link-status" role="status" aria-live="polite">LINE通知は未連携です。</p>
-      <div id="notification-link-instructions" hidden>
-        <p>公式アカウントのトークが開いたら、入力済みの次のメッセージをそのまま送信してください。</p>
-        <code id="notification-link-message"></code>
-        <div class="notification-link-actions">
-          <a id="notification-deep-link" class="button-link compact" href="#" hidden>LINEでメッセージを送る</a>
-          <button type="button" id="notification-copy-button" class="secondary-button">メッセージをコピー</button>
-          <button type="button" id="notification-check-button" class="secondary-button">連携状態を確認</button>
-        </div>
-      </div>
-    </div>
+    <p id="notification-readiness-guidance" class="hint" hidden>
+      問い合わせや見学希望を利用するには、公式アカウントの友だち追加またはブロック解除が必要です。
+    </p>
+    <button type="button" id="notification-enable-button" hidden>
+      友だち追加・ブロック解除
+    </button>
   </aside>
 
   <form id="user-form" method="post" action="{{ url_for('users.me_save') }}">
@@ -164,7 +147,6 @@
   let currentDemolitionProperties = [];
   let currentIdToken = '';
   let currentAuthMode = '';
-  let linkedLineProfile = null;
   let liffInitialized = false;
   const LIFF_LOGIN_ATTEMPT_KEY = 'erabu_zai_spot_liff_login_attempted_at';
   const LIFF_LOGIN_RETRY_DELAY_MS = 60 * 1000;
@@ -797,137 +779,96 @@
     document.getElementById('id_token').value = idToken || '';
   }
 
-  function setGuestMode(enabled) {
-    const notice = document.getElementById('guest-mode-notice');
-    notice.hidden = !enabled;
-    if (enabled) {
-      const notificationLinkRequired = (
-        new URLSearchParams(window.location.search).get('notification_link_required') === '1'
-      );
-      document.getElementById('interest-notification-link-guidance').hidden = !notificationLinkRequired;
-      if (notificationLinkRequired) {
-        setTimeout(() => {
-          notice.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          document.getElementById('notification-link-button').focus();
-        }, 0);
-      }
-      refreshNotificationStatus();
-    }
+  function setIdentityReadiness(ready, message = '') {
+    const status = document.getElementById('identity-readiness');
+    status.className = `readiness-item ${ready ? 'is-ready' : 'is-error'}`;
+    status.textContent = ready
+      ? '✓ LINE本人確認　完了'
+      : `! LINE本人確認　${message || '確認できません'}`;
   }
 
-  async function refreshNotificationStatus() {
-    if (currentAuthMode !== 'guest') {
-      return false;
-    }
-
-    const panel = document.getElementById('notification-link-panel');
-    const status = document.getElementById('notification-link-status');
-    const linkButton = document.getElementById('notification-link-button');
-    try {
-      const resp = await fetch('/link/notification-status?include_profile=1', {
-        headers: { 'Accept': 'application/json' },
-        credentials: 'same-origin',
-      });
-      const body = await resp.json();
-      if (!resp.ok || !body.ok) {
-        throw new Error(body.message || 'notification status failed');
-      }
-
-      panel.classList.toggle('is-linked', body.linked === true);
-      linkButton.hidden = body.linked === true;
-      if (body.linked === true) {
-        linkedLineProfile = body.profile || null;
-        applyLinkedLineProfile(linkedLineProfile);
-        status.textContent = 'LINE通知は連携済みです。';
-        document.getElementById('notification-link-instructions').hidden = true;
-      } else {
-        status.textContent = 'LINE通知は未連携です。';
-      }
-      return body.linked === true;
-    } catch (error) {
-      console.warn('Failed to load notification link status:', error);
-      status.textContent = 'LINE通知の連携状態を確認できませんでした。';
-      return false;
-    }
-  }
-
-  function applyLinkedLineProfile(profile) {
-    const displayName = profile?.display_name || '';
-    if (!displayName) {
+  function setNotificationReadiness(friendFlag, message = '') {
+    const status = document.getElementById('notification-readiness-status');
+    const guidance = document.getElementById('notification-readiness-guidance');
+    const button = document.getElementById('notification-enable-button');
+    if (friendFlag === true) {
+      status.className = 'readiness-item is-ready';
+      status.textContent = '✓ LINE通知　受取可能';
+      guidance.hidden = true;
+      button.hidden = true;
       return;
     }
-    const displayNameInput = document.getElementById('display_name');
-    const contactDisplayNameInput = document.getElementById('contact_display_name');
-    if (displayNameInput && !displayNameInput.value.trim()) {
-      displayNameInput.value = displayName;
-    }
-    if (contactDisplayNameInput && !contactDisplayNameInput.value.trim()) {
-      contactDisplayNameInput.value = displayName;
+
+    status.className = `readiness-item ${friendFlag === false ? 'is-error' : 'is-checking'}`;
+    status.textContent = friendFlag === false
+      ? '! LINE通知　受け取れません'
+      : `LINE通知　${message || '確認中'}`;
+    guidance.hidden = friendFlag !== false;
+    button.hidden = friendFlag !== false;
+
+    const notificationRequired = (
+      new URLSearchParams(window.location.search).get('notification_required') === '1'
+    );
+    if (notificationRequired && friendFlag === false) {
+      setTimeout(() => {
+        document.getElementById('notification-readiness').scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+        button.focus();
+      }, 0);
     }
   }
 
-  async function createNotificationLink() {
-    const button = document.getElementById('notification-link-button');
-    const status = document.getElementById('notification-link-status');
-    const instructions = document.getElementById('notification-link-instructions');
-    const messageElement = document.getElementById('notification-link-message');
-    const deepLink = document.getElementById('notification-deep-link');
-    button.disabled = true;
-    button.textContent = '連携メッセージを準備中...';
+  async function syncFriendshipStatus() {
+    if (!window.liff || typeof liff.getFriendship !== 'function') {
+      setNotificationReadiness(null, '確認できません');
+      return null;
+    }
 
     try {
-      const resp = await fetch('/link/notification-code', {
+      const friendship = await liff.getFriendship();
+      const friendFlag = friendship?.friendFlag === true;
+      const resp = await fetch('/link/friendship', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
+          'Content-Type': 'application/json',
           'X-CSRF-Token': window.CSRF_TOKEN || '',
         },
         credentials: 'same-origin',
+        body: JSON.stringify({ friendFlag }),
       });
-      const body = await resp.json();
-      if (!resp.ok || !body.ok) {
-        throw new Error(body.message || 'notification code failed');
+      if (!resp.ok) {
+        throw new Error('friendship sync failed');
       }
-
-      messageElement.textContent = body.message;
-      instructions.hidden = false;
-      status.textContent = `このメッセージは${body.expires_in_minutes}分間有効です。`;
-      deepLink.hidden = !body.deep_link;
-      if (body.deep_link) {
-        deepLink.href = body.deep_link;
-        window.location.assign(body.deep_link);
-      } else {
-        status.textContent += ' メッセージをコピーして公式アカウントへ送信してください。';
-      }
+      setNotificationReadiness(friendFlag);
+      return friendFlag;
     } catch (error) {
-      console.error(error);
-      status.textContent = '連携メッセージを準備できませんでした。時間をおいて再度お試しください。';
-    } finally {
-      button.disabled = false;
-      button.textContent = 'LINE通知を受け取る';
+      console.warn('Failed to confirm LINE friendship:', error);
+      setNotificationReadiness(null, '確認できません');
+      return null;
     }
   }
 
-  async function copyNotificationLinkMessage() {
-    const message = document.getElementById('notification-link-message').textContent;
-    if (!message) {
-      return;
-    }
+  async function requestNotificationAccess() {
+    const button = document.getElementById('notification-enable-button');
+    button.disabled = true;
+    button.textContent = 'LINEを開いています...';
     try {
-      await navigator.clipboard.writeText(message);
-      document.getElementById('notification-link-status').textContent = '連携メッセージをコピーしました。';
+      await liff.requestFriendship();
+      await syncFriendshipStatus();
     } catch (error) {
-      window.prompt('次のメッセージをコピーしてください。', message);
+      console.error(error);
+      setNotificationReadiness(false);
+      window.alert('友だち追加またはブロック解除を確認できませんでした。LINEの公式アカウント画面で状態をご確認ください。');
+    } finally {
+      button.disabled = false;
+      button.textContent = '友だち追加・ブロック解除';
     }
   }
 
   function handleIdentityRejection(reason) {
-    if (currentAuthMode === 'guest') {
-      showUnavailableState(
-        'ログインなしの利用情報を確認できませんでした。Cookieが有効か確認して、画面を再読み込みしてください。'
-      );
-      return;
-    }
     restartLineAuthentication(reason);
   }
 
@@ -980,20 +921,6 @@
     }
   }
 
-  async function getSessionIdentity() {
-    try {
-      const resp = await fetch('/link/session', {
-        headers: { 'Accept': 'application/json' },
-        credentials: 'same-origin',
-      });
-      const body = await resp.json();
-      return resp.ok && body.ok && body.line_user_id ? body : null;
-    } catch (error) {
-      console.warn('Failed to restore user session:', error);
-      return null;
-    }
-  }
-
   async function loadMeProfile(userId, profileDisplayName = '') {
     const forceRefresh = new URLSearchParams(window.location.search).get('refresh') === '1';
     setIdentityFields(userId, currentIdToken);
@@ -1024,16 +951,12 @@
 
     setSubmitEnabled(true);
     if (body.exists) {
-      if (currentAuthMode === 'guest') {
-        document.getElementById('line-connect-button').hidden = true;
-      }
       document.getElementById('form-title').textContent = 'ユーザー情報（更新）';
       fillUserForm(body.user || {});
       fillContactCard(body.contact_card || {}, body.user || {});
       document.getElementById('submit-button').textContent = '更新する';
       setLoading(false, '登録済みの情報を読み込みました。');
     } else {
-      document.getElementById('line-connect-button').hidden = window.LINE_LOGIN_ENABLED !== true;
       clearUserForm();
       if (profileDisplayName) {
         document.getElementById('display_name').value = profileDisplayName;
@@ -1044,14 +967,9 @@
       renderMatchingHistory([]);
       document.getElementById('form-title').textContent = 'ユーザー情報（新規登録）';
       document.getElementById('submit-button').textContent = '登録する';
-      setLoading(false, currentAuthMode === 'guest'
-        ? 'ログインなしで利用できます。必要事項を入力してください。'
-        : 'LINE表示名を取得しました。必要事項を入力してください。');
-      if (currentAuthMode === 'line') {
-        setTimeout(showRegistrationPrompt, 0);
-      }
+      setLoading(false, 'LINE表示名を取得しました。必要事項を入力してください。');
+      setTimeout(showRegistrationPrompt, 0);
     }
-    applyLinkedLineProfile(linkedLineProfile);
     loadMeActivity(userId, forceRefresh);
   }
 
@@ -1124,126 +1042,50 @@
 
     currentAuthMode = 'line';
     currentIdToken = idToken;
-    setGuestMode(false);
+    setIdentityReadiness(true);
     document.getElementById('profile-note').textContent = profile.displayName
       ? `LINE表示名: ${profile.displayName}`
-      : 'LINE連携済み';
+      : 'LINE本人確認済み';
     clearLiffLoginAttempt();
+    await syncFriendshipStatus();
     await loadMeProfile(profile.userId, profile.displayName || '');
     return true;
-  }
-
-  async function startGuestIdentity() {
-    const resp = await fetch('/link/guest', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'X-CSRF-Token': window.CSRF_TOKEN || '',
-      },
-      credentials: 'same-origin',
-    });
-    const body = await resp.json();
-    if (!resp.ok || !body.ok || !body.line_user_id) {
-      throw new Error(body.message || 'guest session failed');
-    }
-
-    currentAuthMode = body.auth_mode || 'guest';
-    currentIdToken = '';
-    setGuestMode(currentAuthMode === 'guest');
-    document.getElementById('profile-note').textContent = currentAuthMode === 'guest'
-      ? 'LINE連携なし・手入力'
-      : 'LINE連携済み';
-    await loadMeProfile(body.line_user_id);
   }
 
   async function initMeFlow() {
     setSubmitEnabled(false);
     setLoading(true, '利用情報を準備しています...');
 
-    if (window.LINE_LOGIN_ENABLED === true && recentlyAttemptedLiffLogin()) {
-      try {
-        if (await connectLineIdentity(false)) {
-          return;
-        }
-      } catch (error) {
-        console.warn('LINE connection callback failed:', error);
-        logLiffDebug('users/me LINE connection callback failed: ' + error.message, getLiffDebugContext());
-      }
-      clearLiffLoginAttempt();
-    }
-
-    const sessionIdentity = await getSessionIdentity();
-    if (sessionIdentity) {
-      currentAuthMode = sessionIdentity.auth_mode || (
-        sessionIdentity.line_user_id.startsWith('anon_') ? 'guest' : 'line'
-      );
-      currentIdToken = '';
-      setGuestMode(currentAuthMode === 'guest');
-      let profileDisplayName = '';
-      if (currentAuthMode === 'line' && window.LINE_LOGIN_ENABLED === true) {
-        try {
-          if (await initializeLiffClient() && liff.isLoggedIn()) {
-            const profile = await getCurrentLineProfile();
-            if (profile.userId === sessionIdentity.line_user_id) {
-              profileDisplayName = profile.displayName || '';
-              const idToken = liff.getIDToken() || '';
-              currentIdToken = hasFreshIdToken(idToken) ? idToken : '';
-            }
-          }
-        } catch (error) {
-          console.warn('Failed to read LINE profile from existing session:', error);
-        }
-      }
-      document.getElementById('profile-note').textContent = currentAuthMode === 'guest'
-        ? 'LINE連携なし・手入力'
-        : (profileDisplayName ? `LINE表示名: ${profileDisplayName}` : 'LINE連携済み');
-      await loadMeProfile(sessionIdentity.line_user_id, profileDisplayName);
+    if (window.LINE_LOGIN_ENABLED !== true) {
+      setIdentityReadiness(false, '設定が必要です');
+      setNotificationReadiness(null, '確認できません');
+      showUnavailableState('LINEログインの設定を確認してください。');
       return;
     }
 
-    if (window.LINE_LOGIN_ENABLED === true) {
-      try {
-        if (await connectLineIdentity(false)) {
-          return;
-        }
-      } catch (error) {
-        console.warn('LINE auto-link failed; using guest mode:', error);
-        logLiffDebug('users/me LINE auto-link failed: ' + error.message, getLiffDebugContext());
-      }
-    }
-
     try {
-      await startGuestIdentity();
+      if (!await connectLineIdentity(true)) {
+        throw new Error('LIFF is not available');
+      }
     } catch (error) {
       console.error(error);
-      showUnavailableState('利用情報を準備できませんでした。画面を再読み込みしてください。');
+      logLiffDebug('users/me LINE authentication failed: ' + error.message, getLiffDebugContext());
+      setIdentityReadiness(false);
+      setNotificationReadiness(null, '確認できません');
+      showUnavailableState('LINEからユーザー情報ページを開き直してください。');
     }
   }
 
   initializePageTabs();
-  document.getElementById('notification-link-button').addEventListener('click', createNotificationLink);
-  document.getElementById('notification-copy-button').addEventListener('click', copyNotificationLinkMessage);
-  document.getElementById('notification-check-button').addEventListener('click', refreshNotificationStatus);
-  document.getElementById('line-connect-button').addEventListener('click', async (event) => {
-    const button = event.currentTarget;
-    button.disabled = true;
-    try {
-      if (!await connectLineIdentity(true)) {
-        window.alert('この環境ではLINE連携を開始できません。ログインなしのまま利用できます。');
-        setLoading(false, 'ログインなしで利用中です。');
-      }
-    } catch (error) {
-      console.error(error);
-      window.alert('LINE連携を完了できませんでした。ログインなしのまま利用できます。');
-      setLoading(false, 'LINE連携を確認できませんでした。');
-    } finally {
-      button.disabled = false;
+  document.getElementById('notification-enable-button').addEventListener('click', requestNotificationAccess);
+  window.addEventListener('focus', () => {
+    if (currentAuthMode === 'line' && liffInitialized) {
+      syncFriendshipStatus();
     }
   });
-  window.addEventListener('focus', refreshNotificationStatus);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      refreshNotificationStatus();
+    if (document.visibilityState === 'visible' && currentAuthMode === 'line' && liffInitialized) {
+      syncFriendshipStatus();
     }
   });
   initMeFlow();

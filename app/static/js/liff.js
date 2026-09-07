@@ -252,6 +252,41 @@ async function startGuestSession() {
   }
 }
 
+async function syncLineFriendshipStatus() {
+  if (!window.liff || typeof liff.getFriendship !== "function") {
+    window.LINE_NOTIFICATION_READY = null;
+    return null;
+  }
+
+  try {
+    const friendship = await liff.getFriendship();
+    const friendFlag = friendship?.friendFlag === true;
+    const response = await fetch("/link/friendship", {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "X-CSRF-Token": window.CSRF_TOKEN || "",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({ friendFlag }),
+    });
+    if (!response.ok) {
+      throw new Error("friendship sync failed");
+    }
+
+    window.LINE_NOTIFICATION_READY = friendFlag;
+    window.dispatchEvent(new CustomEvent("line-friendship-updated", {
+      detail: { friend: friendFlag },
+    }));
+    return friendFlag;
+  } catch (error) {
+    console.warn("Failed to confirm LINE friendship:", error);
+    window.LINE_NOTIFICATION_READY = null;
+    return null;
+  }
+}
+
 function installLineAuthSubmitGuard() {
   document.addEventListener("submit", (event) => {
     const form = event.target;
@@ -483,6 +518,7 @@ async function initializeLiff() {
 
     window.LINE_SESSION_AUTHENTICATED = true;
     clearLiffLoginAttempt();
+    await syncLineFriendshipStatus();
     if (!await confirmUserRegistration(profile.userId)) {
       return;
     }

@@ -6,7 +6,9 @@ import unicodedata
 
 from flask import current_app
 from sqlalchemy import (
+    Boolean,
     Column,
+    delete,
     Index,
     MetaData,
     String,
@@ -177,6 +179,14 @@ line_notification_link_codes = Table(
     Column("created_at", String(32), nullable=False, default=""),
 )
 
+line_friendships = Table(
+    "line_friendships",
+    metadata,
+    Column("line_user_id", String(255), primary_key=True),
+    Column("is_friend", Boolean, nullable=False, default=False),
+    Column("updated_at", String(32), nullable=False, default=""),
+)
+
 Index("ix_matching_history_member_created", matching_history.c.provider_user_id, matching_history.c.created_at)
 Index("ix_matching_history_requester_created", matching_history.c.requester_user_id, matching_history.c.created_at)
 
@@ -238,6 +248,7 @@ def init_database(app):
             tables=[
                 line_notification_links,
                 line_notification_link_codes,
+                line_friendships,
             ],
             checkfirst=True,
         )
@@ -428,10 +439,221 @@ def get_notification_line_user_id(app_user_id):
     if not app_user_id:
         return ""
     if not app_user_id.startswith("anon_"):
+        if app_user_id.startswith("U"):
+            friendship = get_line_friendship(app_user_id)
+            if not friendship or not friendship.get("is_friend"):
+                return ""
         return app_user_id
 
     link = get_line_notification_link(app_user_id)
     return link.get("line_user_id", "") if link else ""
+
+
+def set_line_friendship(line_user_id, is_friend):
+    if not line_user_id or line_user_id.startswith("anon_"):
+        return False
+
+    now = _now()
+    with _engine().begin() as conn:
+        existing = conn.execute(
+            select(line_friendships.c.line_user_id).where(
+                line_friendships.c.line_user_id == line_user_id
+            )
+        ).first()
+        if existing:
+            conn.execute(
+                update(line_friendships)
+                .where(line_friendships.c.line_user_id == line_user_id)
+                .values(is_friend=bool(is_friend), updated_at=now)
+            )
+        else:
+            conn.execute(
+                line_friendships.insert().values(
+                    line_user_id=line_user_id,
+                    is_friend=bool(is_friend),
+                    updated_at=now,
+                )
+            )
+    return True
+
+
+def get_line_friendship(line_user_id):
+    if not line_user_id:
+        return None
+    return _select_one(
+        line_friendships,
+        line_friendships.c.line_user_id == line_user_id,
+    )
+
+
+def can_receive_line_notifications(app_user_id):
+    if not app_user_id:
+        return False
+    if app_user_id.startswith("anon_"):
+        return bool(get_notification_line_user_id(app_user_id))
+    if not app_user_id.startswith("U"):
+        return True
+
+    friendship = get_line_friendship(app_user_id)
+    return bool(friendship and friendship.get("is_friend"))
+
+
+def migrate_guest_identity(guest_user_id, line_user_id):
+    """Move data owned by a legacy guest session to a verified LINE user ID."""
+    if (
+        not guest_user_id
+        or not guest_user_id.startswith("anon_")
+        or not line_user_id
+        or guest_user_id == line_user_id
+    ):
+        return False
+
+    now = _now()
+    migrated = False
+    with _engine().begin() as conn:
+        source_user = _row_to_dict(
+            conn.execute(
+                select(users).where(users.c.line_user_id == guest_user_id)
+            ).first()
+        )
+        target_user = _row_to_dict(
+            conn.execute(
+                select(users).where(users.c.line_user_id == line_user_id)
+            ).first()
+        )
+
+        if source_user and target_user:
+            merged_user = {
+                field: target_user.get(field) or source_user.get(field) or ""
+                for field in (
+                    "display_name",
+                    "business_name",
+                    "user_category",
+                    "area",
+                    "address",
+                    "transport_info",
+                )
+            }
+            merged_user.update(
+                user_id=line_user_id,
+                userid=line_user_id,
+                updated_at=now,
+            )
+            conn.execute(
+                update(users)
+                .where(users.c.line_user_id == line_user_id)
+                .values(**merged_user)
+            )
+            conn.execute(delete(users).where(users.c.line_user_id == guest_user_id))
+            migrated = True
+        elif source_user:
+            conn.execute(
+                update(users)
+                .where(users.c.line_user_id == guest_user_id)
+                .values(
+                    line_user_id=line_user_id,
+                    user_id=line_user_id,
+                    userid=line_user_id,
+                    updated_at=now,
+                )
+            )
+            migrated = True
+
+        source_card = _row_to_dict(
+            conn.execute(
+                select(contact_cards).where(
+                    or_(
+                        contact_cards.c.line_user_id == guest_user_id,
+                        contact_cards.c.user_id == guest_user_id,
+                    )
+                )
+            ).first()
+        )
+        target_card = _row_to_dict(
+            conn.execute(
+                select(contact_cards).where(
+                    or_(
+                        contact_cards.c.line_user_id == line_user_id,
+                        contact_cards.c.user_id == line_user_id,
+                    )
+                )
+            ).first()
+        )
+        if source_card and target_card:
+            merged_card = {
+                field: target_card.get(field) or source_card.get(field) or ""
+                for field in (
+                    "display_name",
+                    "contact_method",
+                    "contact_value",
+                    "available_time",
+                    "message",
+                    "is_active",
+                )
+            }
+            merged_card.update(
+                user_id=line_user_id,
+                line_user_id=line_user_id,
+                updated_at=now,
+            )
+            conn.execute(
+                update(contact_cards)
+                .where(
+                    contact_cards.c.contact_card_id
+                    == target_card["contact_card_id"]
+                )
+                .values(**merged_card)
+            )
+            conn.execute(
+                delete(contact_cards).where(
+                    contact_cards.c.contact_card_id
+                    == source_card["contact_card_id"]
+                )
+            )
+            migrated = True
+        elif source_card:
+            conn.execute(
+                update(contact_cards)
+                .where(
+                    contact_cards.c.contact_card_id
+                    == source_card["contact_card_id"]
+                )
+                .values(
+                    user_id=line_user_id,
+                    line_user_id=line_user_id,
+                    updated_at=now,
+                )
+            )
+            migrated = True
+
+        ownership_updates = (
+            (materials, materials.c.line_user_id),
+            (demolition_properties, demolition_properties.c.line_user_id),
+            (matching_history, matching_history.c.provider_user_id),
+            (matching_history, matching_history.c.requester_user_id),
+            (contact_share_logs, contact_share_logs.c.from_user_id),
+            (contact_share_logs, contact_share_logs.c.to_user_id),
+        )
+        for table, column in ownership_updates:
+            result = conn.execute(
+                update(table)
+                .where(column == guest_user_id)
+                .values({column.name: line_user_id})
+            )
+            migrated = migrated or result.rowcount > 0
+
+        conn.execute(
+            delete(line_notification_links).where(
+                line_notification_links.c.app_user_id == guest_user_id
+            )
+        )
+        conn.execute(
+            delete(line_notification_link_codes).where(
+                line_notification_link_codes.c.app_user_id == guest_user_id
+            )
+        )
+
+    return migrated
 
 
 def append_material(data):

@@ -20,6 +20,22 @@
 
 LINE通知に失敗した場合も希望・状態変更などの履歴は保存され、画面には通知失敗が明示されます。
 
+## ユーザー識別とLINE通知
+
+通常利用ではLIFFのIDトークンをサーバーで検証し、検証結果のLINEユーザーIDをユーザー情報、投稿、マッチング履歴、通知先の共通IDとして使用します。
+
+- LINE LoginチャンネルとMessaging APIチャンネルは同じProviderに配置します。
+- LINE Loginチャンネルには対象のLINE公式アカウントを連携します。
+- LIFFには`openid`と`profile`スコープを設定します。
+- 公式アカウントの友だち状態はLIFF起動時とfollow/unfollow Webhookで同期します。
+- 旧ゲストセッションのデータは、同じブラウザで最初にLINE認証したときにLINEユーザーIDへ移行します。
+
+本番環境では次を設定します。
+
+```env
+LINE_LOGIN_ENABLED=true
+```
+
 ## 起動方法
 
 ```bash

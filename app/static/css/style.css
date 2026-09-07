@@ -307,6 +307,53 @@ body {
   display: inline-block;
 }
 
+.readiness-card {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 16px;
+  border: 1px solid #d8d0bd;
+  border-radius: 12px;
+  background: #fffdf7;
+}
+
+.readiness-card > strong {
+  color: #2f2a23;
+  font-size: 17px;
+}
+
+.readiness-list {
+  display: grid;
+  gap: 8px;
+}
+
+.readiness-item {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.readiness-item.is-ready {
+  background: #e7f0dc;
+  color: #36552f;
+}
+
+.readiness-item.is-error {
+  background: #fff0e8;
+  color: #8a3f18;
+}
+
+.readiness-item.is-checking {
+  background: #f2efe7;
+  color: #5d5548;
+}
+
+.readiness-card > button {
+  width: fit-content;
+  margin: 0;
+}
+
 .guest-mode-notice {
   display: grid;
   gap: 14px;

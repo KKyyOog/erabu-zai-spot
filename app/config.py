@@ -19,7 +19,7 @@ class Config:
     LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
     LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
     LINE_CHANNEL_ID = os.getenv("LINE_CHANNEL_ID", "")
-    LINE_LOGIN_ENABLED = os.getenv("LINE_LOGIN_ENABLED", "false").lower() in (
+    LINE_LOGIN_ENABLED = os.getenv("LINE_LOGIN_ENABLED", "true").lower() in (
         "1",
         "true",
         "yes",

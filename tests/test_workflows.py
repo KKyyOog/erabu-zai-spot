@@ -95,6 +95,30 @@ class WorkflowTestCase(unittest.TestCase):
                 }
             ],
         }
+        return self.post_signed_line_webhook(payload)
+
+    def post_line_friendship_webhook(self, line_user_id, event_type):
+        event = {
+            "type": event_type,
+            "webhookEventId": f"01TEST{event_type.upper()}000000000000",
+            "deliveryContext": {"isRedelivery": False},
+            "timestamp": 1750000000000,
+            "source": {
+                "type": "user",
+                "userId": line_user_id,
+            },
+            "mode": "active",
+        }
+        if event_type == "follow":
+            event["replyToken"] = "test-follow-reply-token"
+            event["follow"] = {"isUnblocked": False}
+        payload = {
+            "destination": "U00000000000000000000000000000000",
+            "events": [event],
+        }
+        return self.post_signed_line_webhook(payload)
+
+    def post_signed_line_webhook(self, payload):
         body = json.dumps(
             payload,
             ensure_ascii=False,
@@ -129,6 +153,7 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertEqual(
             table_names,
             {
+                "line_friendships",
                 "line_notification_link_codes",
                 "line_notification_links",
             },
@@ -262,6 +287,29 @@ class WorkflowTestCase(unittest.TestCase):
             headers={"X-Line-Signature": "invalid"},
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_follow_and_unfollow_webhooks_update_notification_status(self):
+        line_user_id = "U33333333333333333333333333333333"
+
+        follow_response = self.post_line_friendship_webhook(
+            line_user_id,
+            "follow",
+        )
+        self.assertEqual(follow_response.status_code, 200)
+        with self.app.app_context():
+            self.assertTrue(
+                db_service.can_receive_line_notifications(line_user_id)
+            )
+
+        unfollow_response = self.post_line_friendship_webhook(
+            line_user_id,
+            "unfollow",
+        )
+        self.assertEqual(unfollow_response.status_code, 200)
+        with self.app.app_context():
+            self.assertFalse(
+                db_service.can_receive_line_notifications(line_user_id)
+            )
 
     def test_guest_session_is_stable_and_does_not_replace_line_session(self):
         guest = self.start_guest_session()
@@ -403,17 +451,16 @@ class WorkflowTestCase(unittest.TestCase):
 
         self.assertEqual(material_response.status_code, 302)
         self.assertIn(
-            "/users/me?notification_link_required=1#notification-link-button",
+            "/users/me?notification_required=1#notification-readiness",
             material_response.headers["Location"],
         )
         self.assertEqual(viewing_response.status_code, 200)
         page = viewing_response.get_data(as_text=True)
         self.assertIn(
-            "先にユーザー情報ページの"
-            "「LINE通知を受け取る」を押して通知連携してください。",
+            "LINE通知を受け取れる状態にしてください。",
             page,
         )
-        self.assertIn('id="interest-notification-link-guidance"', page)
+        self.assertIn('id="notification-readiness"', page)
         send.assert_not_called()
         with self.app.app_context():
             history = db_service.get_matching_history_by_user(guest_user_id)
@@ -464,6 +511,48 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["material_id"], material_id)
 
+    def test_line_user_must_be_a_friend_before_sending_interest(self):
+        line_user_id = "U44444444444444444444444444444444"
+        self.add_user("friendship-provider", "提供者")
+        with self.app.app_context():
+            material_id = db_service.append_material(
+                {
+                    "line_user_id": "friendship-provider",
+                    "title": "友だち確認用の材",
+                    "material_type": "木材",
+                    "location": "和泊町",
+                }
+            )
+        self.authenticate(line_user_id)
+
+        blocked = self.post_form(
+            "/materials/interest",
+            {
+                "line_user_id": line_user_id,
+                "material_id": material_id,
+            },
+        )
+        self.assertIn(
+            "/users/me?notification_required=1#notification-readiness",
+            blocked.headers["Location"],
+        )
+
+        with self.app.app_context():
+            db_service.set_line_friendship(line_user_id, True)
+        with patch(
+            "app.routes.materials.send_line_message",
+            return_value=True,
+        ) as send:
+            allowed = self.post_form(
+                "/materials/interest",
+                {
+                    "line_user_id": line_user_id,
+                    "material_id": material_id,
+                },
+            )
+        self.assertEqual(allowed.status_code, 302)
+        send.assert_called_once()
+
     def test_guest_session_cannot_access_another_user(self):
         self.add_user("other-user", "別の利用者")
         self.start_guest_session()
@@ -475,19 +564,103 @@ class WorkflowTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
-    def test_my_page_exposes_guest_mode_without_removing_line_linking(self):
+    def test_my_page_uses_line_identity_and_simple_readiness_status(self):
+        self.app.config["LINE_LOGIN_ENABLED"] = True
         page = self.client.get("/users/me").get_data(as_text=True)
-        self.assertIn("ログインなしで利用中です", page)
-        self.assertIn("LINE通知を受け取る", page)
-        self.assertIn("LINEログインで自動入力する", page)
-        self.assertIn("startGuestIdentity", page)
+        self.assertIn("LINE本人確認", page)
+        self.assertIn("LINE通知", page)
+        self.assertIn("友だち追加・ブロック解除", page)
         self.assertIn("connectLineIdentity", page)
-        self.assertIn("applyLinkedLineProfile", page)
-        self.assertIn("window.LINE_LOGIN_ENABLED = false", page)
-        self.assertNotIn(
+        self.assertIn("syncFriendshipStatus", page)
+        self.assertIn("window.LINE_LOGIN_ENABLED = true", page)
+        self.assertNotIn("通知連携コード", page)
+        self.assertIn(
             "https://static.line-scdn.net/liff/edge/2/sdk.js",
             page,
         )
+
+    def test_line_login_migrates_existing_guest_profile_and_posts(self):
+        guest_user_id = self.start_guest_session()["line_user_id"]
+        with self.app.app_context():
+            db_service.append_user(
+                {
+                    "line_user_id": guest_user_id,
+                    "display_name": "移行前ユーザー",
+                    "address": "和泊町",
+                    "transport_info": "軽トラック",
+                }
+            )
+            db_service.upsert_contact_card(
+                guest_user_id,
+                {
+                    "contact_display_name": "移行連絡先",
+                    "contact_method": "電話",
+                    "contact_value": "090-0000-0000",
+                },
+            )
+            db_service.append_material(
+                {
+                    "line_user_id": guest_user_id,
+                    "title": "移行対象の材",
+                    "material_type": "木材",
+                    "location": "和泊町",
+                }
+            )
+
+        self.app.config["LINE_LOGIN_ENABLED"] = True
+        line_user_id = "U11111111111111111111111111111111"
+        with patch(
+            "app.routes.link.verify_id_token",
+            return_value={"sub": line_user_id},
+        ):
+            response = self.client.post(
+                "/link/liff",
+                json={"userId": line_user_id, "idToken": "test-token"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["migrated_guest_data"])
+        with self.app.app_context():
+            self.assertIsNone(
+                db_service.get_user_by_line_user_id(guest_user_id)
+            )
+            migrated_user = db_service.get_user_by_line_user_id(line_user_id)
+            self.assertEqual(migrated_user["display_name"], "移行前ユーザー")
+            self.assertEqual(
+                db_service.get_contact_card_by_user(line_user_id)["contact_value"],
+                "090-0000-0000",
+            )
+            self.assertEqual(
+                db_service.get_materials_by_line_user_id(line_user_id)[0]["title"],
+                "移行対象の材",
+            )
+
+    def test_line_mode_disables_new_guest_sessions(self):
+        self.app.config["LINE_LOGIN_ENABLED"] = True
+        with self.client.session_transaction() as session:
+            session["_csrf_token"] = self.csrf_token
+
+        response = self.post_form("/link/guest", {})
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json()["code"], "line_login_required")
+
+    def test_authenticated_line_user_can_sync_friendship_status(self):
+        line_user_id = "U22222222222222222222222222222222"
+        self.authenticate(line_user_id)
+
+        response = self.client.post(
+            "/link/friendship",
+            json={"friendFlag": True},
+            headers={"X-CSRF-Token": self.csrf_token},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["friend"])
+        with self.app.app_context():
+            self.assertTrue(
+                db_service.can_receive_line_notifications(line_user_id)
+            )
 
     def test_registration_forms_use_photo_picker_without_url_inputs(self):
         material_page = self.client.get("/materials/register/material").get_data(

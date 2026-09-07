@@ -5,9 +5,17 @@ from flask import Blueprint, request, abort, current_app  # type: ignore[import]
 
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhook import WebhookHandler
-from linebot.v3.webhooks import MessageEvent, TextMessageContent
+from linebot.v3.webhooks import (
+    FollowEvent,
+    MessageEvent,
+    TextMessageContent,
+    UnfollowEvent,
+)
 
-from app.services.db_service import consume_line_notification_link_code
+from app.services.db_service import (
+    consume_line_notification_link_code,
+    set_line_friendship,
+)
 from app.services.line_service import reply_line_message
 
 callback_bp = Blueprint("callback", __name__)
@@ -50,6 +58,28 @@ def callback():
     body = request.get_data(as_text=True)
 
     handler = WebhookHandler(current_app.config["LINE_CHANNEL_SECRET"])
+
+    @handler.add(FollowEvent)
+    def handle_follow(event):
+        source_user_id = (
+            getattr(event.source, "user_id", "") or ""
+        ).strip()
+        if source_user_id:
+            set_line_friendship(source_user_id, True)
+            current_app.logger.info(
+                "[LINE CALLBACK] friendship enabled"
+            )
+
+    @handler.add(UnfollowEvent)
+    def handle_unfollow(event):
+        source_user_id = (
+            getattr(event.source, "user_id", "") or ""
+        ).strip()
+        if source_user_id:
+            set_line_friendship(source_user_id, False)
+            current_app.logger.info(
+                "[LINE CALLBACK] friendship disabled"
+            )
 
     @handler.add(MessageEvent, message=TextMessageContent)
     def handle_text_message(event):

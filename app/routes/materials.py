@@ -13,6 +13,7 @@ from app.services.db_service import (
     POST_TYPE_REQUEST,
     append_material,
     append_demolition_property,
+    can_receive_line_notifications,
     close_material,
     delete_demolition_property,
     get_materials,
@@ -476,22 +477,19 @@ def _send_provider_notification(provider_line_user_id, message, log_context):
         return False
 
 
-def _redirect_unlinked_guest_to_notification_setup(line_user_id):
-    if (
-        not line_user_id.startswith("anon_")
-        or get_notification_line_user_id(line_user_id)
-    ):
+def _redirect_unavailable_notifications_to_user_page(line_user_id):
+    if can_receive_line_notifications(line_user_id):
         return None
 
     flash(
-        "「欲しい」「見学したい」を送るには、先にユーザー情報ページの"
-        "「LINE通知を受け取る」を押して通知連携してください。"
+        "「欲しい」「見学したい」を送るには、LINE通知を受け取れる状態にしてください。"
+        "公式アカウントを友だち追加した状態でユーザー情報ページを開き直してください。"
     )
     return redirect(
         url_for(
             "users.me",
-            notification_link_required="1",
-            _anchor="notification-link-button",
+            notification_required="1",
+            _anchor="notification-readiness",
         )
     )
 
@@ -1099,7 +1097,7 @@ def interest():
         return redirect(url_for("materials.list_materials"))
 
     notification_setup_redirect = (
-        _redirect_unlinked_guest_to_notification_setup(
+        _redirect_unavailable_notifications_to_user_page(
             requester_line_user_id
         )
     )
@@ -1210,7 +1208,7 @@ def visit_interest():
         return redirect(url_for("materials.list_materials"))
 
     notification_setup_redirect = (
-        _redirect_unlinked_guest_to_notification_setup(
+        _redirect_unavailable_notifications_to_user_page(
             requester_line_user_id
         )
     )
