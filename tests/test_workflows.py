@@ -595,11 +595,13 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertIn("liff.sdk_load_timeout", page)
         self.assertIn("window.waitForLiffSdk", page)
         self.assertIn('window.LIFF_ID = "test-liff-id"', page)
+        self.assertIn('liffInitialized && window.liff && liff.isInClient', page)
         liff_script_response = self.client.get("/static/js/liff.js")
         liff_script = liff_script_response.get_data(as_text=True)
         liff_script_response.close()
         self.assertIn('window.LIFF_ID.trim()', liff_script)
         self.assertIn('"liff_id_missing"', liff_script)
+        self.assertIn('liffInitialized && window.liff && liff.isInClient', liff_script)
         self.assertNotIn("通知連携コード", page)
         self.assertIn(
             "https://static.line-scdn.net/liff/edge/2/sdk.js",

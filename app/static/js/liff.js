@@ -12,6 +12,7 @@ const LIFF_TRACE_ID = window.LIFF_TRACE_ID || (
   window.crypto?.randomUUID?.() || `liff-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 );
 window.LIFF_TRACE_ID = LIFF_TRACE_ID;
+let liffInitialized = false;
 
 function liffErrorDetails(error) {
   return {
@@ -97,8 +98,9 @@ function getLiffDebugContext() {
     loginEnabled: window.LINE_LOGIN_ENABLED === true,
     requireLogin: window.REQUIRE_LIFF_LOGIN === true,
     hasLiff: Boolean(window.liff),
-    inClient: Boolean(window.liff && liff.isInClient && liff.isInClient()),
-    isLoggedIn: Boolean(window.liff && liff.isLoggedIn && liff.isLoggedIn()),
+    inClient: Boolean(liffInitialized && window.liff && liff.isInClient && liff.isInClient()),
+    isLoggedIn: Boolean(liffInitialized && window.liff && liff.isLoggedIn && liff.isLoggedIn()),
+    initialized: liffInitialized,
     online: navigator.onLine,
     visibilityState: document.visibilityState,
   };
@@ -481,6 +483,7 @@ async function initializeLiff() {
 
   try {
     await liff.init({ liffId });
+    liffInitialized = true;
     console.log("LIFF initialized successfully.");
     await logToServer("liff.initialization_succeeded", {
       ...getLiffDebugContext(),
