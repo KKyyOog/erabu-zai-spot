@@ -307,6 +307,17 @@ body {
   display: inline-block;
 }
 
+body.has-open-dialog {
+  overflow: hidden;
+}
+
+.hint {
+  margin: 6px 0;
+  color: #766e60;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -622,6 +633,51 @@ input[readonly] {
   font-weight: 700;
 }
 
+.location-choice__options {
+  display: grid;
+  gap: 8px;
+}
+
+.location-choice__option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #d8d0bd;
+  border-radius: 10px;
+  background: #fffdf7;
+  cursor: pointer;
+}
+
+.location-choice__option:has(input:checked) {
+  border-color: #6f965f;
+  background: #f2f8ee;
+}
+
+.location-choice__option input {
+  width: auto;
+  flex: 0 0 auto;
+  margin: 3px 0 0;
+}
+
+.location-choice__option span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.location-choice__option small {
+  color: #766e60;
+  font-size: 12px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.conditional-location[hidden] {
+  display: none;
+}
+
 .star-rating {
   display: flex;
   flex-wrap: wrap;
@@ -778,6 +834,10 @@ button:disabled {
   background: #fffdf7;
 }
 
+.size-builder > .hint {
+  margin-top: 0;
+}
+
 .size-builder legend {
   padding: 0 6px;
 }
@@ -829,7 +889,10 @@ button:disabled {
 }
 
 .size-builder__preview {
-  margin-bottom: 0;
+  min-height: 1.45em;
+  margin: 10px 0 0;
+  color: #466642;
+  font-weight: 700;
 }
 
 .section-heading {
@@ -917,18 +980,18 @@ td {
 }
 
 .listing-grid {
-  column-count: 2;
-  column-gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
 }
 
 .listing-card {
   position: relative;
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   width: 100%;
-  margin: 0 0 12px;
-  break-inside: avoid;
-  page-break-inside: avoid;
+  min-width: 0;
   overflow: hidden;
   background: white;
   border: 1px solid #ded7c8;
@@ -954,7 +1017,7 @@ td {
   position: relative;
   display: grid;
   place-items: center;
-  height: 180px;
+  height: clamp(120px, 28vw, 260px);
   flex: 0 0 auto;
   overflow: hidden;
   background: #ebe6da;
@@ -1025,7 +1088,12 @@ td {
 }
 
 .listing-card__body h3 {
+  display: -webkit-box;
+  min-height: 2.7em;
+  overflow: hidden;
   font-size: 15px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .listing-card__topline,
@@ -1149,6 +1217,7 @@ td {
 
 .listing-card__detail-trigger {
   width: 100%;
+  margin-top: 6px;
 }
 
 .button-link.secondary {
@@ -1302,6 +1371,27 @@ td {
   background: transparent;
 }
 
+.listing-detail-modal[open] {
+  animation: dialog-fade-in 0.18s ease-out;
+}
+
+@keyframes dialog-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .listing-detail-modal[open] {
+    animation: none;
+  }
+}
+
 .listing-detail-modal::backdrop {
   background: rgba(31, 26, 19, 0.58);
   backdrop-filter: blur(4px);
@@ -1333,6 +1423,7 @@ td {
   color: #2f2a23;
   font-size: 24px;
   line-height: 1;
+  z-index: 2;
 }
 
 .listing-detail-modal__media {
@@ -1399,15 +1490,11 @@ td {
   }
 
   .listing-grid {
-    column-gap: 18px;
+    gap: 18px;
   }
 
   .listing-card__image {
-    height: 360px;
-  }
-
-  .listing-card {
-    margin-bottom: 18px;
+    height: 260px;
   }
 
   .listing-card__body {
@@ -1426,6 +1513,15 @@ td {
 
   .listing-card .summary-list div {
     grid-template-columns: 68px 1fr;
+  }
+
+  .listing-detail-modal__shell {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    align-items: start;
+  }
+
+  .listing-detail-modal__content {
+    padding-right: 42px;
   }
 
   .button-link.compact,
@@ -1466,16 +1562,38 @@ td {
   }
 
   .listing-grid {
-    column-count: 1;
-    column-gap: 10px;
-  }
-
-  .listing-card {
-    margin-bottom: 10px;
+    gap: 10px;
   }
 
   .listing-card__image {
-    height: 220px;
+    height: 120px;
+  }
+
+  .listing-card__body {
+    gap: 5px;
+    padding: 8px;
+  }
+
+  .listing-card__body h3 {
+    font-size: 14px;
+  }
+
+  .listing-card .entry-badge {
+    padding: 3px 7px;
+    font-size: 11px;
+  }
+
+  .listing-card .summary-list {
+    font-size: 12px;
+  }
+
+  .listing-card .summary-list div {
+    grid-template-columns: 42px 1fr;
+    gap: 5px;
+  }
+
+  .listing-card .summary-list dt {
+    font-size: 11px;
   }
 
   .listing-card__topline {
@@ -1496,6 +1614,12 @@ td {
     min-height: 40px;
     padding: 8px 6px;
     font-size: 13px;
+  }
+
+  .listing-card__detail-trigger {
+    min-height: 38px;
+    padding: 7px 5px;
+    font-size: 12px;
   }
 
   .listing-detail-modal {

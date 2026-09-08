@@ -6,6 +6,7 @@ import os
 import time
 import unittest
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import patch
 
 from sqlalchemy import create_engine, event, inspect, text
@@ -1189,6 +1190,59 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertEqual(records[0]["title"], "木材があります")
         self.assertEqual(records[0]["image_urls"], uploaded_urls)
         self.assertTrue(records[0]["expires_at"])
+
+    def test_offer_can_use_the_registered_profile_location(self):
+        self.add_user("profile-location-owner", "提供者")
+        self.authenticate("profile-location-owner")
+
+        with patch(
+            "app.routes.materials._upload_images",
+            return_value=["https://res.cloudinary.com/test-cloud/image/upload/v1/profile-location.jpg"],
+        ):
+            response = self.post_form(
+                "/materials/submit",
+                {
+                    "line_user_id": "profile-location-owner",
+                    "material_type": "木材",
+                    "quantity_level": "少量",
+                    "location_source": "profile",
+                    "image_files": [(BytesIO(b"image"), "image.jpg")],
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            records = db_service.get_materials_by_line_user_id("profile-location-owner")
+        self.assertEqual(records[0]["location"], "和泊町")
+
+    def test_list_and_registration_pages_expose_compact_popup_and_building_inputs(self):
+        with self.app.app_context():
+            db_service.append_material(
+                {
+                    "line_user_id": "popup-owner",
+                    "title": "ポップアップ確認用",
+                    "post_type": "offer",
+                    "material_type": "木材",
+                    "quantity_level": "少量",
+                    "location": "和泊町",
+                }
+            )
+
+        list_page = self.client.get("/materials/list").get_data(as_text=True)
+        material_page = self.client.get("/materials/register/material").get_data(as_text=True)
+        request_page = self.client.get("/materials/register/request").get_data(as_text=True)
+        stylesheet = Path(
+            self.app.root_path, "static", "css", "style.css"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("<dialog class=\"listing-detail-modal\"", list_page)
+        self.assertIn("data-open-dialog", list_page)
+        self.assertIn("aria-label=\"詳細を閉じる\"", list_page)
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", stylesheet)
+        self.assertIn("マイページの拠点情報を使う", material_page)
+        self.assertIn("別の場所を指定する", material_page)
+        self.assertIn("板材（L×W×t）", material_page)
+        self.assertIn("柱・角材（L×□）", request_page)
 
     def test_offer_requires_at_least_one_photo(self):
         self.add_user("offer-without-photo", "提供者")

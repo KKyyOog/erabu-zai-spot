@@ -4,7 +4,7 @@
 <section class="card post-form-card request-form-card">
   <p class="entry-badge request">材を探しています</p>
   <h2>探している材を知らせる</h2>
-  <p class="hint">用途や必要な形が伝わる程度で大丈夫です。参考写真はなくても投稿できます。</p>
+  <p class="hint">用途や必要な形が分かる程度で大丈夫です。</p>
 
   <div id="user-registration-check-status" class="registration-skeleton skeleton-screen" role="status">
     <span class="visually-hidden">ユーザー情報を確認しています</span>
@@ -49,8 +49,8 @@
         <label>希望数量</label>
         <input type="text" name="quantity" placeholder="例：5本ほど">
 
-        <label>希望寸法</label>
-        <input type="text" name="size" placeholder="例：約2m、幅90mm程度">
+        {% set size_label = '希望寸法' %}
+        {% include 'materials/_size_builder.html' %}
 
         <label>使用目的</label>
         <select name="usage_purpose">
@@ -62,12 +62,12 @@
 
         <label>参考写真（任意・複数選択可）</label>
         <input type="file" name="image_files" accept="image/*" multiple data-max-files="6">
-        <p class="hint">探している形や使用例の写真を6枚まで添付できます。</p>
+        <p class="hint">使用例の写真を6枚まで。</p>
       </div>
     </details>
 
     <button type="submit">この内容で投稿する</button>
-    <p class="hint">投稿は30日後に通常一覧から自動的に非表示になります。</p>
+    <p class="hint">掲載期間は30日です。</p>
   </form>
 </section>
 
@@ -87,5 +87,6 @@
     });
   });
 </script>
+<script src="{{ url_for('static', filename='js/size_builder.js', v='20260908-building-format') }}"></script>
 <script src="{{ url_for('static', filename='js/liff.js', v='20260908-sdk-defer') }}"></script>
 {% endblock %}

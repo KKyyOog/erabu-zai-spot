@@ -170,6 +170,12 @@ function setUserRegistrationState(state) {
   });
 }
 
+function notifyUserRegistrationConfirmed(userId) {
+  window.dispatchEvent(new CustomEvent("user-registration-confirmed", {
+    detail: { userId },
+  }));
+}
+
 async function confirmUserRegistration(userId, idToken = "") {
   if (window.REQUIRE_USER_REGISTRATION !== true) {
     return true;
@@ -177,6 +183,7 @@ async function confirmUserRegistration(userId, idToken = "") {
 
   if (window.getCachedUserRegistration?.(userId) === true) {
     setUserRegistrationState("registered");
+    notifyUserRegistrationConfirmed(userId);
     logToServer("user_registration.cache_hit", { registered: true });
     return true;
   }
@@ -199,6 +206,7 @@ async function confirmUserRegistration(userId, idToken = "") {
     if (response.ok && body.exists === true) {
       window.cacheUserRegistration?.(userId);
       setUserRegistrationState("registered");
+      notifyUserRegistrationConfirmed(userId);
       logToServer("user_registration.loaded", {
         registered: true,
         serverCacheHit: body.cached === true,

@@ -4,7 +4,7 @@
 <section class="card post-form-card offer-form-card">
   <p class="entry-badge offer">材があります</p>
   <h2>余っている材を知らせる</h2>
-  <p class="hint">寸法を測ったり本数を数えたりしなくても投稿できます。</p>
+  <p class="hint">写真・材種・量・受け渡し場所だけで投稿できます。</p>
 
   <div id="user-registration-check-status" class="registration-skeleton skeleton-screen" role="status">
     <span class="visually-hidden">ユーザー情報を確認しています</span>
@@ -26,7 +26,7 @@
 
     <label>写真を撮る・ライブラリから選ぶ *</label>
     <input type="file" name="image_files" accept="image/*" multiple required data-max-files="6">
-    <p class="hint">現状が分かる写真を1〜6枚選んでください。</p>
+    <p class="hint">現状が分かる写真を1〜6枚。</p>
 
     <label>材の種類 *</label>
     <select name="material_type" required>
@@ -44,19 +44,33 @@
       {% endfor %}
     </select>
 
-    <label>受け渡しエリア *</label>
-    <select name="location" id="location" required>
-      <option value="">選択してください</option>
-      {% for area in area_options %}
-        <option value="{{ area }}">{{ area }}</option>
-      {% endfor %}
-    </select>
+    <fieldset class="form-fieldset location-choice" data-location-choice data-profile-location="">
+      <legend>受け渡し場所 *</legend>
+      <div class="location-choice__options">
+        <label class="location-choice__option">
+          <input type="radio" name="location_source" value="profile" checked>
+          <span>
+            <strong>マイページの拠点情報を使う</strong>
+            <small data-profile-location-label>拠点情報を読み込んでいます…</small>
+          </span>
+        </label>
+        <label class="location-choice__option">
+          <input type="radio" name="location_source" value="custom">
+          <span><strong>別の場所を指定する</strong></span>
+        </label>
+      </div>
+      <div class="conditional-location" data-custom-location-panel hidden>
+        <label for="custom-location">受け渡し場所の住所</label>
+        <input id="custom-location" type="text" name="custom_location" maxlength="300" data-custom-location placeholder="例：和泊町○○、現場名など">
+      </div>
+      <input type="hidden" name="location" id="location">
+    </fieldset>
 
     <details class="optional-fields">
       <summary>詳しい情報を追加する（任意）</summary>
       <div class="optional-fields__body">
-        <label>寸法</label>
-        <input type="text" name="size" placeholder="例：約2m、1〜3m程度、不明">
+        {% set size_label = '寸法' %}
+        {% include 'materials/_size_builder.html' %}
 
         <label>数量</label>
         <input type="text" name="quantity" placeholder="例：5本ほど、軽トラック1台分">
@@ -72,7 +86,7 @@
         </select>
 
         <label>コメント</label>
-        <textarea name="description" rows="4" placeholder="材の特徴、受け渡し方法、使えそうな用途など"></textarea>
+        <textarea name="description" rows="3" placeholder="材の特徴や受け渡し方法など"></textarea>
 
         <label>受け渡し希望期限</label>
         <input type="date" name="pickup_deadline">
@@ -80,7 +94,7 @@
     </details>
 
     <button type="submit">この内容で投稿する</button>
-    <p class="hint">投稿は30日後に通常一覧から自動的に非表示になります。</p>
+    <p class="hint">掲載期間は30日です。</p>
   </form>
 </section>
 
@@ -100,5 +114,7 @@
     });
   });
 </script>
-<script src="{{ url_for('static', filename='js/liff.js', v='20260908-sdk-defer') }}"></script>
+<script src="{{ url_for('static', filename='js/size_builder.js', v='20260908-building-format') }}"></script>
+<script src="{{ url_for('static', filename='js/material_registration.js', v='20260908-profile-location') }}"></script>
+<script src="{{ url_for('static', filename='js/liff.js', v='20260908-registration-location') }}"></script>
 {% endblock %}

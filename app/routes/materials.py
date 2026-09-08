@@ -48,6 +48,7 @@ MATERIAL_FIELD_LIMITS = {
     "quantity_level": 64,
     "condition": 100,
     "location": 300,
+    "custom_location": 300,
     "usage_purpose": 100,
     "pickup_deadline": 100,
     "image_urls_text": 3000,
@@ -511,6 +512,18 @@ def _registered_profile(line_user_id):
     return user
 
 
+def _profile_delivery_location(profile):
+    if not profile:
+        return ""
+    area = (profile.get("area") or "").strip()
+    address = (profile.get("address") or "").strip()
+    if not address:
+        return area
+    if not area or area in address:
+        return address
+    return f"{area} {address}"
+
+
 @materials_bp.route("/register", methods=["GET"])
 def register():
     return render_template("materials/register_select.html")
@@ -567,6 +580,10 @@ def submit():
         or profile.get("business_name")
         or profile.get("display_name", "")
     )
+    if form.get("location_source") == "profile":
+        form["location"] = _profile_delivery_location(profile)
+    elif form.get("location_source") == "custom":
+        form["location"] = (form.get("custom_location") or form.get("location") or "").strip()
 
     image_files = [image_file for image_file in request.files.getlist("image_files") if image_file and image_file.filename]
     legacy_image_file = request.files.get("image_file")

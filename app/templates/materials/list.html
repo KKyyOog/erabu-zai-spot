@@ -3,7 +3,6 @@
 {% block content %}
 <section class="listing-page">
   <h2>登録情報を見る</h2>
-  <p class="hint">島内にある材と、探している材を同じ場所で確認できます。</p>
 
   <nav class="filter-tabs listing-filter-tabs" aria-label="投稿タイプで絞り込み">
     <a class="{{ 'active' if display_filter == 'all' else '' }}" href="{{ url_for('materials.list_materials', type='all', material_type='all') }}">すべて</a>
@@ -25,6 +24,7 @@
   {% if items %}
     <div class="listing-grid">
       {% for item in items %}
+        {% set dialog_id = 'listing-detail-' ~ loop.index %}
         {% if item.entry_type == 'material' %}
           <article class="listing-card {{ 'request-card' if item.post_type == 'request' else 'offer-card' }}">
             <div class="listing-card__image">
@@ -40,58 +40,88 @@
             </div>
 
             <div class="listing-card__body">
-              <div class="badge-row">
-                <p class="entry-badge {{ 'request' if item.post_type == 'request' else 'offer' }}">
-                  {{ '探しています' if item.post_type == 'request' else '材があります' }}
-                </p>
-                <span class="status-badge">{{ item.status }}</span>
-              </div>
+              <p class="entry-badge {{ 'request' if item.post_type == 'request' else 'offer' }}">
+                {{ '探しています' if item.post_type == 'request' else '材があります' }}
+              </p>
               <h3>{{ item.title }}</h3>
               <dl class="summary-list">
-                <div>
-                  <dt>材種</dt>
-                  <dd>{{ item.material_type or '未設定' }}</dd>
-                </div>
+                <div><dt>材種</dt><dd>{{ item.material_type or '未設定' }}</dd></div>
                 {% if item.post_type == 'request' %}
-                  <div>
-                    <dt>内容</dt>
-                    <dd>{{ item.description or '未設定' }}</dd>
-                  </div>
-                  <div>
-                    <dt>希望エリア</dt>
-                    <dd>{{ item.location or '指定なし' }}</dd>
-                  </div>
+                  <div><dt>内容</dt><dd>{{ item.description or '未設定' }}</dd></div>
                 {% else %}
-                  <div>
-                    <dt>量の目安</dt>
-                    <dd>{{ item.quantity_level or item.quantity or '不明' }}</dd>
-                  </div>
-                  <div>
-                    <dt>エリア</dt>
-                    <dd>{{ item.location or '未設定' }}</dd>
-                  </div>
+                  <div><dt>量</dt><dd>{{ item.quantity_level or item.quantity or '不明' }}</dd></div>
                 {% endif %}
-                <div>
-                  <dt>投稿者</dt>
-                  <dd>{{ item.display_name or '登録ユーザー' }}</dd>
-                </div>
-                <div>
-                  <dt>投稿日</dt>
-                  <dd>{{ item.created_at|date_jp if item.created_at else '未設定' }}</dd>
-                </div>
+                <div><dt>場所</dt><dd>{{ item.location or '指定なし' }}</dd></div>
               </dl>
-              <div class="listing-actions">
-                <a class="button-link compact secondary-button" href="{{ url_for('materials.detail', material_id=item.id) }}">詳細を見る</a>
-                <form method="post" action="{{ url_for('materials.interest') }}">
-                  <input type="hidden" name="material_id" value="{{ item.id }}">
-                  <input type="hidden" name="line_user_id">
-                  <input type="hidden" name="return_type" value="{{ display_filter }}">
-                  <input type="hidden" name="return_material_type" value="{{ material_type_filter }}">
-                  <button type="submit">{{ '提供できます' if item.post_type == 'request' else '問い合わせる' }}</button>
-                </form>
-              </div>
+              <button class="listing-card__detail-trigger secondary-button" type="button" data-open-dialog="{{ dialog_id }}" aria-haspopup="dialog">
+                詳細を見る
+              </button>
             </div>
           </article>
+
+          <dialog class="listing-detail-modal" id="{{ dialog_id }}" aria-labelledby="{{ dialog_id }}-title">
+            <div class="listing-detail-modal__shell">
+              <button class="listing-detail-modal__close" type="button" data-close-dialog aria-label="詳細を閉じる">×</button>
+              <div class="listing-detail-modal__media">
+                <div class="listing-card__image">
+                  {% if item.image_urls %}
+                    <div class="image-carousel" aria-label="{{ item.title or '投稿写真' }}">
+                      {% for image_url in item.image_urls %}
+                        <img src="{{ image_url }}" alt="{{ item.title or '投稿写真' }}" loading="lazy" decoding="async">
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <span>{{ '参考写真なし' if item.post_type == 'request' else '写真なし' }}</span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="listing-detail-modal__content">
+                <header class="listing-detail__header">
+                  <div class="badge-row">
+                    <p class="entry-badge {{ 'request' if item.post_type == 'request' else 'offer' }}">
+                      {{ '探しています' if item.post_type == 'request' else '材があります' }}
+                    </p>
+                    <span class="status-badge">{{ item.status }}</span>
+                  </div>
+                  <h3 id="{{ dialog_id }}-title">{{ item.title }}</h3>
+                  <p class="listing-detail__meta">
+                    {{ item.display_name or '登録ユーザー' }}{% if item.created_at %} ・ {{ item.created_at|date_jp }}{% endif %}
+                  </p>
+                </header>
+
+                <dl class="detail-list listing-detail__list">
+                  <div><dt>材の種類</dt><dd>{{ item.material_type or '未設定' }}</dd></div>
+                  {% if item.post_type == 'request' %}
+                    <div><dt>欲しい内容</dt><dd>{{ item.description or '未設定' }}</dd></div>
+                    {% if item.quantity %}<div><dt>希望数量</dt><dd>{{ item.quantity }}</dd></div>{% endif %}
+                    {% if item.size %}<div><dt>希望寸法</dt><dd>{{ item.size|size_display }}</dd></div>{% endif %}
+                    {% if item.usage_purpose %}<div><dt>使用目的</dt><dd>{{ item.usage_purpose }}</dd></div>{% endif %}
+                    <div><dt>希望エリア</dt><dd>{{ item.location or '指定なし' }}</dd></div>
+                  {% else %}
+                    <div><dt>量の目安</dt><dd>{{ item.quantity_level or item.quantity or '不明' }}</dd></div>
+                    {% if item.size %}<div><dt>寸法</dt><dd>{{ item.size|size_display }}</dd></div>{% endif %}
+                    {% if item.quantity %}<div><dt>数量</dt><dd>{{ item.quantity }}</dd></div>{% endif %}
+                    {% if item.condition %}<div><dt>状態</dt><dd>{{ item.condition }}</dd></div>{% endif %}
+                    <div><dt>受け渡し場所</dt><dd>{{ item.location or '未設定' }}</dd></div>
+                    {% if item.description %}<div><dt>コメント</dt><dd>{{ item.description }}</dd></div>{% endif %}
+                    {% if item.pickup_deadline %}<div><dt>希望期限</dt><dd>{{ item.pickup_deadline|date_jp }}</dd></div>{% endif %}
+                  {% endif %}
+                </dl>
+
+                {% if item.effective_status == 'active' %}
+                  <form class="listing-detail__actions" method="post" action="{{ url_for('materials.interest') }}">
+                    <input type="hidden" name="material_id" value="{{ item.id }}">
+                    <input type="hidden" name="line_user_id">
+                    <input type="hidden" name="return_type" value="{{ display_filter }}">
+                    <input type="hidden" name="return_material_type" value="{{ material_type_filter }}">
+                    <label for="message-{{ loop.index }}">問い合わせメッセージ</label>
+                    <textarea id="message-{{ loop.index }}" name="message" rows="3" placeholder="{{ '提供できそうな材があります。' if item.post_type == 'request' else '受け渡し方法について相談したいです。' }}"></textarea>
+                    <button type="submit">{{ '提供できます・問い合わせる' if item.post_type == 'request' else 'この材について問い合わせる' }}</button>
+                  </form>
+                {% endif %}
+              </div>
+            </div>
+          </dialog>
         {% else %}
           <article class="listing-card demolition-card">
             <div class="listing-card__image">
@@ -106,19 +136,57 @@
               {% endif %}
             </div>
             <div class="listing-card__body">
-              <div class="badge-row">
-                <p class="entry-badge demolition">解体物件</p>
-                <span class="status-badge demolition">{{ item.status }}</span>
-              </div>
+              <p class="entry-badge demolition">解体物件</p>
               <h3>{{ item.title or item.location or '物件名未設定' }}</h3>
               <dl class="summary-list">
-                <div><dt>所在地</dt><dd>{{ item.location or '未設定' }}</dd></div>
-                <div><dt>登録者</dt><dd>{{ item.registrant_name or item.registrant_type or '未設定' }}</dd></div>
-                <div><dt>解体予定日</dt><dd>{{ item.demolition_date|date_jp if item.demolition_date else '未定' }}</dd></div>
+                <div><dt>場所</dt><dd>{{ item.location or '未設定' }}</dd></div>
+                <div><dt>解体日</dt><dd>{{ item.demolition_date|date_jp if item.demolition_date else '未定' }}</dd></div>
               </dl>
-              <div class="listing-actions">
-                <a class="button-link compact secondary-button" href="{{ url_for('materials.demolition_detail', property_id=item.id) }}">詳細を見る</a>
-                <form method="post" action="{{ url_for('materials.visit_interest') }}">
+              <button class="listing-card__detail-trigger secondary-button" type="button" data-open-dialog="{{ dialog_id }}" aria-haspopup="dialog">
+                詳細を見る
+              </button>
+            </div>
+          </article>
+
+          <dialog class="listing-detail-modal" id="{{ dialog_id }}" aria-labelledby="{{ dialog_id }}-title">
+            <div class="listing-detail-modal__shell">
+              <button class="listing-detail-modal__close" type="button" data-close-dialog aria-label="詳細を閉じる">×</button>
+              <div class="listing-detail-modal__media">
+                <div class="listing-card__image">
+                  {% if item.image_urls %}
+                    <div class="image-carousel" aria-label="{{ item.title or item.location or '解体物件写真' }}">
+                      {% for image_url in item.image_urls %}
+                        <img src="{{ image_url }}" alt="{{ item.title or item.location or '解体物件写真' }}" loading="lazy" decoding="async">
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <span>写真なし</span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="listing-detail-modal__content">
+                <header class="listing-detail__header">
+                  <div class="badge-row">
+                    <p class="entry-badge demolition">解体物件</p>
+                    <span class="status-badge demolition">{{ item.status }}</span>
+                  </div>
+                  <h3 id="{{ dialog_id }}-title">{{ item.title or item.location or '物件名未設定' }}</h3>
+                  {% if item.created_at %}<p class="listing-detail__meta">登録日 {{ item.created_at|date_jp }}</p>{% endif %}
+                </header>
+                <dl class="detail-list listing-detail__list">
+                  <div><dt>所在地</dt><dd>{{ item.location or '未設定' }}</dd></div>
+                  {% if item.registrant_name or item.registrant_type %}<div><dt>登録者</dt><dd>{{ item.registrant_name or item.registrant_type }}</dd></div>{% endif %}
+                  <div><dt>解体予定日</dt><dd>{{ item.demolition_date|date_jp if item.demolition_date else '未定' }}</dd></div>
+                  {% if item.demolition_contractor %}<div><dt>解体業者</dt><dd>{{ item.demolition_contractor }}</dd></div>{% endif %}
+                  {% if item.viewing_period %}<div><dt>見学期間</dt><dd>{{ item.viewing_period }}</dd></div>{% endif %}
+                  {% if item.building_use %}<div><dt>建物用途</dt><dd>{{ item.building_use }}</dd></div>{% endif %}
+                  {% if item.structure %}<div><dt>構造</dt><dd>{{ item.structure }}</dd></div>{% endif %}
+                  {% if item.floors %}<div><dt>階数</dt><dd>{{ item.floors }}</dd></div>{% endif %}
+                  {% if item.building_age %}<div><dt>築年数</dt><dd>{{ item.building_age }}</dd></div>{% endif %}
+                  {% if item.condition_evaluation %}<div><dt>状態評価</dt><dd>{{ item.condition_evaluation }}</dd></div>{% endif %}
+                  {% if item.notes %}<div><dt>備考</dt><dd>{{ item.notes }}</dd></div>{% endif %}
+                </dl>
+                <form class="listing-detail__actions" method="post" action="{{ url_for('materials.visit_interest') }}">
                   <input type="hidden" name="property_id" value="{{ item.id }}">
                   <input type="hidden" name="line_user_id">
                   <input type="hidden" name="return_type" value="{{ display_filter }}">
@@ -127,7 +195,7 @@
                 </form>
               </div>
             </div>
-          </article>
+          </dialog>
         {% endif %}
       {% endfor %}
     </div>
@@ -141,6 +209,36 @@
 
 <script>
   window.LIFF_ID = {{ LIFF_ID|tojson }};
+
+  document.querySelectorAll('[data-open-dialog]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const dialog = document.getElementById(button.dataset.openDialog);
+      if (!dialog) return;
+      if (typeof dialog.showModal === 'function') {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute('open', '');
+      }
+      document.body.classList.add('has-open-dialog');
+    });
+  });
+
+  document.querySelectorAll('.listing-detail-modal').forEach((dialog) => {
+    const closeDialog = () => {
+      if (typeof dialog.close === 'function') {
+        dialog.close();
+      } else {
+        dialog.removeAttribute('open');
+      }
+      document.body.classList.remove('has-open-dialog');
+    };
+
+    dialog.querySelector('[data-close-dialog]')?.addEventListener('click', closeDialog);
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) closeDialog();
+    });
+    dialog.addEventListener('close', () => document.body.classList.remove('has-open-dialog'));
+  });
 </script>
 <script src="{{ url_for('static', filename='js/liff.js', v='20260908-sdk-defer') }}"></script>
 {% endblock %}

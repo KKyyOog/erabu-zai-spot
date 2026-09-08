@@ -1,0 +1,64 @@
+<fieldset class="size-builder" data-size-builder data-size-initial-mode="board">
+  <legend>{{ size_label|default('寸法') }}</legend>
+  <p class="hint">部材の形を選ぶと、建築用の表記で寸法をまとめられます。</p>
+
+  <label for="material-size-mode">部材の形</label>
+  <select id="material-size-mode" data-size-mode-select>
+    <option value="board">板材（L×W×t）</option>
+    <option value="square">柱・角材（L×□）</option>
+    <option value="door">建具（W×H）</option>
+    <option value="round">丸材（φ×L）</option>
+    <option value="pipe">パイプ（L×φ×t）</option>
+    <option value="free">自由記入</option>
+  </select>
+
+  <div class="size-builder__panel" data-size-panel="board">
+    <div class="size-builder__grid">
+      <div><label>長さ L</label><input type="number" min="0" step="any" inputmode="decimal" data-size-field="length" placeholder="1800"></div>
+      <div><label>幅 W</label><input type="number" min="0" step="any" inputmode="decimal" data-size-field="width" placeholder="90"></div>
+      <div><label>厚み t</label><input type="number" min="0" step="any" inputmode="decimal" data-size-field="thickness" placeholder="30"></div>
+      <div><label>単位</label><select data-size-unit><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option></select></div>
+    </div>
+  </div>
+
+  <div class="size-builder__panel" data-size-panel="square" hidden>
+    <div class="size-builder__grid">
+      <div><label>長さ L</label><input type="number" min="0" step="any" inputmode="decimal" data-size-field="length" placeholder="1800"></div>
+      <div><label>断面一辺 □</label><input type="number" min="0" step="any" inputmode="decimal" data-size-field="section" placeholder="90"></div>
+      <div><label>単位</label><select data-size-unit><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option></select></div>
+    </div>
+  </div>
+
+  <div class="size-builder__panel" data-size-panel="door" hidden>
+    <div class="size-builder__grid">
+      <div><label>幅 W</label><input type="number" min="0" step="any" inputmode="decimal" data-size-field="width" placeholder="850"></div>
+      <div><label>高さ H</label><input type="number" min="0" step="any" inputmode="decimal" data-size-field="height" placeholder="2000"></div>
+      <div><label>単位</label><select data-size-unit><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option></select></div>
+    </div>
+  </div>
+
+  <div class="size-builder__panel" data-size-panel="round" hidden>
+    <div class="size-builder__grid">
+      <div><label>直径 φ</label><input type="number" min="0" step="any" inputmode="decimal" data-size-field="diameter" placeholder="60"></div>
+      <div><label>長さ L</label><input type="number" min="0" step="any" inputmode="decimal" data-size-field="length" placeholder="2400"></div>
+      <div><label>単位</label><select data-size-unit><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option></select></div>
+    </div>
+  </div>
+
+  <div class="size-builder__panel" data-size-panel="pipe" hidden>
+    <div class="size-builder__grid">
+      <div><label>長さ L</label><input type="number" min="0" step="any" inputmode="decimal" data-size-field="length" placeholder="2000"></div>
+      <div><label>外径 φ</label><input type="number" min="0" step="any" inputmode="decimal" data-size-field="outerDiameter" placeholder="27"></div>
+      <div><label>肉厚 t</label><input type="number" min="0" step="any" inputmode="decimal" data-size-field="thickness" placeholder="2.3"></div>
+      <div><label>単位</label><select data-size-unit><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option></select></div>
+    </div>
+  </div>
+
+  <div class="size-builder__panel" data-size-panel="free" hidden>
+    <label for="material-size-free">寸法</label>
+    <input id="material-size-free" type="text" maxlength="300" data-size-free placeholder="例：約2m、幅90mm程度、不明">
+  </div>
+
+  <p class="hint size-builder__preview" data-size-preview aria-live="polite"></p>
+  <input type="hidden" name="size" data-size-hidden>
+</fieldset>

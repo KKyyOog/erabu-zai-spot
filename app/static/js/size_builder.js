@@ -8,7 +8,11 @@
         { key: 'thickness', label: '厚み', placeholder: '30' },
       ],
       build(values) {
-        return `L${values.length}×W${values.width}×t${values.thickness}${values.unit}`;
+        return [
+          values.length ? `L${values.length}` : '',
+          values.width ? `W${values.width}` : '',
+          values.thickness ? `t${values.thickness}` : '',
+        ].filter(Boolean).join('×') + values.unit;
       },
     },
     square: {
@@ -18,7 +22,10 @@
         { key: 'section', label: '断面一辺', placeholder: '90' },
       ],
       build(values) {
-        return `L${values.length}×□${values.section}${values.unit}`;
+        return [
+          values.length ? `L${values.length}` : '',
+          values.section ? `□${values.section}` : '',
+        ].filter(Boolean).join('×') + values.unit;
       },
     },
     door: {
@@ -28,7 +35,10 @@
         { key: 'height', label: '高さ', placeholder: '2000' },
       ],
       build(values) {
-        return `W${values.width}×H${values.height}${values.unit}`;
+        return [
+          values.width ? `W${values.width}` : '',
+          values.height ? `H${values.height}` : '',
+        ].filter(Boolean).join('×') + values.unit;
       },
     },
     round: {
@@ -38,7 +48,10 @@
         { key: 'length', label: '長さ', placeholder: '2400' },
       ],
       build(values) {
-        return `φ${values.diameter}×L${values.length}${values.unit}`;
+        return [
+          values.diameter ? `φ${values.diameter}` : '',
+          values.length ? `L${values.length}` : '',
+        ].filter(Boolean).join('×') + values.unit;
       },
     },
     pipe: {
@@ -49,7 +62,11 @@
         { key: 'thickness', label: '肉厚', placeholder: '2.3' },
       ],
       build(values) {
-        return `L${values.length}×φ${values.outerDiameter}×t${values.thickness}${values.unit}`;
+        return [
+          values.length ? `L${values.length}` : '',
+          values.outerDiameter ? `φ${values.outerDiameter}` : '',
+          values.thickness ? `t${values.thickness}` : '',
+        ].filter(Boolean).join('×') + values.unit;
       },
     },
   };
@@ -151,4 +168,10 @@
 
   window.initMaterialSizeBuilders = initMaterialSizeBuilders;
   window.updateMaterialSizeBuilder = updateSizeState;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => initMaterialSizeBuilders(), { once: true });
+  } else {
+    initMaterialSizeBuilders();
+  }
 })();
