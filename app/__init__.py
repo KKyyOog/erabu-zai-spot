@@ -2,10 +2,11 @@ import os
 import logging
 import re
 import secrets
+import time
 from datetime import datetime
 
 import truststore
-from flask import Flask, abort, render_template, request, session
+from flask import Flask, abort, g, render_template, request, session
 
 from app.routes.materials import materials_bp
 from app.routes.users import users_bp
@@ -63,6 +64,7 @@ def create_app():
         return {
             "LIFF_ID": app.config["LIFF_ID"],
             "LINE_LOGIN_ENABLED": app.config["LINE_LOGIN_ENABLED"],
+            "USER_INFO_CACHE_SECONDS": app.config["USER_INFO_CACHE_SECONDS"],
             "liff_url_for": liff_url_for,
             "csrf_token": csrf_token,
         }
@@ -133,13 +135,21 @@ def create_app():
 
     @app.before_request
     def log_debug_request():
-        if app.config["LIFF_DEBUG_LOGGING"] and request.path.startswith(
-            ("/link", "/users/me", "/callback")
+        if (
+            app.config["LIFF_DEBUG_LOGGING"]
+            and request.path.startswith(("/link", "/users/me", "/callback"))
+            and request.path != "/link/liff-debug"
         ):
+            trace_id = request.headers.get("X-LIFF-Trace-ID", "")
+            trace_id = re.sub(r"[^A-Za-z0-9_-]", "", trace_id)[:64] or "none"
+            g.liff_debug_started_at = time.perf_counter()
+            g.liff_debug_trace_id = trace_id
             app.logger.info(
-                "[REQUEST DEBUG] method=%s path=%s remote_addr=%s referer_present=%s user_agent=%s",
+                "[REQUEST DEBUG] started method=%s path=%s trace=%s "
+                "remote_addr=%s referer_present=%s user_agent=%s",
                 request.method,
                 request.path,
+                trace_id,
                 request.headers.get("X-Forwarded-For", request.remote_addr),
                 bool(request.headers.get("Referer", "")),
                 request.headers.get("User-Agent", ""),
@@ -147,6 +157,17 @@ def create_app():
 
     @app.after_request
     def add_security_headers(response):
+        debug_started_at = getattr(g, "liff_debug_started_at", None)
+        if debug_started_at is not None:
+            app.logger.info(
+                "[REQUEST DEBUG] completed method=%s path=%s trace=%s "
+                "status=%s duration_ms=%d",
+                request.method,
+                request.path,
+                getattr(g, "liff_debug_trace_id", "none"),
+                response.status_code,
+                round((time.perf_counter() - debug_started_at) * 1000),
+            )
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")

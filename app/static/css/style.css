@@ -307,6 +307,155 @@ body {
   display: inline-block;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skeleton-screen {
+  display: grid;
+  gap: 16px;
+}
+
+.skeleton-screen[hidden],
+.page-transition-skeleton[hidden] {
+  display: none;
+}
+
+.skeleton-line,
+.skeleton-field,
+.skeleton-button,
+.skeleton-image {
+  overflow: hidden;
+  border-radius: 8px;
+  background: linear-gradient(100deg, #e8e3d8 20%, #f7f4ec 38%, #e8e3d8 56%);
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+.skeleton-line {
+  width: 100%;
+  height: 14px;
+}
+
+.skeleton-line--title {
+  width: min(64%, 320px);
+  height: 26px;
+}
+
+.skeleton-line--medium {
+  width: 72%;
+}
+
+.skeleton-line--short {
+  width: 38%;
+}
+
+.skeleton-field {
+  height: 46px;
+}
+
+.skeleton-button {
+  width: min(58%, 240px);
+  height: 46px;
+}
+
+.skeleton-image {
+  min-height: 150px;
+}
+
+.skeleton-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid #e1dacb;
+  border-radius: 12px;
+  background: #fffdf8;
+}
+
+.skeleton-card--compact {
+  gap: 10px;
+}
+
+.skeleton-form-grid,
+.user-page-skeleton__panels {
+  display: grid;
+  gap: 14px;
+}
+
+.registration-skeleton {
+  margin: 18px 0;
+}
+
+.registration-skeleton.is-error {
+  display: block;
+  padding: 12px;
+  border-radius: 8px;
+  background: #fff0e8;
+  color: #8a3f18;
+}
+
+.user-page-skeleton {
+  margin-bottom: 20px;
+}
+
+.user-page-skeleton__status {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.user-page-live[hidden] {
+  display: none;
+}
+
+.page-transition-skeleton {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  overflow: hidden;
+  padding: 92px 16px 24px;
+  background: rgba(246, 243, 234, 0.98);
+}
+
+.page-transition-skeleton__shell {
+  display: grid;
+  gap: 16px;
+  width: min(100%, 928px);
+  margin: 0 auto;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (min-width: 720px) {
+  .skeleton-form-grid,
+  .user-page-skeleton__panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line,
+  .skeleton-field,
+  .skeleton-button,
+  .skeleton-image {
+    animation: none;
+    background: #e8e3d8;
+  }
+}
+
 .readiness-card {
   display: grid;
   gap: 12px;

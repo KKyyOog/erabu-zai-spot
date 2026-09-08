@@ -4,10 +4,52 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>えらぶ材すぽっと</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260907-line-identity') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260908-skeleton') }}">
   <script>
     window.CSRF_TOKEN = {{ csrf_token()|tojson }};
     window.LINE_LOGIN_ENABLED = {{ LINE_LOGIN_ENABLED|tojson }};
+    window.USER_INFO_CACHE_SECONDS = {{ USER_INFO_CACHE_SECONDS|tojson }};
+    window.getCachedUserRegistration = function getCachedUserRegistration(userId) {
+      try {
+        const cached = JSON.parse(window.sessionStorage.getItem('erabu_zai_spot_user_registration') || 'null');
+        if (
+          cached
+          && cached.userId === userId
+          && cached.registered === true
+          && Number(cached.expiresAt || 0) > Date.now()
+        ) {
+          return true;
+        }
+        window.sessionStorage.removeItem('erabu_zai_spot_user_registration');
+      } catch (error) {
+        window.sessionStorage.removeItem('erabu_zai_spot_user_registration');
+      }
+      return false;
+    };
+    window.cacheUserRegistration = function cacheUserRegistration(userId) {
+      if (!userId) {
+        return;
+      }
+      try {
+        window.sessionStorage.setItem('erabu_zai_spot_user_registration', JSON.stringify({
+          userId,
+          registered: true,
+          expiresAt: Date.now() + (Number(window.USER_INFO_CACHE_SECONDS || 0) * 1000),
+        }));
+      } catch (error) {
+        // Storage may be unavailable in restricted browser modes. Server caching still works.
+      }
+    };
+    window.clearCachedUserRegistration = function clearCachedUserRegistration(userId = '') {
+      try {
+        const cached = JSON.parse(window.sessionStorage.getItem('erabu_zai_spot_user_registration') || 'null');
+        if (!userId || !cached || cached.userId === userId) {
+          window.sessionStorage.removeItem('erabu_zai_spot_user_registration');
+        }
+      } catch (error) {
+        window.sessionStorage.removeItem('erabu_zai_spot_user_registration');
+      }
+    };
     window.ensureCsrfToken = function ensureCsrfToken(form) {
       if (!form || !window.CSRF_TOKEN) {
         return;
@@ -24,6 +66,50 @@
     document.addEventListener("DOMContentLoaded", function () {
       document.querySelectorAll("form").forEach(window.ensureCsrfToken);
     });
+    window.showPageTransitionSkeleton = function showPageTransitionSkeleton() {
+      const skeleton = document.getElementById('page-transition-skeleton');
+      if (!skeleton) {
+        return;
+      }
+      skeleton.hidden = false;
+      document.body.setAttribute('aria-busy', 'true');
+    };
+    window.hidePageTransitionSkeleton = function hidePageTransitionSkeleton() {
+      const skeleton = document.getElementById('page-transition-skeleton');
+      if (skeleton) {
+        skeleton.hidden = true;
+      }
+      document.body.removeAttribute('aria-busy');
+    };
+    window.addEventListener('pageshow', window.hidePageTransitionSkeleton);
+    document.addEventListener('click', function (event) {
+      const link = event.target.closest('a[href]');
+      if (
+        !link
+        || event.defaultPrevented
+        || event.button !== 0
+        || event.metaKey
+        || event.ctrlKey
+        || event.shiftKey
+        || event.altKey
+        || link.target === '_blank'
+        || link.hasAttribute('download')
+      ) {
+        return;
+      }
+      const target = new URL(link.href, window.location.href);
+      if (target.origin !== window.location.origin) {
+        return;
+      }
+      if (target.pathname === window.location.pathname && target.search === window.location.search && target.hash) {
+        return;
+      }
+      window.queueMicrotask(function () {
+        if (!event.defaultPrevented) {
+          window.showPageTransitionSkeleton();
+        }
+      });
+    });
     document.addEventListener("submit", function (event) {
       window.ensureCsrfToken(event.target);
       if (event.target && event.target.dataset.confirmMessage) {
@@ -31,6 +117,13 @@
           event.preventDefault();
         }
       }
+      window.queueMicrotask(function () {
+        if (event.defaultPrevented) {
+          window.hidePageTransitionSkeleton();
+          return;
+        }
+        window.showPageTransitionSkeleton();
+      });
     }, true);
   </script>
   {% if LINE_LOGIN_ENABLED %}
@@ -38,6 +131,23 @@
   {% endif %}
 </head>
 <body>
+  <div id="page-transition-skeleton" class="page-transition-skeleton" role="status" aria-live="polite" hidden>
+    <span class="visually-hidden">ページを読み込んでいます</span>
+    <div class="page-transition-skeleton__shell" aria-hidden="true">
+      <div class="skeleton-line skeleton-line--title"></div>
+      <div class="skeleton-line skeleton-line--medium"></div>
+      <div class="skeleton-card">
+        <div class="skeleton-line skeleton-line--short"></div>
+        <div class="skeleton-field"></div>
+        <div class="skeleton-field"></div>
+        <div class="skeleton-line skeleton-line--medium"></div>
+      </div>
+      <div class="skeleton-card skeleton-card--compact">
+        <div class="skeleton-line skeleton-line--medium"></div>
+        <div class="skeleton-line"></div>
+      </div>
+    </div>
+  </div>
   <header class="site-header">
     <h1>えらぶ材すぽっと</h1>
     <p>沖永良部島の材を、必要な人へ。</p>

@@ -25,13 +25,13 @@ from app.services.db_service import (
     renew_material,
     append_matching_history,
     delete_material,
-    get_user_by_line_user_id,
     update_demolition_property,
     update_material,
 )
 from app.services.line_service import send_line_message
 from app.services.liff_service import liff_url_for
 from app.services.line_auth_service import LineAuthError, require_verified_line_user_id
+from app.services.user_cache_service import get_user_profile_snapshot
 from app.validation import first_overlong_field
 
 materials_bp = Blueprint("materials", __name__, url_prefix="/materials")
@@ -495,7 +495,7 @@ def _redirect_unavailable_notifications_to_user_page(line_user_id):
 
 
 def _public_user_summary(line_user_id):
-    user = get_user_by_line_user_id(line_user_id)
+    user, _, _ = get_user_profile_snapshot(line_user_id)
     if not user:
         return "登録情報: 未登録"
 
@@ -504,8 +504,11 @@ def _public_user_summary(line_user_id):
     return "\n".join([f"名前・事業者名: {name}", f"エリア: {area}"])
 
 
-def _has_registered_profile(line_user_id):
-    return bool(line_user_id and get_user_by_line_user_id(line_user_id))
+def _registered_profile(line_user_id):
+    if not line_user_id:
+        return None
+    user, _, _ = get_user_profile_snapshot(line_user_id)
+    return user
 
 
 @materials_bp.route("/register", methods=["GET"])
@@ -555,10 +558,10 @@ def submit():
         return redirect(url_for("materials.register_material"))
     form["line_user_id"] = line_user_id
 
-    if not _has_registered_profile(line_user_id):
+    profile = _registered_profile(line_user_id)
+    if not profile:
         flash("材を登録する前に、マイページでユーザー情報を登録してください。")
         return redirect(url_for("users.me"))
-    profile = get_user_by_line_user_id(line_user_id) or {}
     form["display_name"] = (
         form.get("display_name")
         or profile.get("business_name")
@@ -639,10 +642,10 @@ def submit_request():
         return redirect(url_for("materials.register_request"))
     form["line_user_id"] = line_user_id
 
-    if not _has_registered_profile(line_user_id):
+    profile = _registered_profile(line_user_id)
+    if not profile:
         flash("投稿する前に、マイページでユーザー情報を登録してください。")
         return redirect(url_for("users.me"))
-    profile = get_user_by_line_user_id(line_user_id) or {}
     form["display_name"] = (
         form.get("display_name")
         or profile.get("business_name")
@@ -706,7 +709,7 @@ def submit_demolition():
         return redirect(url_for("materials.register_demolition"))
     form["line_user_id"] = line_user_id
 
-    if not _has_registered_profile(line_user_id):
+    if not _registered_profile(line_user_id):
         flash("解体物件を登録する前に、マイページでユーザー情報を登録してください。")
         return redirect(url_for("users.me"))
 

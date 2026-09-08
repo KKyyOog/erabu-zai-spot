@@ -6,7 +6,15 @@
   <h2>探している材を知らせる</h2>
   <p class="hint">用途や必要な形が伝わる程度で大丈夫です。参考写真はなくても投稿できます。</p>
 
-  <p id="user-registration-check-status" class="hint">マイページの登録状況を確認しています...</p>
+  <div id="user-registration-check-status" class="registration-skeleton skeleton-screen" role="status">
+    <span class="visually-hidden">ユーザー情報を確認しています</span>
+    <div class="skeleton-card" aria-hidden="true">
+      <div class="skeleton-line skeleton-line--medium"></div>
+      <div class="skeleton-field"></div>
+      <div class="skeleton-field"></div>
+      <div class="skeleton-button"></div>
+    </div>
+  </div>
   <div id="user-registration-required" class="flash" role="alert" tabindex="-1" hidden>
     <p>投稿するには、先にマイページでユーザー情報を登録してください。</p>
     <p><a class="button-link" href="{{ url_for('users.me') }}">マイページで登録する</a></p>
@@ -79,5 +87,5 @@
     });
   });
 </script>
-<script src="{{ url_for('static', filename='js/liff.js', v='20260907-line-identity') }}"></script>
+<script src="{{ url_for('static', filename='js/liff.js', v='20260908-user-cache') }}"></script>
 {% endblock %}

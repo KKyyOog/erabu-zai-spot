@@ -1,6 +1,37 @@
 {% extends "base.html" %}
 
 {% block content %}
+<section id="user-page-skeleton" class="skeleton-screen user-page-skeleton" role="status" aria-live="polite">
+  <span class="visually-hidden">ユーザー情報を読み込んでいます</span>
+  <div class="skeleton-line skeleton-line--medium" aria-hidden="true"></div>
+  <div class="skeleton-card" aria-hidden="true">
+    <div class="skeleton-line skeleton-line--title"></div>
+    <div class="skeleton-line skeleton-line--short"></div>
+    <div class="skeleton-form-grid user-page-skeleton__status">
+      <div class="skeleton-field"></div>
+      <div class="skeleton-field"></div>
+    </div>
+  </div>
+  <div class="user-page-skeleton__panels" aria-hidden="true">
+    <div class="skeleton-card">
+      <div class="skeleton-line skeleton-line--medium"></div>
+      <div class="skeleton-field"></div>
+      <div class="skeleton-field"></div>
+      <div class="skeleton-field"></div>
+      <div class="skeleton-field"></div>
+    </div>
+    <div class="skeleton-card">
+      <div class="skeleton-line skeleton-line--medium"></div>
+      <div class="skeleton-field"></div>
+      <div class="skeleton-field"></div>
+      <div class="skeleton-field"></div>
+      <div class="skeleton-field"></div>
+    </div>
+  </div>
+  <div class="skeleton-button" aria-hidden="true"></div>
+</section>
+
+<div id="user-page-live" class="user-page-live" hidden aria-busy="true">
 <nav class="page-tabs" aria-label="マイページの表示切り替え">
   <button type="button" class="page-tab active" data-tab-target="profile-panel">プロフィール</button>
   <button type="button" class="page-tab" data-tab-target="materials-panel">登録した情報</button>
@@ -138,6 +169,7 @@
   <h3>マッチング履歴</h3>
   <div id="matching-history-container"><p>読み込み中...</p></div>
 </section>
+</div>
 
 <script>
   window.LIFF_ID = {{ LIFF_ID|tojson }};
@@ -148,8 +180,21 @@
   let currentIdToken = '';
   let currentAuthMode = '';
   let liffInitialized = false;
+  let userPageSkeletonTimer = null;
   const LIFF_LOGIN_ATTEMPT_KEY = 'erabu_zai_spot_liff_login_attempted_at';
   const LIFF_LOGIN_RETRY_DELAY_MS = 60 * 1000;
+  const LIFF_TRACE_ID = window.LIFF_TRACE_ID || (
+    window.crypto?.randomUUID?.() || `liff-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  );
+  window.LIFF_TRACE_ID = LIFF_TRACE_ID;
+
+  function liffErrorDetails(error) {
+    return {
+      errorName: error?.name || 'Error',
+      errorCode: error?.code || '',
+      errorMessage: error?.message || String(error || 'unknown error'),
+    };
+  }
 
   const materialTypeOptions = ['木材', '合板・ボード', '建具', 'トタン・金属材', 'タイル・石材', 'コンクリート・ブロック', '金物', 'その他'];
   const quantityLevelOptions = ['少量', 'まとまってあります', '大量', '不明'];
@@ -206,7 +251,10 @@
   }
 
   function restartLineAuthentication(reason) {
-    logLiffDebug(`users/me restarting LINE authentication: ${reason}`, getLiffDebugContext());
+    logLiffDebug('auth.restart_requested', {
+      reason,
+      ...getLiffDebugContext(),
+    }, 'warning');
     currentIdToken = '';
     document.getElementById('id_token').value = '';
     setSubmitEnabled(false);
@@ -248,20 +296,23 @@
 
   function getLiffDebugContext() {
     return {
-      href: window.location.href,
-      origin: window.location.origin,
       pathname: window.location.pathname,
-      search: window.location.search,
+      loginEnabled: window.LINE_LOGIN_ENABLED === true,
       hasLiff: Boolean(window.liff),
       inClient: Boolean(window.liff && liff.isInClient && liff.isInClient()),
-      userAgent: navigator.userAgent,
+      isLoggedIn: Boolean(window.liff && liff.isLoggedIn && liff.isLoggedIn()),
+      initialized: liffInitialized,
+      online: navigator.onLine,
+      visibilityState: document.visibilityState,
     };
   }
 
-  function logLiffDebug(message, details = {}) {
+  function logLiffDebug(event, details = {}, level = 'info') {
     const payload = JSON.stringify({
-      message: message,
-      details: details,
+      event,
+      level,
+      traceId: LIFF_TRACE_ID,
+      details,
       timestamp: new Date().toISOString(),
     });
 
@@ -275,7 +326,10 @@
 
       fetch('/link/liff-debug', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-LIFF-Trace-ID': LIFF_TRACE_ID,
+        },
         body: payload,
         keepalive: true,
       }).catch((error) => {
@@ -772,6 +826,29 @@
     status.textContent = message;
   }
 
+  function setUserPageSkeleton(isLoading) {
+    const skeleton = document.getElementById('user-page-skeleton');
+    const liveContent = document.getElementById('user-page-live');
+    skeleton.hidden = !isLoading;
+    liveContent.hidden = isLoading;
+    liveContent.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+    if (!isLoading && userPageSkeletonTimer) {
+      window.clearTimeout(userPageSkeletonTimer);
+      userPageSkeletonTimer = null;
+    }
+  }
+
+  function startUserPageSkeletonFallback() {
+    if (userPageSkeletonTimer) {
+      window.clearTimeout(userPageSkeletonTimer);
+    }
+    userPageSkeletonTimer = window.setTimeout(() => {
+      setUserPageSkeleton(false);
+      setLoading(false, '読み込みに時間がかかっています。画面を開き直してください。');
+      logLiffDebug('page.skeleton_timeout', getLiffDebugContext(), 'warning');
+    }, 12000);
+  }
+
   function setIdentityFields(userId, idToken = '') {
     document.getElementById('line_user_id').value = userId || '';
     document.getElementById('user_id').value = userId || '';
@@ -821,31 +898,85 @@
   }
 
   async function syncFriendshipStatus() {
+    const startedAt = performance.now();
     if (!window.liff || typeof liff.getFriendship !== 'function') {
+      logLiffDebug('friendship.api_unavailable', getLiffDebugContext(), 'warning');
       setNotificationReadiness(null, '確認できません');
       return null;
     }
 
     try {
+      logLiffDebug('friendship.check_started', getLiffDebugContext());
       const friendship = await liff.getFriendship();
       const friendFlag = friendship?.friendFlag === true;
+      logLiffDebug('friendship.api_succeeded', {
+        friendFlag,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       const resp = await fetch('/link/friendship', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
           'X-CSRF-Token': window.CSRF_TOKEN || '',
+          'X-LIFF-Trace-ID': LIFF_TRACE_ID,
         },
         credentials: 'same-origin',
         body: JSON.stringify({ friendFlag }),
       });
       if (!resp.ok) {
-        throw new Error('friendship sync failed');
+        throw Object.assign(new Error('friendship sync failed'), {
+          code: `HTTP_${resp.status}`,
+        });
       }
+      logLiffDebug('friendship.sync_succeeded', {
+        friendFlag,
+        httpStatus: resp.status,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       setNotificationReadiness(friendFlag);
       return friendFlag;
     } catch (error) {
       console.warn('Failed to confirm LINE friendship:', error);
+      logLiffDebug('friendship.check_failed', {
+        ...liffErrorDetails(error),
+        durationMs: Math.round(performance.now() - startedAt),
+        ...getLiffDebugContext(),
+      }, 'warning');
+      setNotificationReadiness(null, '確認できません');
+      return null;
+    }
+  }
+
+  async function loadCachedFriendshipStatus() {
+    const startedAt = performance.now();
+    try {
+      const resp = await fetch('/link/friendship', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'X-LIFF-Trace-ID': LIFF_TRACE_ID,
+        },
+        credentials: 'same-origin',
+      });
+      const body = await resp.json();
+      if (!resp.ok || body.ok !== true) {
+        throw Object.assign(new Error('cached friendship request failed'), {
+          code: `HTTP_${resp.status}`,
+        });
+      }
+      const friendFlag = body.friend === true;
+      setNotificationReadiness(friendFlag);
+      logLiffDebug('friendship.server_cache_loaded', {
+        friendFlag,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
+      return friendFlag;
+    } catch (error) {
+      logLiffDebug('friendship.server_cache_failed', {
+        ...liffErrorDetails(error),
+        durationMs: Math.round(performance.now() - startedAt),
+      }, 'warning');
       setNotificationReadiness(null, '確認できません');
       return null;
     }
@@ -856,10 +987,19 @@
     button.disabled = true;
     button.textContent = 'LINEを開いています...';
     try {
+      if (!await initializeLiffClient()) {
+        throw new Error('LIFF is not available');
+      }
+      logLiffDebug('friendship.request_started', getLiffDebugContext());
       await liff.requestFriendship();
+      logLiffDebug('friendship.request_closed', getLiffDebugContext());
       await syncFriendshipStatus();
     } catch (error) {
       console.error(error);
+      logLiffDebug('friendship.request_failed', {
+        ...liffErrorDetails(error),
+        ...getLiffDebugContext(),
+      }, 'warning');
       setNotificationReadiness(false);
       window.alert('友だち追加またはブロック解除を確認できませんでした。LINEの公式アカウント画面で状態をご確認ください。');
     } finally {
@@ -881,6 +1021,7 @@
     document.getElementById('profile-note').textContent = '';
     setLoading(false, message);
     setSubmitEnabled(false);
+    setUserPageSkeleton(false);
   }
 
   function showRegistrationPrompt() {
@@ -894,6 +1035,7 @@
         headers: {
           'Content-Type': 'application/json',
           'X-CSRF-Token': window.CSRF_TOKEN || '',
+          'X-LIFF-Trace-ID': LIFF_TRACE_ID,
         },
         body: JSON.stringify({
           userId,
@@ -922,7 +1064,9 @@
   }
 
   async function loadMeProfile(userId, profileDisplayName = '') {
+    const startedAt = performance.now();
     const forceRefresh = new URLSearchParams(window.location.search).get('refresh') === '1';
+    logLiffDebug('profile.load_started', { forceRefresh });
     setIdentityFields(userId, currentIdToken);
     setLoading(true, '登録情報を読み込んでいます...');
 
@@ -931,6 +1075,7 @@
       headers: {
         'Content-Type': 'application/json',
         'X-CSRF-Token': window.CSRF_TOKEN || '',
+        'X-LIFF-Trace-ID': LIFF_TRACE_ID,
       },
       body: JSON.stringify({
         userId,
@@ -940,6 +1085,13 @@
       }),
     });
     const body = await resp.json();
+    logLiffDebug('profile.load_response', {
+      httpStatus: resp.status,
+      ok: resp.ok && body.ok === true,
+      exists: body.exists === true,
+      serverCacheHit: body.cached === true,
+      durationMs: Math.round(performance.now() - startedAt),
+    }, resp.ok ? 'info' : 'warning');
     if (resp.status === 401) {
       handleIdentityRejection('user data request rejected session');
       return;
@@ -951,12 +1103,14 @@
 
     setSubmitEnabled(true);
     if (body.exists) {
+      window.cacheUserRegistration?.(userId);
       document.getElementById('form-title').textContent = 'ユーザー情報（更新）';
       fillUserForm(body.user || {});
       fillContactCard(body.contact_card || {}, body.user || {});
       document.getElementById('submit-button').textContent = '更新する';
       setLoading(false, '登録済みの情報を読み込みました。');
     } else {
+      window.clearCachedUserRegistration?.(userId);
       clearUserForm();
       if (profileDisplayName) {
         document.getElementById('display_name').value = profileDisplayName;
@@ -970,23 +1124,48 @@
       setLoading(false, 'LINE表示名を取得しました。必要事項を入力してください。');
       setTimeout(showRegistrationPrompt, 0);
     }
-    loadMeActivity(userId, forceRefresh);
+    await loadMeActivity(userId, forceRefresh);
+    setUserPageSkeleton(false);
   }
 
   async function initializeLiffClient() {
+    const startedAt = performance.now();
+    logLiffDebug('liff.initialization_started', {
+      ...getLiffDebugContext(),
+      liffIdPresent: Boolean(window.LIFF_ID),
+    });
     if (window.LINE_LOGIN_ENABLED !== true) {
+      logLiffDebug('liff.initialization_skipped', { reason: 'login_disabled' }, 'warning');
       return false;
     }
     if (liffInitialized) {
+      logLiffDebug('liff.initialization_reused', getLiffDebugContext());
       return true;
     }
     if (!window.LIFF_ID || !window.liff) {
+      logLiffDebug('liff.initialization_skipped', {
+        reason: 'sdk_or_liff_id_missing',
+        ...getLiffDebugContext(),
+      }, 'warning');
       return false;
     }
-    await liff.init({ liffId: window.LIFF_ID });
-    liffInitialized = true;
-    clearLegacyLiffReturnUrl();
-    return true;
+    try {
+      await liff.init({ liffId: window.LIFF_ID });
+      liffInitialized = true;
+      clearLegacyLiffReturnUrl();
+      logLiffDebug('liff.initialization_succeeded', {
+        ...getLiffDebugContext(),
+        durationMs: Math.round(performance.now() - startedAt),
+      });
+      return true;
+    } catch (error) {
+      logLiffDebug('liff.initialization_failed', {
+        ...liffErrorDetails(error),
+        durationMs: Math.round(performance.now() - startedAt),
+        ...getLiffDebugContext(),
+      }, 'error');
+      throw error;
+    }
   }
 
   async function getCurrentLineProfile() {
@@ -1001,14 +1180,72 @@
     return profile;
   }
 
+  async function restoreCachedLineIdentity() {
+    const startedAt = performance.now();
+    try {
+      const response = await fetch('/link/session', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'X-LIFF-Trace-ID': LIFF_TRACE_ID,
+        },
+        credentials: 'same-origin',
+      });
+      const body = await response.json();
+      if (
+        !response.ok
+        || body.ok !== true
+        || body.cache_valid !== true
+        || body.auth_mode !== 'line'
+        || !body.line_user_id
+      ) {
+        logLiffDebug('auth.session_cache_miss', {
+          sessionPresent: body.ok === true,
+          cacheValid: body.cache_valid === true,
+          durationMs: Math.round(performance.now() - startedAt),
+        });
+        return false;
+      }
+
+      currentAuthMode = 'line';
+      currentIdToken = '';
+      setIdentityFields(body.line_user_id, '');
+      setIdentityReadiness(true);
+      document.getElementById('profile-note').textContent = 'LINE本人確認済み';
+      clearLiffLoginAttempt();
+      await loadCachedFriendshipStatus();
+      await loadMeProfile(body.line_user_id);
+      logLiffDebug('auth.session_cache_hit', {
+        expiresInSeconds: Number(body.cache_expires_in || 0),
+        durationMs: Math.round(performance.now() - startedAt),
+      });
+      return true;
+    } catch (error) {
+      logLiffDebug('auth.session_cache_failed', {
+        ...liffErrorDetails(error),
+        durationMs: Math.round(performance.now() - startedAt),
+      }, 'warning');
+      return false;
+    }
+  }
+
   async function connectLineIdentity(redirectIfLoggedOut = false) {
+    const startedAt = performance.now();
+    logLiffDebug('auth.flow_started', {
+      redirectIfLoggedOut,
+      ...getLiffDebugContext(),
+    });
     if (window.LINE_LOGIN_ENABLED !== true) {
       return false;
+    }
+    if (await restoreCachedLineIdentity()) {
+      return true;
     }
     if (!await initializeLiffClient()) {
       return false;
     }
     if (!liff.isLoggedIn()) {
+      logLiffDebug('auth.login_required', getLiffDebugContext(), 'warning');
       if (!redirectIfLoggedOut) {
         return false;
       }
@@ -1020,6 +1257,10 @@
 
     const idToken = liff.getIDToken() || '';
     if (!hasFreshIdToken(idToken)) {
+      logLiffDebug('auth.id_token_unavailable', {
+        idTokenPresent: Boolean(idToken),
+        ...getLiffDebugContext(),
+      }, 'warning');
       if (redirectIfLoggedOut) {
         throw new Error('LINE ID token is missing or expired');
       }
@@ -1027,18 +1268,38 @@
     }
 
     const profile = await getCurrentLineProfile();
+    logLiffDebug('auth.profile_resolved', {
+      userIdPresent: Boolean(profile?.userId),
+      displayNamePresent: Boolean(profile?.displayName),
+      durationMs: Math.round(performance.now() - startedAt),
+    });
 
     const linkResponse = await fetch('/link/liff', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-LIFF-Trace-ID': LIFF_TRACE_ID,
+      },
       body: JSON.stringify({
         userId: profile.userId,
         idToken,
       }),
     });
     if (!linkResponse.ok) {
-      throw new Error('LINE authentication failed');
+      logLiffDebug('auth.server_link_failed', {
+        httpStatus: linkResponse.status,
+        durationMs: Math.round(performance.now() - startedAt),
+      }, 'warning');
+      throw Object.assign(new Error('LINE authentication failed'), {
+        code: `HTTP_${linkResponse.status}`,
+      });
     }
+    const linkBody = await linkResponse.json();
+    logLiffDebug('auth.server_link_succeeded', {
+      httpStatus: linkResponse.status,
+      migratedGuestData: linkBody.migrated_guest_data === true,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
 
     currentAuthMode = 'line';
     currentIdToken = idToken;
@@ -1049,10 +1310,17 @@
     clearLiffLoginAttempt();
     await syncFriendshipStatus();
     await loadMeProfile(profile.userId, profile.displayName || '');
+    logLiffDebug('auth.flow_succeeded', {
+      durationMs: Math.round(performance.now() - startedAt),
+    });
     return true;
   }
 
   async function initMeFlow() {
+    const startedAt = performance.now();
+    logLiffDebug('page.initialization_started', getLiffDebugContext());
+    setUserPageSkeleton(true);
+    startUserPageSkeletonFallback();
     setSubmitEnabled(false);
     setLoading(true, '利用情報を準備しています...');
 
@@ -1067,9 +1335,16 @@
       if (!await connectLineIdentity(true)) {
         throw new Error('LIFF is not available');
       }
+      logLiffDebug('page.initialization_succeeded', {
+        durationMs: Math.round(performance.now() - startedAt),
+      });
     } catch (error) {
       console.error(error);
-      logLiffDebug('users/me LINE authentication failed: ' + error.message, getLiffDebugContext());
+      logLiffDebug('page.initialization_failed', {
+        ...liffErrorDetails(error),
+        durationMs: Math.round(performance.now() - startedAt),
+        ...getLiffDebugContext(),
+      }, 'error');
       setIdentityReadiness(false);
       setNotificationReadiness(null, '確認できません');
       showUnavailableState('LINEからユーザー情報ページを開き直してください。');
@@ -1077,6 +1352,9 @@
   }
 
   initializePageTabs();
+  document.getElementById('user-form').addEventListener('submit', () => {
+    window.clearCachedUserRegistration?.(document.getElementById('line_user_id').value);
+  });
   document.getElementById('notification-enable-button').addEventListener('click', requestNotificationAccess);
   window.addEventListener('focus', () => {
     if (currentAuthMode === 'line' && liffInitialized) {

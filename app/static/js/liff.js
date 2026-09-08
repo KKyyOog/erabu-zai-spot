@@ -8,6 +8,18 @@ function clearLegacyLiffReturnUrl() {
 
 const LIFF_LOGIN_ATTEMPT_KEY = "erabu_zai_spot_liff_login_attempted_at";
 const LIFF_LOGIN_RETRY_DELAY_MS = 60 * 1000;
+const LIFF_TRACE_ID = window.LIFF_TRACE_ID || (
+  window.crypto?.randomUUID?.() || `liff-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+);
+window.LIFF_TRACE_ID = LIFF_TRACE_ID;
+
+function liffErrorDetails(error) {
+  return {
+    errorName: error?.name || "Error",
+    errorCode: error?.code || "",
+    errorMessage: error?.message || String(error || "unknown error"),
+  };
+}
 
 function recentlyAttemptedLiffLogin() {
   try {
@@ -51,6 +63,9 @@ function hasFreshIdToken(idToken) {
 
 function restartLineAuthentication(reason) {
   logToServer(`Restarting LINE authentication: ${reason}`, getLiffDebugContext());
+  if (window.clearCachedUserRegistration) {
+    window.clearCachedUserRegistration(window.LINE_USER_ID || "");
+  }
   window.LINE_ID_TOKEN = "";
   window.LINE_SESSION_AUTHENTICATED = false;
   setAllLineUserInputs("");
@@ -78,15 +93,14 @@ function restartLineAuthentication(reason) {
 
 function getLiffDebugContext() {
   return {
-    href: window.location.href,
-    origin: window.location.origin,
     pathname: window.location.pathname,
-    search: window.location.search,
     loginEnabled: window.LINE_LOGIN_ENABLED === true,
     requireLogin: window.REQUIRE_LIFF_LOGIN === true,
     hasLiff: Boolean(window.liff),
     inClient: Boolean(window.liff && liff.isInClient && liff.isInClient()),
-    userAgent: navigator.userAgent,
+    isLoggedIn: Boolean(window.liff && liff.isLoggedIn && liff.isLoggedIn()),
+    online: navigator.onLine,
+    visibilityState: document.visibilityState,
   };
 }
 
@@ -138,6 +152,7 @@ function setUserRegistrationState(state) {
 
   if (status) {
     status.hidden = state === "registered" || state === "unregistered";
+    status.classList.toggle("is-error", state === "error");
     if (state === "error") {
       status.textContent = "マイページの登録状況を確認できませんでした。画面を再読み込みしてください。";
     }
@@ -158,8 +173,17 @@ async function confirmUserRegistration(userId, idToken = "") {
     return true;
   }
 
+  if (window.getCachedUserRegistration?.(userId) === true) {
+    setUserRegistrationState("registered");
+    logToServer("user_registration.cache_hit", { registered: true });
+    return true;
+  }
+
   try {
-    const headers = { "Accept": "application/json" };
+    const headers = {
+      "Accept": "application/json",
+      "X-LIFF-Trace-ID": LIFF_TRACE_ID,
+    };
     if (idToken) {
       headers["X-Line-ID-Token"] = idToken;
     }
@@ -171,10 +195,16 @@ async function confirmUserRegistration(userId, idToken = "") {
     const body = await response.json();
 
     if (response.ok && body.exists === true) {
+      window.cacheUserRegistration?.(userId);
       setUserRegistrationState("registered");
+      logToServer("user_registration.loaded", {
+        registered: true,
+        serverCacheHit: body.cached === true,
+      });
       return true;
     }
     if (response.ok) {
+      window.clearCachedUserRegistration?.(userId);
       setUserRegistrationState("unregistered");
       setLineAuthControls(false, "マイページ登録が必要です");
       return false;
@@ -198,11 +228,17 @@ async function restoreLineSession() {
       method: "GET",
       headers: {
         "Accept": "application/json",
+        "X-LIFF-Trace-ID": LIFF_TRACE_ID,
       },
       credentials: "same-origin",
     });
     const body = await response.json();
-    if (response.ok && body.ok && body.line_user_id) {
+    if (
+      response.ok
+      && body.ok
+      && body.line_user_id
+      && body.cache_valid === true
+    ) {
       window.LINE_SESSION_AUTHENTICATED = true;
       window.LINE_USER_ID = body.line_user_id;
       window.AUTH_MODE = body.auth_mode || (
@@ -212,10 +248,19 @@ async function restoreLineSession() {
       if (await confirmUserRegistration(body.line_user_id)) {
         setLineAuthControls(true);
       }
+      logToServer("auth.session_cache_hit", {
+        authMode: window.AUTH_MODE,
+        expiresInSeconds: Number(body.cache_expires_in || 0),
+      });
       return true;
     }
+    logToServer("auth.session_cache_miss", {
+      sessionPresent: body.ok === true,
+      cacheValid: body.cache_valid === true,
+    });
   } catch (error) {
     console.warn("Failed to restore LINE session:", error);
+    logToServer("auth.session_cache_failed", liffErrorDetails(error), "warning");
   }
 
   window.LINE_SESSION_AUTHENTICATED = false;
@@ -253,28 +298,43 @@ async function startGuestSession() {
 }
 
 async function syncLineFriendshipStatus() {
+  const startedAt = performance.now();
   if (!window.liff || typeof liff.getFriendship !== "function") {
+    logToServer("friendship.api_unavailable", getLiffDebugContext(), "warning");
     window.LINE_NOTIFICATION_READY = null;
     return null;
   }
 
   try {
+    logToServer("friendship.check_started", getLiffDebugContext());
     const friendship = await liff.getFriendship();
     const friendFlag = friendship?.friendFlag === true;
+    logToServer("friendship.api_succeeded", {
+      friendFlag,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
     const response = await fetch("/link/friendship", {
       method: "POST",
       headers: {
         "Accept": "application/json",
         "Content-Type": "application/json",
         "X-CSRF-Token": window.CSRF_TOKEN || "",
+        "X-LIFF-Trace-ID": LIFF_TRACE_ID,
       },
       credentials: "same-origin",
       body: JSON.stringify({ friendFlag }),
     });
     if (!response.ok) {
-      throw new Error("friendship sync failed");
+      throw Object.assign(new Error("friendship sync failed"), {
+        code: `HTTP_${response.status}`,
+      });
     }
 
+    logToServer("friendship.sync_succeeded", {
+      friendFlag,
+      httpStatus: response.status,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
     window.LINE_NOTIFICATION_READY = friendFlag;
     window.dispatchEvent(new CustomEvent("line-friendship-updated", {
       detail: { friend: friendFlag },
@@ -282,6 +342,11 @@ async function syncLineFriendshipStatus() {
     return friendFlag;
   } catch (error) {
     console.warn("Failed to confirm LINE friendship:", error);
+    logToServer("friendship.check_failed", {
+      ...liffErrorDetails(error),
+      durationMs: Math.round(performance.now() - startedAt),
+      ...getLiffDebugContext(),
+    }, "warning");
     window.LINE_NOTIFICATION_READY = null;
     return null;
   }
@@ -370,7 +435,12 @@ function installImagePreviews() {
 
 async function initializeLiff() {
   const liffId = window.LIFF_ID || "";
+  const startedAt = performance.now();
   console.log("LIFF initialization started. LIFF ID:", liffId);
+  logToServer("liff.initialization_started", {
+    ...getLiffDebugContext(),
+    liffIdPresent: Boolean(liffId),
+  });
   installLineAuthSubmitGuard();
   installImagePreviews();
 
@@ -387,14 +457,14 @@ async function initializeLiff() {
   }
 
   setLineAuthControls(false, "LINE確認中...");
+  if (await restoreLineSession()) {
+    return;
+  }
 
   // Flaskテンプレート外で使う場合に備えて、LIFF ID未設定でもフォーム確認は可能にする
   if (!window.liff || !liffId || liffId.includes("{{")) {
     console.warn("LIFF is not configured or not available.");
     await logToServer("LIFF is not configured or not available.");
-    if (await restoreLineSession()) {
-      return;
-    }
     setLineAuthControls(false, "LINEで開いてください");
     return;
   }
@@ -402,16 +472,15 @@ async function initializeLiff() {
   try {
     await liff.init({ liffId });
     console.log("LIFF initialized successfully.");
-    await logToServer("LIFF initialized successfully.");
+    await logToServer("liff.initialization_succeeded", {
+      ...getLiffDebugContext(),
+      durationMs: Math.round(performance.now() - startedAt),
+    });
     clearLegacyLiffReturnUrl();
 
     if (!liff.isLoggedIn()) {
       console.log("Not logged in.");
       await logToServer("Not logged in.");
-
-      if (await restoreLineSession()) {
-        return;
-      }
 
       if (window.REQUIRE_LIFF_LOGIN === true) {
         console.log("Redirecting to LIFF login...");
@@ -433,7 +502,12 @@ async function initializeLiff() {
       return;
     }
     console.log("Profile retrieved.");
-    await logToServer("Profile retrieved.");
+    await logToServer("liff.profile_retrieved", {
+      userIdPresent: Boolean(profile?.userId),
+      displayNamePresent: Boolean(profile?.displayName),
+      idTokenPresent: Boolean(window.LINE_ID_TOKEN),
+      durationMs: Math.round(performance.now() - startedAt),
+    });
 
     const lineUserIdInput = document.getElementById("line_user_id");
     const userIdInput = document.getElementById("user_id");
@@ -499,6 +573,7 @@ async function initializeLiff() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-LIFF-Trace-ID": LIFF_TRACE_ID,
       },
       body: JSON.stringify({
         userId: profile.userId,
@@ -507,6 +582,10 @@ async function initializeLiff() {
       keepalive: true,
     });
     if (!linkResponse.ok) {
+      logToServer("liff.server_auth_failed", {
+        httpStatus: linkResponse.status,
+        durationMs: Math.round(performance.now() - startedAt),
+      }, "warning");
       if (linkResponse.status === 401) {
         restartLineAuthentication("server rejected ID token");
       } else {
@@ -517,6 +596,10 @@ async function initializeLiff() {
     }
 
     window.LINE_SESSION_AUTHENTICATED = true;
+    logToServer("liff.server_auth_succeeded", {
+      httpStatus: linkResponse.status,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
     clearLiffLoginAttempt();
     await syncLineFriendshipStatus();
     if (!await confirmUserRegistration(profile.userId)) {
@@ -528,14 +611,20 @@ async function initializeLiff() {
     window.dispatchEvent(new Event("line-authenticated"));
   } catch (error) {
     console.error("LIFF initialization error:", error);
-    await logToServer("LIFF initialization error: " + error.message);
+    await logToServer("liff.initialization_failed", {
+      ...liffErrorDetails(error),
+      durationMs: Math.round(performance.now() - startedAt),
+      ...getLiffDebugContext(),
+    }, "error");
   }
 }
 
-function logToServer(message, details = {}) {
+function logToServer(event, details = {}, level = "info") {
   const payload = JSON.stringify({
-    message: message,
-    details: details,
+    event,
+    level,
+    traceId: LIFF_TRACE_ID,
+    details,
     timestamp: new Date().toISOString(),
   });
 
@@ -551,6 +640,7 @@ function logToServer(message, details = {}) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-LIFF-Trace-ID": LIFF_TRACE_ID,
       },
       body: payload,
       keepalive: true,
@@ -564,5 +654,5 @@ function logToServer(message, details = {}) {
 
 initializeLiff().catch((error) => {
   console.error("LIFF initialization failed:", error);
-  logToServer("LIFF initialization failed: " + error.message);
+  logToServer("liff.unhandled_initialization_failure", liffErrorDetails(error), "error");
 });

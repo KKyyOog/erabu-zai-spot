@@ -45,4 +45,6 @@ class Config:
     PERMANENT_SESSION_LIFETIME = timedelta(
         days=int(os.getenv("GUEST_SESSION_DAYS", "365"))
     )
-    LIFF_DEBUG_LOGGING = os.getenv("LIFF_DEBUG_LOGGING", "false").lower() in ("1", "true", "yes")
+    LIFF_DEBUG_LOGGING = os.getenv("LIFF_DEBUG_LOGGING", "true").lower() in ("1", "true", "yes")
+    USER_INFO_CACHE_SECONDS = int(os.getenv("USER_INFO_CACHE_SECONDS", "600"))
+    USER_INFO_CACHE_MAX_ENTRIES = int(os.getenv("USER_INFO_CACHE_MAX_ENTRIES", "1000"))

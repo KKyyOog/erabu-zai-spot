@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+import time
 import unittest
 from io import BytesIO
 from unittest.mock import patch
@@ -11,7 +12,7 @@ from sqlalchemy import create_engine, event, inspect, text
 
 from app import create_app
 from app.config import Config
-from app.services import db_service
+from app.services import db_service, user_cache_service
 from scripts.migrate_posts_v2 import migrate as migrate_posts_v2
 
 
@@ -29,14 +30,19 @@ class WorkflowTestCase(unittest.TestCase):
         Config.LINE_CHANNEL_SECRET = "test-line-channel-secret"
         Config.LINE_CHANNEL_ACCESS_TOKEN = "test-line-channel-access-token"
         Config.LINE_OFFICIAL_ACCOUNT_ID = "@test-account"
+        Config.LIFF_DEBUG_LOGGING = False
+        Config.USER_INFO_CACHE_SECONDS = 600
+        Config.USER_INFO_CACHE_MAX_ENTRIES = 1000
 
     def setUp(self):
+        user_cache_service.clear_user_profile_cache()
         self.app = create_app()
         self.app.config.update(TESTING=True)
         self.client = self.app.test_client()
         self.csrf_token = "test-csrf-token"
 
     def tearDown(self):
+        user_cache_service.clear_user_profile_cache()
         self.app.extensions["database_engine"].dispose()
 
     def authenticate(self, line_user_id):
@@ -361,6 +367,7 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         with self.client.session_transaction() as session:
             self.assertEqual(session["line_user_id"], line_user_id)
+            self.assertGreater(session["line_authenticated_at"], 0)
         page = self.client.get("/users/me").get_data(as_text=True)
         self.assertIn(
             "https://static.line-scdn.net/liff/edge/2/sdk.js",
@@ -572,7 +579,14 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertIn("友だち追加・ブロック解除", page)
         self.assertIn("connectLineIdentity", page)
         self.assertIn("syncFriendshipStatus", page)
+        self.assertIn("restoreCachedLineIdentity", page)
+        self.assertIn("window.cacheUserRegistration", page)
+        self.assertIn("window.USER_INFO_CACHE_SECONDS = 600", page)
         self.assertIn("window.LINE_LOGIN_ENABLED = true", page)
+        self.assertIn('id="user-page-skeleton"', page)
+        self.assertIn('id="user-page-live" class="user-page-live" hidden', page)
+        self.assertIn('id="page-transition-skeleton"', page)
+        self.assertIn("startUserPageSkeletonFallback", page)
         self.assertNotIn("通知連携コード", page)
         self.assertIn(
             "https://static.line-scdn.net/liff/edge/2/sdk.js",
@@ -662,6 +676,133 @@ class WorkflowTestCase(unittest.TestCase):
                 db_service.can_receive_line_notifications(line_user_id)
             )
 
+    def test_recent_line_session_can_skip_reauthentication(self):
+        line_user_id = "U44444444444444444444444444444444"
+        with self.client.session_transaction() as session:
+            session["line_user_id"] = line_user_id
+            session["line_authenticated_at"] = int(time.time())
+
+        response = self.client.get("/link/session")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertTrue(body["ok"])
+        self.assertTrue(body["cache_valid"])
+        self.assertGreater(body["cache_expires_in"], 0)
+
+    def test_expired_line_session_requires_fresh_liff_authentication(self):
+        line_user_id = "U55555555555555555555555555555555"
+        self.app.config["USER_INFO_CACHE_SECONDS"] = 600
+        with self.client.session_transaction() as session:
+            session["line_user_id"] = line_user_id
+            session["line_authenticated_at"] = int(time.time()) - 601
+
+        response = self.client.get("/link/session")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertTrue(body["ok"])
+        self.assertFalse(body["cache_valid"])
+        self.assertEqual(body["cache_expires_in"], 0)
+
+    def test_user_registration_check_reuses_cached_profile(self):
+        line_user_id = "cached-profile-user"
+        self.add_user(line_user_id, "キャッシュ利用者")
+        self.authenticate(line_user_id)
+
+        with patch(
+            "app.services.user_cache_service.get_me_profile_by_line_user_id",
+            wraps=db_service.get_me_profile_by_line_user_id,
+        ) as loader:
+            first = self.client.get(f"/users/check/{line_user_id}")
+            second = self.client.get(f"/users/check/{line_user_id}")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertTrue(first.get_json()["exists"])
+        self.assertFalse(first.get_json()["cached"])
+        self.assertTrue(second.get_json()["cached"])
+        self.assertEqual(loader.call_count, 1)
+
+    def test_profile_update_refreshes_cached_user_information(self):
+        line_user_id = "cache-update-user"
+        self.add_user(line_user_id, "変更前")
+        self.authenticate(line_user_id)
+
+        initial = self.client.get(f"/users/check/{line_user_id}")
+        self.assertTrue(initial.get_json()["exists"])
+
+        save_response = self.post_form(
+            "/users/me/save",
+            {
+                "line_user_id": line_user_id,
+                "display_name": "変更後",
+                "address": "知名町",
+                "transport_info": "軽トラック",
+                "contact_display_name": "新しい連絡先名",
+                "contact_method": "LINE",
+                "contact_value": "line-contact",
+            },
+        )
+        self.assertEqual(save_response.status_code, 302)
+
+        profile_response = self.client.post(
+            "/users/me/data",
+            json={"userId": line_user_id, "scope": "profile"},
+            headers={"X-CSRF-Token": self.csrf_token},
+        )
+
+        self.assertEqual(profile_response.status_code, 200)
+        profile = profile_response.get_json()
+        self.assertTrue(profile["cached"])
+        self.assertEqual(profile["user"]["display_name"], "変更後")
+        self.assertEqual(profile["contact_card"]["display_name"], "新しい連絡先名")
+
+    def test_liff_debug_logging_records_structured_safe_event(self):
+        line_user_id = "U33333333333333333333333333333333"
+        self.authenticate(line_user_id)
+        self.app.config["LIFF_DEBUG_LOGGING"] = True
+
+        with self.assertLogs("app.routes.link", level="INFO") as captured:
+            response = self.client.post(
+                "/link/liff-debug",
+                json={
+                    "event": "friendship.check_failed",
+                    "level": "warning",
+                    "traceId": "trace-test-1",
+                    "timestamp": "2026-09-08T00:00:00.000Z",
+                    "details": {
+                        "errorCode": "400",
+                        "errorMessage": "There is no login bot linked",
+                        "friendFlag": False,
+                        "idToken": "secret-id-token",
+                        "href": "https://example.com/?code=secret-code",
+                    },
+                },
+                headers={"Referer": "https://example.com/users/me?code=secret-code"},
+            )
+
+        self.assertEqual(response.status_code, 204)
+        log_output = "\n".join(captured.output)
+        self.assertIn("event=friendship.check_failed", log_output)
+        self.assertIn("trace=trace-test-1", log_output)
+        self.assertIn('"errorCode":"400"', log_output)
+        self.assertIn('"friendFlag":false', log_output)
+        self.assertIn("referer_path=/users/me", log_output)
+        self.assertIn("[redacted]", log_output)
+        self.assertNotIn("secret-id-token", log_output)
+        self.assertNotIn("secret-code", log_output)
+        self.assertNotIn(line_user_id, log_output)
+
+    def test_disabled_liff_debug_endpoint_does_not_return_404(self):
+        self.app.config["LIFF_DEBUG_LOGGING"] = False
+
+        response = self.client.post(
+            "/link/liff-debug",
+            json={"event": "page.initialization_started"},
+        )
+
+        self.assertEqual(response.status_code, 204)
+
     def test_registration_forms_use_photo_picker_without_url_inputs(self):
         material_page = self.client.get("/materials/register/material").get_data(
             as_text=True
@@ -669,6 +810,7 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertIn("写真を撮る・ライブラリから選ぶ", material_page)
         self.assertIn('name="image_files"', material_page)
         self.assertNotIn('name="image_urls_text"', material_page)
+        self.assertIn('class="registration-skeleton skeleton-screen"', material_page)
 
         demolition_page = self.client.get(
             "/materials/register/demolition"
@@ -676,6 +818,7 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertIn("建物写真を撮る・ライブラリから選ぶ", demolition_page)
         self.assertIn('name="building_image_files"', demolition_page)
         self.assertNotIn('name="building_photo_urls_text"', demolition_page)
+        self.assertIn('class="registration-skeleton skeleton-screen"', demolition_page)
 
         request_page = self.client.get(
             "/materials/register/request"
@@ -684,6 +827,7 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertIn('name="description"', request_page)
         self.assertIn('name="image_files"', request_page)
         self.assertNotIn('name="image_urls_text"', request_page)
+        self.assertIn('class="registration-skeleton skeleton-screen"', request_page)
 
         selection_page = self.client.get("/materials/register").get_data(
             as_text=True

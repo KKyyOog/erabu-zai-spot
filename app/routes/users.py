@@ -18,6 +18,10 @@ from app.services.db_service import (
 )
 from app.services.line_service import send_line_message
 from app.services.line_auth_service import LineAuthError, require_verified_line_user_id
+from app.services.user_cache_service import (
+    get_user_profile_snapshot,
+    refresh_user_profile_cache,
+)
 from app.validation import first_overlong_field
 
 users_bp = Blueprint("users", __name__, url_prefix="/users")
@@ -162,6 +166,7 @@ def submit():
     line_user_id = append_user(form)
     _save_contact_card_if_present(line_user_id, form)
     _clear_me_data_cache(line_user_id)
+    refresh_user_profile_cache(line_user_id)
     flash("ユーザー情報を登録しました。")
     return redirect(url_for("users.me"))
 
@@ -173,8 +178,10 @@ def check(line_user_id):
     except LineAuthError:
         return jsonify({"exists": False, "message": "LINE authentication failed"}), 401
 
-    user = get_user_by_line_user_id(verified_user_id)
-    return jsonify({"exists": user is not None})
+    user, _, cache_hit = get_user_profile_snapshot(verified_user_id)
+    response = jsonify({"exists": user is not None, "cached": cache_hit})
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @users_bp.route("/<line_user_id>", methods=["GET"])
@@ -219,6 +226,7 @@ def update_profile(line_user_id):
     if result:
         _save_contact_card_if_present(resolved_user_id, form)
         _clear_me_data_cache(resolved_user_id)
+        refresh_user_profile_cache(resolved_user_id)
     flash("ユーザー情報を更新しました。" if exists else "ユーザー情報を登録しました。")
 
     if result:
@@ -256,6 +264,28 @@ def me_data():
         return jsonify({"ok": False, "message": "invalid scope"}), 400
 
     force_refresh = data.get("refresh") is True
+    if scope == "profile":
+        user, contact_card, cache_hit = get_user_profile_snapshot(
+            user_id,
+            force_refresh=force_refresh,
+        )
+        payload = {
+            "ok": True,
+            "exists": user is not None,
+            "user": user or {
+                "line_user_id": user_id,
+                "display_name": "",
+                "business_name": "",
+                "user_category": "",
+                "area": "",
+                "address": "",
+                "transport_info": "",
+            },
+            "contact_card": contact_card or {},
+            "cached": cache_hit,
+        }
+        return jsonify(payload)
+
     cached = None if force_refresh else _get_cached_me_data(user_id, scope)
     if cached:
         return jsonify(cached)
@@ -326,6 +356,7 @@ def me_save():
     if result:
         _save_contact_card_if_present(resolved_user_id, form)
         _clear_me_data_cache(resolved_user_id)
+        refresh_user_profile_cache(resolved_user_id)
 
     if result:
         flash("ユーザー情報を更新しました。" if exists else "ユーザー情報を登録しました。")
