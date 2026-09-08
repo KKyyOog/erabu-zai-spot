@@ -1256,9 +1256,7 @@
       if (!redirectIfLoggedOut) {
         return false;
       }
-      rememberLiffLoginAttempt();
-      setLoading(true, 'LINE連携画面へ移動しています...');
-      liff.login({ redirectUri: liffLoginRedirectUrl() });
+      restartLineAuthentication('LINE login required');
       return true;
     }
 
@@ -1269,7 +1267,9 @@
         ...getLiffDebugContext(),
       }, 'warning');
       if (redirectIfLoggedOut) {
-        throw new Error('LINE ID token is missing or expired');
+        restartLineAuthentication('missing or expired ID token');
+        // Recovery either redirects or displays an actionable error of its own.
+        return true;
       }
       return false;
     }
@@ -1297,6 +1297,10 @@
         httpStatus: linkResponse.status,
         durationMs: Math.round(performance.now() - startedAt),
       }, 'warning');
+      if (linkResponse.status === 401 && redirectIfLoggedOut) {
+        restartLineAuthentication('server rejected ID token');
+        return true;
+      }
       throw Object.assign(new Error('LINE authentication failed'), {
         code: `HTTP_${linkResponse.status}`,
       });
