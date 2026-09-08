@@ -25,7 +25,7 @@ class WorkflowTestCase(unittest.TestCase):
         Config.SECRET_KEY = "test-secret-key-that-is-long-enough-for-tests"
         Config.ALLOW_INSECURE_DEV_CONFIG = True
         Config.SESSION_COOKIE_SECURE = False
-        Config.LIFF_ID = "test-liff-id"
+        Config.LIFF_ID = " test-liff-id "
         Config.LINE_LOGIN_ENABLED = False
         Config.LINE_CHANNEL_SECRET = "test-line-channel-secret"
         Config.LINE_CHANNEL_ACCESS_TOKEN = "test-line-channel-access-token"
@@ -373,6 +373,7 @@ class WorkflowTestCase(unittest.TestCase):
             "https://static.line-scdn.net/liff/edge/2/sdk.js",
             page,
         )
+        self.assertIn('sdk.js" async', page)
 
     def test_guest_can_save_profile_and_register_material(self):
         guest_user_id = self.start_guest_session()["line_user_id"]
@@ -587,6 +588,18 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertIn('id="user-page-live" class="user-page-live" hidden', page)
         self.assertIn('id="page-transition-skeleton"', page)
         self.assertIn("startUserPageSkeletonFallback", page)
+        self.assertIn("startUserPageInitialization", page)
+        self.assertIn("page.head_initialized", page)
+        self.assertIn("page.dom_ready", page)
+        self.assertIn("browser.javascript_error", page)
+        self.assertIn("liff.sdk_load_timeout", page)
+        self.assertIn("window.waitForLiffSdk", page)
+        self.assertIn('window.LIFF_ID = "test-liff-id"', page)
+        liff_script_response = self.client.get("/static/js/liff.js")
+        liff_script = liff_script_response.get_data(as_text=True)
+        liff_script_response.close()
+        self.assertIn('window.LIFF_ID.trim()', liff_script)
+        self.assertIn('"liff_id_missing"', liff_script)
         self.assertNotIn("通知連携コード", page)
         self.assertIn(
             "https://static.line-scdn.net/liff/edge/2/sdk.js",

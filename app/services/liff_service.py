@@ -3,6 +3,7 @@ from flask import current_app, url_for
 
 def build_liff_url(path="/", liff_id=None):
     resolved_liff_id = liff_id if liff_id is not None else current_app.config.get("LIFF_ID", "")
+    resolved_liff_id = str(resolved_liff_id or "").strip()
     if not resolved_liff_id:
         return path
 

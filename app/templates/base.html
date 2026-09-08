@@ -6,6 +6,115 @@
   <title>えらぶ材すぽっと</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260908-skeleton') }}">
   <script>
+    window.LIFF_TRACE_ID = window.LIFF_TRACE_ID || (
+      window.crypto && typeof window.crypto.randomUUID === 'function'
+        ? window.crypto.randomUUID()
+        : `liff-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    );
+    window.sendClientDiagnostic = function sendClientDiagnostic(eventName, details = {}, level = 'info') {
+      const payload = JSON.stringify({
+        event: eventName,
+        level,
+        traceId: window.LIFF_TRACE_ID,
+        details,
+        timestamp: new Date().toISOString(),
+      });
+      try {
+        if (navigator.sendBeacon) {
+          const sent = navigator.sendBeacon(
+            '/link/liff-debug',
+            new Blob([payload], { type: 'application/json' }),
+          );
+          if (sent) {
+            return;
+          }
+        }
+        fetch('/link/liff-debug', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-LIFF-Trace-ID': window.LIFF_TRACE_ID,
+          },
+          body: payload,
+          keepalive: true,
+        }).catch(function () {});
+      } catch (error) {
+        // Diagnostics must never stop the page itself from loading.
+      }
+    };
+    window.addEventListener('error', function (event) {
+      if (event.target && event.target !== window) {
+        const source = event.target.src || event.target.href || '';
+        let sourcePath = '';
+        try {
+          const sourceUrl = new URL(source, window.location.origin);
+          sourcePath = `${sourceUrl.hostname}${sourceUrl.pathname}`;
+        } catch (error) {
+          sourcePath = 'unknown';
+        }
+        window.sendClientDiagnostic('browser.resource_load_failed', {
+          element: event.target.tagName || 'unknown',
+          sourcePath,
+        }, 'error');
+        return;
+      }
+      window.sendClientDiagnostic('browser.javascript_error', {
+        errorName: event.error && event.error.name ? event.error.name : 'Error',
+        errorMessage: event.message || 'unknown JavaScript error',
+        line: event.lineno || 0,
+        column: event.colno || 0,
+      }, 'error');
+    }, true);
+    window.addEventListener('unhandledrejection', function (event) {
+      const reason = event.reason || {};
+      window.sendClientDiagnostic('browser.unhandled_rejection', {
+        errorName: reason.name || 'Error',
+        errorCode: reason.code || '',
+        errorMessage: reason.message || String(reason || 'unknown Promise rejection'),
+      }, 'error');
+    });
+    window.LIFF_SDK_READY = new Promise(function (resolve) {
+      window.resolveLiffSdkReady = resolve;
+    });
+    window.reportLiffSdkLoad = function reportLiffSdkLoad(loaded) {
+      window.sendClientDiagnostic(loaded ? 'liff.sdk_loaded' : 'liff.sdk_load_failed', {
+        hasLiff: Boolean(window.liff),
+      }, loaded ? 'info' : 'error');
+      if (window.resolveLiffSdkReady) {
+        window.resolveLiffSdkReady(Boolean(loaded && window.liff));
+        window.resolveLiffSdkReady = null;
+      }
+    };
+    window.waitForLiffSdk = function waitForLiffSdk(timeoutMs = 8000) {
+      if (window.liff) {
+        return Promise.resolve(true);
+      }
+      return new Promise(function (resolve) {
+        let settled = false;
+        const finish = function (available) {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timer);
+          resolve(Boolean(available && window.liff));
+        };
+        const timer = setTimeout(function () {
+          window.sendClientDiagnostic('liff.sdk_load_timeout', {
+            timeoutMs,
+            online: navigator.onLine,
+          }, 'error');
+          finish(false);
+        }, timeoutMs);
+        window.LIFF_SDK_READY.then(finish, function () {
+          finish(false);
+        });
+      });
+    };
+    window.sendClientDiagnostic('page.head_initialized', {
+      pathname: window.location.pathname,
+      online: navigator.onLine,
+    });
     window.CSRF_TOKEN = {{ csrf_token()|tojson }};
     window.LINE_LOGIN_ENABLED = {{ LINE_LOGIN_ENABLED|tojson }};
     window.USER_INFO_CACHE_SECONDS = {{ USER_INFO_CACHE_SECONDS|tojson }};
@@ -65,6 +174,10 @@
     };
     document.addEventListener("DOMContentLoaded", function () {
       document.querySelectorAll("form").forEach(window.ensureCsrfToken);
+      window.sendClientDiagnostic('page.dom_ready', {
+        pathname: window.location.pathname,
+        hasLiff: Boolean(window.liff),
+      });
     });
     window.showPageTransitionSkeleton = function showPageTransitionSkeleton() {
       const skeleton = document.getElementById('page-transition-skeleton');
@@ -127,7 +240,9 @@
     }, true);
   </script>
   {% if LINE_LOGIN_ENABLED %}
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" async
+          onload="window.reportLiffSdkLoad(true)"
+          onerror="window.reportLiffSdkLoad(false)"></script>
   {% endif %}
 </head>
 <body>

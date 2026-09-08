@@ -434,12 +434,13 @@ function installImagePreviews() {
 }
 
 async function initializeLiff() {
-  const liffId = window.LIFF_ID || "";
+  const liffId = typeof window.LIFF_ID === "string" ? window.LIFF_ID.trim() : "";
   const startedAt = performance.now();
   console.log("LIFF initialization started. LIFF ID:", liffId);
   logToServer("liff.initialization_started", {
     ...getLiffDebugContext(),
     liffIdPresent: Boolean(liffId),
+    liffIdLength: liffId.length,
   });
   installLineAuthSubmitGuard();
   installImagePreviews();
@@ -461,10 +462,19 @@ async function initializeLiff() {
     return;
   }
 
+  if (!window.liff && typeof window.waitForLiffSdk === "function") {
+    await window.waitForLiffSdk();
+  }
+
   // Flaskテンプレート外で使う場合に備えて、LIFF ID未設定でもフォーム確認は可能にする
   if (!window.liff || !liffId || liffId.includes("{{")) {
     console.warn("LIFF is not configured or not available.");
-    await logToServer("LIFF is not configured or not available.");
+    await logToServer("liff.initialization_skipped", {
+      ...getLiffDebugContext(),
+      reason: !liffId ? "liff_id_missing" : "sdk_unavailable",
+      liffIdPresent: Boolean(liffId),
+      liffIdLength: liffId.length,
+    }, "error");
     setLineAuthControls(false, "LINEで開いてください");
     return;
   }
@@ -652,7 +662,15 @@ function logToServer(event, details = {}, level = "info") {
   }
 }
 
-initializeLiff().catch((error) => {
-  console.error("LIFF initialization failed:", error);
-  logToServer("liff.unhandled_initialization_failure", liffErrorDetails(error), "error");
-});
+function startLiffInitialization() {
+  initializeLiff().catch((error) => {
+    console.error("LIFF initialization failed:", error);
+    logToServer("liff.unhandled_initialization_failure", liffErrorDetails(error), "error");
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", startLiffInitialization, { once: true });
+} else {
+  startLiffInitialization();
+}

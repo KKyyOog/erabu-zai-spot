@@ -1130,9 +1130,11 @@
 
   async function initializeLiffClient() {
     const startedAt = performance.now();
+    const liffId = typeof window.LIFF_ID === 'string' ? window.LIFF_ID.trim() : '';
     logLiffDebug('liff.initialization_started', {
       ...getLiffDebugContext(),
-      liffIdPresent: Boolean(window.LIFF_ID),
+      liffIdPresent: Boolean(liffId),
+      liffIdLength: liffId.length,
     });
     if (window.LINE_LOGIN_ENABLED !== true) {
       logLiffDebug('liff.initialization_skipped', { reason: 'login_disabled' }, 'warning');
@@ -1142,15 +1144,20 @@
       logLiffDebug('liff.initialization_reused', getLiffDebugContext());
       return true;
     }
-    if (!window.LIFF_ID || !window.liff) {
+    if (!window.liff && typeof window.waitForLiffSdk === 'function') {
+      await window.waitForLiffSdk();
+    }
+    if (!liffId || !window.liff) {
       logLiffDebug('liff.initialization_skipped', {
-        reason: 'sdk_or_liff_id_missing',
+        reason: !liffId ? 'liff_id_missing' : 'sdk_unavailable',
+        liffIdPresent: Boolean(liffId),
+        liffIdLength: liffId.length,
         ...getLiffDebugContext(),
-      }, 'warning');
+      }, 'error');
       return false;
     }
     try {
-      await liff.init({ liffId: window.LIFF_ID });
+      await liff.init({ liffId });
       liffInitialized = true;
       clearLegacyLiffReturnUrl();
       logLiffDebug('liff.initialization_succeeded', {
@@ -1351,22 +1358,30 @@
     }
   }
 
-  initializePageTabs();
-  document.getElementById('user-form').addEventListener('submit', () => {
-    window.clearCachedUserRegistration?.(document.getElementById('line_user_id').value);
-  });
-  document.getElementById('notification-enable-button').addEventListener('click', requestNotificationAccess);
-  window.addEventListener('focus', () => {
-    if (currentAuthMode === 'line' && liffInitialized) {
-      syncFriendshipStatus();
-    }
-  });
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && currentAuthMode === 'line' && liffInitialized) {
-      syncFriendshipStatus();
-    }
-  });
-  initMeFlow();
+  function startUserPageInitialization() {
+    initializePageTabs();
+    document.getElementById('user-form').addEventListener('submit', () => {
+      window.clearCachedUserRegistration?.(document.getElementById('line_user_id').value);
+    });
+    document.getElementById('notification-enable-button').addEventListener('click', requestNotificationAccess);
+    window.addEventListener('focus', () => {
+      if (currentAuthMode === 'line' && liffInitialized) {
+        syncFriendshipStatus();
+      }
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && currentAuthMode === 'line' && liffInitialized) {
+        syncFriendshipStatus();
+      }
+    });
+    initMeFlow();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startUserPageInitialization, { once: true });
+  } else {
+    startUserPageInitialization();
+  }
 </script>
 
 {% endblock %}

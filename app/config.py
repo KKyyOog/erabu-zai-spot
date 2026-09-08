@@ -28,7 +28,7 @@ class Config:
     LINE_NOTIFICATION_LINK_TTL_MINUTES = int(
         os.getenv("LINE_NOTIFICATION_LINK_TTL_MINUTES", "10")
     )
-    LIFF_ID = os.getenv("LIFF_ID", "")
+    LIFF_ID = os.getenv("LIFF_ID", "").strip()
     GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
     GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "service_account.json")
     GOOGLE_SERVICE_ACCOUNT_JSON_TEXT = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON_TEXT", "")

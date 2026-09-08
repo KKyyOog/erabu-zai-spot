@@ -24,6 +24,17 @@ def create_app():
 
     app = Flask(__name__)
     app.config.from_object(Config)
+    app.config["LIFF_ID"] = str(app.config.get("LIFF_ID") or "").strip()
+    app.logger.info(
+        "[LINE CONFIG] login_enabled=%s liff_id_present=%s liff_id_length=%d",
+        app.config["LINE_LOGIN_ENABLED"],
+        bool(app.config["LIFF_ID"]),
+        len(app.config["LIFF_ID"]),
+    )
+    if app.config["LINE_LOGIN_ENABLED"] and not app.config["LIFF_ID"]:
+        app.logger.error(
+            "[LINE CONFIG] LIFF_ID is missing; LINE pages cannot initialize LIFF"
+        )
     secret_key = app.config.get("SECRET_KEY") or ""
     if (
         (secret_key == "dev-secret" or len(secret_key) < 32)
