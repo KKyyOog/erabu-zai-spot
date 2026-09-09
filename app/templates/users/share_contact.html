@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card share-confirmation">
+  <p class="entry-badge">共有前の確認</p>
+  <h2>この連絡先を共有しますか？</h2>
+  <p><strong>{{ target_name }}</strong>さんへ、以下の内容を共有します。</p>
+  <p class="hint">対象：{{ match.entry_title or 'マッチング中の投稿' }}</p>
+  <dl class="detail-list">
+    <div><dt>表示名</dt><dd>{{ card.display_name or '未設定' }}</dd></div>
+    <div><dt>連絡方法</dt><dd>{{ card.contact_method or '未設定' }}</dd></div>
+    <div><dt>連絡先</dt><dd>{{ card.contact_value }}</dd></div>
+    {% if card.available_time %}<div><dt>連絡しやすい時間</dt><dd>{{ card.available_time }}</dd></div>{% endif %}
+    {% if card.message %}<div><dt>ひとこと</dt><dd>{{ card.message }}</dd></div>{% endif %}
+  </dl>
+  <p class="hint">共有すると相手の履歴に保存され、LINE通知にも記載されます。相手が受け取った内容は取り消せません。</p>
+  <form method="post">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="contact_version" value="{{ contact_version }}">
+    <button type="submit">この内容で共有する</button>
+  </form>
+  <div class="flow-actions">
+    <a href="{{ url_for('users.me', tab='matches') }}">共有せずに戻る</a>
+    <a href="{{ url_for('users.me', tab='profile') }}">連絡先を修正する</a>
+  </div>
+</section>
+{% endblock %}

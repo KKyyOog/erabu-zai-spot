@@ -3,25 +3,49 @@
 {% block content %}
 <section class="listing-page">
   <h2>登録情報を見る</h2>
+  {% if inquiry_result %}
+  <aside class="next-step-card" role="status">
+    <h3>問い合わせを受け付けました</h3>
+    <p>マッチング履歴に保存しました。次は相手の返答を待ちましょう。</p>
+    {% if not inquiry_result.notification_sent %}<p>LINE通知はまだ送信できていません。問い合わせ自体を送り直す必要はありません。</p>{% endif %}
+    <p class="hint">直接の連絡を希望する場合は、履歴から連絡先カードを確認して共有できます。</p>
+    <a class="button-link" href="{{ url_for('users.me', tab='matches', refresh='1') }}">問い合わせの履歴を見る</a>
+  </aside>
+  {% endif %}
+  <form class="listing-search" method="get">
+    <input type="hidden" name="type" value="{{ display_filter }}">
+    <input type="hidden" name="material_type" value="{{ material_type_filter }}">
+    <div><label for="listing-query">キーワード</label><input id="listing-query" type="search" name="q" value="{{ query }}" maxlength="100" placeholder="例：角材、ドア、タイル"></div>
+    <div><label for="listing-area">エリア</label><select id="listing-area" name="area"><option value="all">すべてのエリア</option>{% for name in ['和泊町', '知名町'] %}<option value="{{ name }}" {% if area == name %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
+    <button type="submit">この条件で探す</button>
+  </form>
+  {% if query or area != 'all' or material_type_filter != 'all' or display_filter != 'all' %}<p class="filter-summary">{% if query %}「{{ query }}」{% endif %}{% if area != 'all' %} · {{ area }}{% endif %} <a href="{{ url_for('materials.list_materials') }}">条件をすべて解除</a></p>{% endif %}
+  {% include "materials/_pagination.html" %}
 
   <nav class="filter-tabs listing-filter-tabs" aria-label="投稿タイプで絞り込み">
-    <a class="{{ 'active' if display_filter == 'all' else '' }}" href="{{ url_for('materials.list_materials', type='all', material_type='all') }}">すべて</a>
-    <a class="offer-filter {{ 'active' if display_filter == 'offer' else '' }}" href="{{ url_for('materials.list_materials', type='offer', material_type=material_type_filter) }}">材があります</a>
-    <a class="request-filter {{ 'active' if display_filter == 'request' else '' }}" href="{{ url_for('materials.list_materials', type='request', material_type=material_type_filter) }}">探しています</a>
-    <a class="{{ 'active' if display_filter == 'demolitions' else '' }}" href="{{ url_for('materials.list_materials', type='demolitions', material_type='all') }}">解体物件</a>
+    <a class="{{ 'active' if display_filter == 'all' else '' }}" href="{{ listing_url(type='all', material_type='all') }}">すべて</a>
+    <a class="offer-filter {{ 'active' if display_filter == 'offer' else '' }}" href="{{ listing_url(type='offer', material_type=material_type_filter) }}">材があります</a>
+    <a class="request-filter {{ 'active' if display_filter == 'request' else '' }}" href="{{ listing_url(type='request', material_type=material_type_filter) }}">探しています</a>
+    <a class="{{ 'active' if display_filter == 'demolitions' else '' }}" href="{{ listing_url(type='demolitions', material_type='all') }}">解体物件</a>
   </nav>
 
   {% if display_filter != 'demolitions' %}
     <nav class="filter-tabs material-type-tabs listing-filter-tabs" aria-label="材の種類で絞り込み">
       <span class="filter-label">材の種類</span>
-      <a class="{{ 'active' if material_type_filter == 'all' else '' }}" href="{{ url_for('materials.list_materials', type=display_filter, material_type='all') }}">すべて</a>
+      <a class="{{ 'active' if material_type_filter == 'all' else '' }}" href="{{ listing_url(type=display_filter, material_type='all') }}">すべて</a>
       {% for material_type in material_type_options %}
-        <a class="{{ 'active' if material_type_filter == material_type else '' }}" href="{{ url_for('materials.list_materials', type=display_filter, material_type=material_type) }}">{{ material_type }}</a>
+        <a class="{{ 'active' if material_type_filter == material_type else '' }}" href="{{ listing_url(type=display_filter, material_type=material_type) }}">{{ material_type }}</a>
       {% endfor %}
     </nav>
   {% endif %}
 
-  {% if items %}
+  {% if load_error %}
+    <div class="empty-state" role="alert">
+      <h3>投稿を読み込めませんでした</h3>
+      <p>時間をおいて、もう一度お試しください。検索条件はそのまま保持されます。</p>
+      <a class="button-link" href="{{ listing_url(page=page) }}">再読み込みする</a>
+    </div>
+  {% elif items %}
     <div class="listing-grid">
       {% for item in items %}
         {% set dialog_id = 'listing-detail-' ~ loop.index %}
@@ -84,6 +108,7 @@
                     <span class="status-badge">{{ item.status }}</span>
                   </div>
                   <h3 id="{{ dialog_id }}-title">{{ item.title }}</h3>
+                  <a href="{{ url_for('materials.detail', material_id=item.id) }}">個別ページを開く・共有する</a>
                   <p class="listing-detail__meta">
                     {{ item.display_name or '登録ユーザー' }}{% if item.created_at %} ・ {{ item.created_at|date_jp }}{% endif %}
                   </p>
@@ -112,7 +137,10 @@
                   <form class="listing-detail__actions" method="post" action="{{ url_for('materials.interest') }}">
                     <input type="hidden" name="material_id" value="{{ item.id }}">
                     <input type="hidden" name="line_user_id">
-                    <input type="hidden" name="return_type" value="{{ display_filter }}">
+                    <input type="hidden" name="return_page" value="{{ page }}">
+                  <input type="hidden" name="return_area" value="{{ area }}">
+                  <input type="hidden" name="return_q" value="{{ query }}">
+                  <input type="hidden" name="return_type" value="{{ display_filter }}">
                     <input type="hidden" name="return_material_type" value="{{ material_type_filter }}">
                     <label for="message-{{ loop.index }}">問い合わせメッセージ</label>
                     <textarea id="message-{{ loop.index }}" name="message" rows="3" placeholder="{{ '提供できそうな材があります。' if item.post_type == 'request' else '受け渡し方法について相談したいです。' }}"></textarea>
@@ -171,6 +199,7 @@
                     <span class="status-badge demolition">{{ item.status }}</span>
                   </div>
                   <h3 id="{{ dialog_id }}-title">{{ item.title or item.location or '物件名未設定' }}</h3>
+                  <a href="{{ url_for('materials.demolition_detail', property_id=item.id) }}">個別ページを開く・共有する</a>
                   {% if item.created_at %}<p class="listing-detail__meta">登録日 {{ item.created_at|date_jp }}</p>{% endif %}
                 </header>
                 <dl class="detail-list listing-detail__list">
@@ -189,6 +218,9 @@
                 <form class="listing-detail__actions" method="post" action="{{ url_for('materials.visit_interest') }}">
                   <input type="hidden" name="property_id" value="{{ item.id }}">
                   <input type="hidden" name="line_user_id">
+                  <input type="hidden" name="return_page" value="{{ page }}">
+                  <input type="hidden" name="return_area" value="{{ area }}">
+                  <input type="hidden" name="return_q" value="{{ query }}">
                   <input type="hidden" name="return_type" value="{{ display_filter }}">
                   <input type="hidden" name="return_material_type" value="{{ material_type_filter }}">
                   <button type="submit">見学したい</button>
@@ -201,10 +233,15 @@
     </div>
   {% else %}
     <div class="empty-state">
-      <p>現在表示できる投稿はありません。</p>
-      <a class="button-link compact" href="{{ url_for('materials.register') }}">投稿する</a>
+      <h3>この条件の投稿は見つかりませんでした</h3>
+      <p>条件を広げるか、探している材を投稿して情報を待つことができます。</p>
+      <div class="flow-actions">
+        <a class="button-link secondary-button" href="{{ url_for('materials.list_materials') }}">条件を解除する</a>
+        <a class="button-link" href="{{ url_for('materials.register_request') }}">「探しています」を投稿する</a>
+      </div>
     </div>
   {% endif %}
+  {% include "materials/_pagination.html" %}
 </section>
 
 <script>

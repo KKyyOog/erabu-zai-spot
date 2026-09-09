@@ -20,7 +20,7 @@
     <p><a class="button-link" href="{{ url_for('users.me') }}">マイページで登録する</a></p>
   </div>
 
-  <form method="post" action="{{ url_for('materials.submit') }}" enctype="multipart/form-data" data-requires-user-registration hidden>
+  <form method="post" action="{{ url_for('materials.submit') }}" enctype="multipart/form-data" data-draft-kind="offer" data-requires-user-registration hidden>
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="display_name" id="display_name">
 
@@ -45,7 +45,8 @@
     </select>
 
     <fieldset class="form-fieldset location-choice" data-location-choice data-profile-location="">
-      <legend>受け渡し場所 *</legend>
+      <legend>受け渡し場所（詳しい住所は非公開） *</legend>
+      <p class="hint">公開する場所は町名までです。詳しい住所は、問い合わせ相手と連絡を取り合って共有してください。</p>
       <div class="location-choice__options">
         <label class="location-choice__option">
           <input type="radio" name="location_source" value="profile" checked>

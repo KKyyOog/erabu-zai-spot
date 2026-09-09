@@ -1,0 +1,5 @@
+<nav class="pagination" aria-label="一覧のページ切り替え">
+  {% if page > 1 %}<a class="button-link secondary-button" href="{{ listing_url(page=page-1) }}">前のページ</a>{% endif %}
+  <span aria-current="page">{{ page }}ページ目</span>
+  {% if has_next %}<a class="button-link secondary-button" href="{{ listing_url(page=page+1) }}">次のページ</a>{% endif %}
+</nav>

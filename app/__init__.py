@@ -16,6 +16,8 @@ from app.routes.admin import admin_bp
 from app.config import Config
 from app.services.db_service import init_database
 from app.services.liff_service import liff_url_for
+from app.services.line_auth_service import session_identity_is_fresh
+from app.services.rate_limit_service import allow_request
 
 
 def create_app():
@@ -63,6 +65,26 @@ def create_app():
     app.register_blueprint(callback_bp)
     app.register_blueprint(admin_bp)
 
+    @app.cli.command("send-notifications")
+    def send_notifications():
+        """Deliver up to 100 due notifications; schedule every minute."""
+        from app.services.notification_service import drain_notifications
+        print(f"Delivered: {drain_notifications()}")
+
+    @app.cli.command("clean-upload-jobs")
+    def clean_upload_jobs_command():
+        """Reconcile tracked uploads older than 24 hours; schedule daily."""
+        from app.routes.materials import clean_upload_jobs
+        print(f"Reconciled: {clean_upload_jobs()}")
+
+    @app.errorhandler(413)
+    def upload_too_large(error):
+        return render_template("error.html", message="写真の合計サイズが大きすぎます。写真を減らすか、小さいサイズで選び直してください。"), 413
+
+    @app.errorhandler(500)
+    def server_error(error):
+        return render_template("error.html", message="処理を完了できませんでした。マイページで保存状況を確認してから、再度お試しください。"), 500
+
     @app.context_processor
     def inject_liff_id():
         def csrf_token():
@@ -78,6 +100,7 @@ def create_app():
             "USER_INFO_CACHE_SECONDS": app.config["USER_INFO_CACHE_SECONDS"],
             "liff_url_for": liff_url_for,
             "csrf_token": csrf_token,
+            "completed_draft": session.pop("completed_draft", None),
         }
 
     @app.template_filter("date_jp")
@@ -115,6 +138,15 @@ def create_app():
         return text
 
     @app.before_request
+    def expire_identity():
+        if session.get("line_user_id") and not session_identity_is_fresh():
+            if str(session["line_user_id"]).startswith("anon_"):
+                # Retain migration provenance without treating it as authenticated.
+                session["legacy_guest_user_id"] = session["line_user_id"]
+            session.pop("line_user_id", None)
+            session.pop("line_authenticated_at", None)
+
+    @app.before_request
     def protect_from_csrf():
         if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
             return None
@@ -143,6 +175,32 @@ def create_app():
             abort(400)
 
         return None
+
+    @app.before_request
+    def limit_sensitive_requests():
+        if request.method != "POST":
+            return None
+        endpoint = request.endpoint or ""
+        limits = {
+            "link.liff_link": (30, 60),
+            "link.liff_debug": (30, 60),
+            "materials.interest": (20, 3600),
+            "materials.visit_interest": (20, 3600),
+            "materials.report_post": (10, 3600),
+            "users.share_contact": (20, 3600),
+            "users.update_match_status": (60, 3600),
+            "materials.submit": (20, 3600),
+            "materials.submit_request": (20, 3600),
+            "materials.submit_demolition": (20, 3600),
+        }
+        if endpoint not in limits:
+            return None
+        if endpoint == "link.liff_debug" and not app.config["LIFF_DEBUG_LOGGING"]:
+            return None
+        limit, seconds = limits[endpoint]
+        principal = (request.remote_addr or "unknown") if endpoint.startswith("link.") else session.get("line_user_id", request.remote_addr or "unknown")
+        if not allow_request(endpoint, principal, limit, seconds):
+            return "送信回数の上限に達しました。時間をおいて再度お試しください。", 429, {"Retry-After": str(seconds)}
 
     @app.before_request
     def log_debug_request():

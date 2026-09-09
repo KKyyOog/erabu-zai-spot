@@ -1,13 +1,20 @@
 import json
 import os
 import re
+import time
+from uuid import uuid4
 from urllib.parse import unquote, urlparse
 
 import cloudinary
 import cloudinary.uploader
-from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
+from sqlalchemy import select, delete as sql_delete
 
 from app.services.db_service import (
+    _engine, image_upload_jobs,
+    record_operation,
+    DELETED_STATUS,
+    DEMOLITION_ACTIVE_STATUS,
     POST_STATUS_ACTIVE,
     POST_TYPE_OFFER,
     POST_TYPE_REQUEST,
@@ -17,10 +24,10 @@ from app.services.db_service import (
     close_material,
     delete_demolition_property,
     get_materials,
+    get_public_listing_page,
     get_material_by_id,
     get_demolition_properties,
     get_demolition_property_by_id,
-    get_notification_line_user_id,
     has_recent_matching_request,
     renew_material,
     append_matching_history,
@@ -29,12 +36,45 @@ from app.services.db_service import (
     update_material,
 )
 from app.services.line_service import send_line_message
+from app.services.notification_service import deliver_notification
 from app.services.liff_service import liff_url_for
 from app.services.line_auth_service import LineAuthError, require_verified_line_user_id
 from app.services.user_cache_service import get_user_profile_snapshot
 from app.validation import first_overlong_field
+from app.services.location_service import public_location, public_post
 
 materials_bp = Blueprint("materials", __name__, url_prefix="/materials")
+
+
+def _listing_return_args():
+    return {
+        "type": request.form.get("return_type", "all"),
+        "material_type": request.form.get("return_material_type", "all"),
+        "page": max(1, min(request.form.get("return_page", 1, type=int), 100000)),
+        "area": request.form.get("return_area", "all"),
+        "q": request.form.get("return_q", "")[:100],
+    }
+
+
+def _return_to_listing():
+    return redirect(url_for("materials.list_materials", **_listing_return_args()))
+
+
+@materials_bp.route("/report/<kind>/<entry_id>", methods=["POST"])
+def report_post(kind, entry_id):
+    try:
+        user_id = require_verified_line_user_id(_resolve_line_user_id(request.form))
+    except LineAuthError:
+        flash("通報するにはLINEからログインしてください。")
+        return redirect(url_for("users.me"))
+    entry = get_material_by_id(entry_id) if kind == "material" else get_demolition_property_by_id(entry_id) if kind == "demolition" else None
+    reason = request.form.get("reason", "").strip()
+    if not entry or reason not in ("個人情報が公開されている", "内容が不適切", "掲載内容に問題がある"):
+        return "対象または通報理由を確認してください。", 400
+    with _engine().begin() as conn:
+        record_operation(conn, "report", f"{kind}:{entry_id}", user_id, reason)
+    flash("通報を受け付けました。運営者が内容を確認します。")
+    return redirect(url_for("materials.list_materials"))
 
 MAX_IMAGES_PER_ENTRY = 6
 
@@ -133,12 +173,19 @@ def _upload_image(image_file):
         getattr(image_file, "content_type", ""),
     )
 
+    public_id = f"erabu-zai-spot/uploads/{uuid4().hex}"
+    with _engine().begin() as conn:
+        conn.execute(image_upload_jobs.insert().values(public_id=public_id, created_at=int(time.time())))
+    g.upload_jobs = getattr(g, "upload_jobs", []) + [public_id]
     upload_result = cloudinary.uploader.upload(
         image_file,
-        folder="erabu-zai-spot/uploads",
+        public_id=public_id,
         resource_type="image",
     )
-    return upload_result.get("secure_url", "")
+    image_url = upload_result.get("secure_url", "")
+    if not image_url or not _is_allowed_image_url(image_url):
+        raise ValueError("写真の保存結果を確認できませんでした。写真を選び直してください。")
+    return image_url
 
 
 def _upload_images(image_files):
@@ -153,6 +200,44 @@ def _upload_images(image_files):
         if image_url:
             image_urls.append(image_url)
     return image_urls
+
+
+def clean_upload_jobs(public_ids=None):
+    """Remove only tracked uploads unreferenced by any retained post."""
+    if public_ids is None:
+        with _engine().connect() as conn:
+            public_ids = conn.execute(select(image_upload_jobs.c.public_id).where(
+                image_upload_jobs.c.created_at < int(time.time()) - 86400
+            ).order_by(image_upload_jobs.c.created_at).limit(100)).scalars().all()
+    if not public_ids:
+        return 0
+    # Match the full asset suffix too: Cloudinary URLs may omit a version or
+    # include transformations. Never delete a referenced asset on parse failure.
+    active_paths = {os.path.splitext(unquote(urlparse(url).path))[0] for url in _active_cloudinary_image_urls()}
+    cleaned = 0
+    for public_id in public_ids:
+        if not any(path.endswith('/' + public_id) for path in active_paths):
+            try:
+                result = cloudinary.uploader.destroy(public_id, resource_type="image", invalidate=True)
+                if result.get("result") not in ("ok", "not found"):
+                    continue
+            except Exception:
+                current_app.logger.exception("[UPLOAD CLEANUP] failed")
+                continue
+        with _engine().begin() as conn:
+            conn.execute(sql_delete(image_upload_jobs).where(image_upload_jobs.c.public_id == public_id))
+        cleaned += 1
+    return cleaned
+
+
+@materials_bp.after_request
+def finish_upload_jobs(response):
+    if getattr(g, "upload_jobs", None):
+        try:
+            clean_upload_jobs(g.upload_jobs)
+        except Exception:
+            current_app.logger.exception("[UPLOAD CLEANUP] deferred to scheduled job")
+    return response
 
 
 def _detect_image_type(header):
@@ -380,11 +465,11 @@ def _sort_key_created_at(item):
     return str(value)
 
 
-def _build_listing_items(display_filter, material_type_filter="all"):
+def _build_listing_items(display_filter, material_type_filter="all", material_records=None, demolition_records=None):
     items = []
 
     if display_filter in ("all", "materials", "offer", "request") and material_type_filter in ("all", *ALL_MATERIAL_TYPE_OPTIONS):
-        for material in get_materials():
+        for material in (get_materials() if material_records is None else material_records):
             material_id = material.get("material_id", "")
             material_type = material.get("material_type", "")
             post_type = material.get("post_type", POST_TYPE_OFFER)
@@ -402,7 +487,7 @@ def _build_listing_items(display_filter, material_type_filter="all"):
                     "title": material.get("title", ""),
                     "image_url": image_urls[0] if image_urls else "",
                     "image_urls": image_urls,
-                    "location": material.get("location", ""),
+                    "location": public_location(material.get("location")),
                     "status": material.get("status_label", "受付中"),
                     "effective_status": material.get("effective_status", POST_STATUS_ACTIVE),
                     "created_at": material.get("created_at", ""),
@@ -420,7 +505,7 @@ def _build_listing_items(display_filter, material_type_filter="all"):
             )
 
     if display_filter in ("all", "demolitions") and material_type_filter == "all":
-        for property_record in get_demolition_properties():
+        for property_record in (get_demolition_properties() if demolition_records is None else demolition_records):
             image_urls = _collect_image_urls(
                 property_record,
                 "building_photo_url",
@@ -433,7 +518,7 @@ def _build_listing_items(display_filter, material_type_filter="all"):
                     "title": property_record.get("property_name", ""),
                     "image_url": image_urls[0] if image_urls else "",
                     "image_urls": image_urls,
-                    "location": property_record.get("location", ""),
+                    "location": public_location(property_record.get("location")),
                     "status": property_record.get("status", ""),
                     "created_at": property_record.get("created_at", ""),
                     "registrant_name": property_record.get("display_name", ""),
@@ -461,23 +546,6 @@ def _resolve_line_user_id(form):
     return ""
 
 
-def _send_provider_notification(provider_line_user_id, message, log_context):
-    notification_line_user_id = get_notification_line_user_id(
-        provider_line_user_id
-    )
-    if not notification_line_user_id:
-        return False
-
-    try:
-        sent = send_line_message(notification_line_user_id, message)
-        if not sent:
-            current_app.logger.warning("[%s] LINE notification was not sent", log_context)
-        return sent
-    except Exception:
-        current_app.logger.exception("[%s] LINE notification failed", log_context)
-        return False
-
-
 def _redirect_unavailable_notifications_to_user_page(line_user_id):
     if can_receive_line_notifications(line_user_id):
         return None
@@ -493,16 +561,6 @@ def _redirect_unavailable_notifications_to_user_page(line_user_id):
             _anchor="notification-readiness",
         )
     )
-
-
-def _public_user_summary(line_user_id):
-    user, _, _ = get_user_profile_snapshot(line_user_id)
-    if not user:
-        return "登録情報: 未登録"
-
-    name = user.get("business_name") or user.get("display_name") or "未登録"
-    area = user.get("area") or user.get("address") or "未登録"
-    return "\n".join([f"名前・事業者名: {name}", f"エリア: {area}"])
 
 
 def _registered_profile(line_user_id):
@@ -621,7 +679,7 @@ def submit():
             return redirect(url_for("materials.register_material"))
         except Exception:
             current_app.logger.exception("[materials.submit] cloudinary upload failed")
-            flash("画像のアップロードに失敗しました。画像なしで登録するか、再度お試しください。")
+            flash("写真を保存できませんでした。下書きを復元し、写真を選び直して再度お試しください。")
             return redirect(url_for("materials.register_material"))
 
     form["post_type"] = POST_TYPE_OFFER
@@ -639,6 +697,7 @@ def submit():
 
     append_material(form)
     flash("「材があります」を投稿しました。掲載期間は30日です。")
+    session["completed_draft"] = {"kind": "offer", "owner": form["line_user_id"]}
     return redirect(url_for("materials.list_materials", type="offer"))
 
 
@@ -706,6 +765,7 @@ def submit_request():
     form["image_urls"] = json.dumps(final_image_urls, ensure_ascii=False)
     append_material(form)
     flash("「材を探しています」を投稿しました。掲載期間は30日です。")
+    session["completed_draft"] = {"kind": "request", "owner": form["line_user_id"]}
     return redirect(url_for("materials.list_materials", type="request"))
 
 
@@ -773,11 +833,19 @@ def submit_demolition():
     form["building_photo_urls"] = json.dumps(final_image_urls, ensure_ascii=False)
     append_demolition_property(form)
     flash("解体物件を登録しました。")
+    session["completed_draft"] = {"kind": "demolition", "owner": form["line_user_id"]}
     return redirect(url_for("materials.list_materials"))
 
 
 @materials_bp.route("/list", methods=["GET"])
 def list_materials():
+    load_error = False
+    page = max(1, min(request.args.get("page", 1, type=int), 100000))
+    has_next = False
+    area = request.args.get("area", "all")
+    if area not in ("all", "和泊町", "知名町"):
+        area = "all"
+    query = request.args.get("q", "").strip()[:100]
     display_filter = request.args.get("type", "all")
     if display_filter == "materials":
         display_filter = "offer"
@@ -788,19 +856,34 @@ def list_materials():
         material_type_filter = "all"
 
     try:
-        items = _build_listing_items(display_filter, material_type_filter)
+        material_records, demolition_records, refs, has_next = get_public_listing_page(display_filter, material_type_filter, page, area=area, query=query)
+        items = _build_listing_items(display_filter, material_type_filter, material_records, demolition_records)
+        positions = {(r["kind"], r["id"]): i for i, r in enumerate(refs)}
+        items.sort(key=lambda item: positions[(item["entry_type"], item["id"])])
     except Exception:
         current_app.logger.exception("[materials.list] failed to load listing items")
-        flash("登録情報の読み込みに失敗しました。時間をおいて再度お試しください。")
+        load_error = True
         items = []
+
+    def listing_url(**changes):
+        args = {"type": display_filter, "material_type": material_type_filter, "area": area, "q": query, "page": 1}
+        args.update(changes)
+        return url_for("materials.list_materials", **args)
 
     return render_template(
         "materials/list.html",
         items=items,
+        load_error=load_error,
+        page=page,
+        has_next=has_next,
+        area=area,
+        query=query,
+        listing_url=listing_url,
+        inquiry_result=session.pop("inquiry_result", None),
         display_filter=display_filter,
         material_type_filter=material_type_filter,
         material_type_options=ALL_MATERIAL_TYPE_OPTIONS,
-    )
+    ), (503 if load_error else 200)
 
 
 @materials_bp.route("/<material_id>", methods=["GET"])
@@ -809,20 +892,20 @@ def detail(material_id):
     if not material or material.get("effective_status") == "deleted":
         return "指定された材が見つかりません。", 404
     material["image_urls"] = _collect_image_urls(material, "image_url", "image_urls")
-    return render_template("materials/detail.html", material=material)
+    return render_template("materials/detail.html", material=public_post(material))
 
 
 @materials_bp.route("/demolitions/<property_id>", methods=["GET"])
 def demolition_detail(property_id):
     property_record = get_demolition_property_by_id(property_id)
-    if not property_record:
+    if not property_record or property_record.get("status") == DELETED_STATUS:
         return "指定された解体物件が見つかりません。", 404
     property_record["building_photo_urls"] = _collect_image_urls(
         property_record,
         "building_photo_url",
         "building_photo_urls",
     )
-    return render_template("materials/demolition_detail.html", property_record=property_record)
+    return render_template("materials/demolition_detail.html", property_record=public_post(property_record))
 
 
 @materials_bp.route("/demolitions/<property_id>/edit", methods=["GET"])
@@ -1114,7 +1197,7 @@ def interest():
         requester_line_user_id = require_verified_line_user_id(requester_line_user_id)
     except LineAuthError:
         flash("LINE login verification failed. Please reopen this page from LINE.")
-        return redirect(url_for("materials.list_materials"))
+        return _return_to_listing()
 
     notification_setup_redirect = (
         _redirect_unavailable_notifications_to_user_page(
@@ -1127,24 +1210,24 @@ def interest():
     message = request.form.get("message", "")
     if len(message) > 1000:
         flash("メッセージは1000文字以内で入力してください。")
-        return redirect(url_for("materials.list_materials"))
+        return _return_to_listing()
 
     material = get_material_by_id(material_id)
     if not material:
         return "指定された材が見つかりません。", 404
     if material.get("effective_status") != POST_STATUS_ACTIVE:
         flash("この投稿は受付を終了しています。")
-        return redirect(url_for("materials.list_materials"))
+        return _return_to_listing()
 
     if material.get("line_user_id") == requester_line_user_id:
         flash("自分が登録した投稿には問い合わせできません。")
-        return redirect(url_for("materials.list_materials"))
+        return _return_to_listing()
 
     post_type = material.get("post_type", POST_TYPE_OFFER)
     match_type = "request" if post_type == POST_TYPE_REQUEST else "material"
     if has_recent_matching_request(match_type, material_id, requester_line_user_id):
         flash("同じ問い合わせを送信済みです。少し時間をおいてください。")
-        return redirect(url_for("materials.list_materials"))
+        return _return_to_listing()
 
     if post_type == POST_TYPE_REQUEST:
         provider_user_id = requester_line_user_id
@@ -1165,38 +1248,15 @@ def interest():
             "status": "未対応",
         },
         match_type=match_type,
+        prevent_duplicate=True,
     )
 
-    provider_line_user_id = material.get("line_user_id", "")
-    if post_type == POST_TYPE_REQUEST:
-        notification_lines = [
-            "【えらぶ材すぽっと】",
-            f"探している材「{material.get('title', '')}」に提供の申し出が届きました。",
-            "",
-            _public_user_summary(requester_line_user_id),
-            f"メッセージ: {message or 'なし'}",
-            "",
-            "連絡先を共有する場合は、マイページのマッチング履歴から共有してください。",
-            liff_url_for("users.me"),
-            f"match_id: {match_id}",
-        ]
-    else:
-        notification_lines = [
-            "【えらぶ材すぽっと】",
-            f"登録した材「{material.get('title', '')}」に欲しい通知が届きました。",
-            "",
-            _public_user_summary(requester_line_user_id),
-            f"メッセージ: {message or 'なし'}",
-            "",
-            "連絡先を共有する場合は、マイページのマッチング履歴から共有してください。",
-            liff_url_for("users.me"),
-            f"match_id: {match_id}",
-        ]
-    notification_sent = _send_provider_notification(
-        provider_line_user_id,
-        "\n".join(notification_lines),
-        "materials.interest",
-    )
+    if not match_id:
+        flash("送信済み、または受付を終了した投稿です。")
+        return _return_to_listing()
+
+    notification_sent = deliver_notification(match_id, sender=send_line_message)
+    session["inquiry_result"] = {"match_id": match_id, "notification_sent": notification_sent}
 
     if notification_sent:
         flash("問い合わせを送信しました。")
@@ -1208,13 +1268,7 @@ def interest():
             f"問い合わせはマッチング履歴に保存しましたが、{notification_target_label}へのLINE通知に失敗しました。"
             "マイページで履歴を確認し、必要に応じて運営者へ連絡してください。"
         )
-    return redirect(
-        url_for(
-            "materials.list_materials",
-            type=request.form.get("return_type", "all"),
-            material_type=request.form.get("return_material_type", "all"),
-        )
-    )
+    return _return_to_listing()
 
 
 @materials_bp.route("/demolitions/visit-interest", methods=["POST"])
@@ -1225,7 +1279,7 @@ def visit_interest():
         requester_line_user_id = require_verified_line_user_id(requester_line_user_id)
     except LineAuthError:
         flash("LINE login verification failed. Please reopen this page from LINE.")
-        return redirect(url_for("materials.list_materials"))
+        return _return_to_listing()
 
     notification_setup_redirect = (
         _redirect_unavailable_notifications_to_user_page(
@@ -1236,15 +1290,18 @@ def visit_interest():
         return notification_setup_redirect
 
     property_record = get_demolition_property_by_id(property_id)
-    if not property_record:
+    if not property_record or property_record.get("status") == DELETED_STATUS:
         return "指定された解体物件が見つかりません。", 404
+    if property_record.get("status") != DEMOLITION_ACTIVE_STATUS:
+        flash("この物件は受付を終了しています。")
+        return _return_to_listing()
 
     if property_record.get("line_user_id") == requester_line_user_id:
         flash("自分が登録した物件には見学希望を送れません。")
-        return redirect(url_for("materials.list_materials"))
+        return _return_to_listing()
     if has_recent_matching_request("viewing", property_id, requester_line_user_id):
         flash("同じ見学希望を送信済みです。少し時間をおいてください。")
-        return redirect(url_for("materials.list_materials"))
+        return _return_to_listing()
 
     match_id = append_matching_history(
         {
@@ -1256,25 +1313,15 @@ def visit_interest():
             "status": "未対応",
         },
         match_type="viewing",
+        prevent_duplicate=True,
     )
 
-    provider_line_user_id = property_record.get("line_user_id", "")
-    notification_sent = _send_provider_notification(
-        provider_line_user_id,
-        "\n".join(
-            [
-                "【えらぶ材すぽっと】",
-                f"解体物件「{property_record.get('property_name', '')}」に見学希望が届きました。",
-                "",
-                _public_user_summary(requester_line_user_id),
-                "",
-                "連絡先を共有する場合は、マイページのマッチング履歴から共有してください。",
-                liff_url_for("users.me"),
-                f"match_id: {match_id}",
-            ]
-        ),
-        "demolitions.visit_interest",
-    )
+    if not match_id:
+        flash("送信済み、または受付を終了した物件です。")
+        return _return_to_listing()
+
+    notification_sent = deliver_notification(match_id, sender=send_line_message)
+    session["inquiry_result"] = {"match_id": match_id, "notification_sent": notification_sent}
 
     if notification_sent:
         flash("見学希望を送信しました。")
@@ -1283,10 +1330,4 @@ def visit_interest():
             "見学希望はマッチング履歴に保存しましたが、登録者へのLINE通知に失敗しました。"
             "マイページで履歴を確認し、必要に応じて運営者へ連絡してください。"
         )
-    return redirect(
-        url_for(
-            "materials.list_materials",
-            type=request.form.get("return_type", "all"),
-            material_type=request.form.get("return_material_type", "all"),
-        )
-    )
+    return _return_to_listing()

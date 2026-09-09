@@ -62,11 +62,19 @@
 
   root.closest('form')?.addEventListener('submit', (event) => {
     updateLocationState();
+    let error = root.querySelector('[data-location-error]');
+    if (error) error.remove();
     if (!locationInput.value) {
       event.preventDefault();
-      window.alert(selectedSource() === 'profile'
+      error = document.createElement('p');
+      error.dataset.locationError = 'true';
+      error.className = 'field-error';
+      error.setAttribute('role', 'alert');
+      error.textContent = selectedSource() === 'profile'
         ? 'マイページの拠点情報を登録するか、別の受け渡し場所を入力してください。'
-        : '受け渡し場所を入力してください。');
+        : '受け渡し場所を入力してください。';
+      root.append(error);
+      root.querySelector('input[name="location_source"]:checked')?.focus();
     }
   });
 

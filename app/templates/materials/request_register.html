@@ -20,7 +20,7 @@
     <p><a class="button-link" href="{{ url_for('users.me') }}">マイページで登録する</a></p>
   </div>
 
-  <form method="post" action="{{ url_for('materials.submit_request') }}" enctype="multipart/form-data" data-requires-user-registration hidden>
+  <form method="post" action="{{ url_for('materials.submit_request') }}" enctype="multipart/form-data" data-draft-kind="request" data-requires-user-registration hidden>
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="display_name" id="display_name">
 

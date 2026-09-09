@@ -102,6 +102,7 @@
   {% else %}
     <p class="empty-state">この投稿は受付を終了しています。</p>
   {% endif %}
+  {% set report_kind = 'material' %}{% set report_id = material.material_id %}{% include 'materials/_report.html' %}
 </article>
 
 <script>

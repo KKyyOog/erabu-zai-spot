@@ -49,7 +49,13 @@ function clearLiffLoginAttempt() {
 }
 
 function liffLoginRedirectUrl() {
-  return `${window.location.origin}${window.location.pathname}`;
+  const base = `${window.location.origin}${window.location.pathname}`;
+  const incoming = new URLSearchParams(window.location.search || '');
+  const safe = new URLSearchParams();
+  for (const key of ['tab', 'match', 'refresh', 'notification_required', 'q', 'area', 'type', 'material_type', 'page']) {
+    if (incoming.has(key)) safe.set(key, incoming.get(key).slice(0, 100));
+  }
+  return base + (safe.size ? `?${safe}` : '');
 }
 
 function hasFreshIdToken(idToken) {
@@ -414,7 +420,7 @@ function renderImagePreview(input) {
   list.className = "image-preview__grid";
   preview.appendChild(list);
 
-  files.forEach((file) => {
+  files.forEach((file, index) => {
     const item = document.createElement("figure");
     item.className = "image-preview__item";
 
@@ -428,6 +434,18 @@ function renderImagePreview(input) {
 
     item.appendChild(image);
     item.appendChild(caption);
+    if (typeof DataTransfer === 'function') {
+      const remove = document.createElement('button');
+      remove.type = 'button'; remove.className = 'secondary-button'; remove.textContent = 'この写真を外す';
+      remove.setAttribute('aria-label', `${file.name}を外す`);
+      remove.addEventListener('click', () => {
+        const transfer = new DataTransfer();
+        files.forEach((remaining, position) => { if (position !== index) transfer.items.add(remaining); });
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      item.appendChild(remove);
+    }
     list.appendChild(item);
   });
 }

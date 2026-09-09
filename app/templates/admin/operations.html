@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h2>運用状況</h2>
+  <p>通知：送信待ち {{ counts.get('pending', 0) }}件 ／ 失敗 {{ counts.get('failed', 0) }}件 ／ API受付済み {{ counts.get('sent', 0) }}件</p>
+  <p>最も古い送信待ち：{{ oldest_minutes }}分前 ／ 再送ジョブの最終完了：{{ heartbeat }}</p>
+  {% if job_stale %}<p class="field-error" role="alert">再送ジョブの実行を確認してください。5分以上、正常完了が記録されていません。</p>{% endif %}
+  {% if stale_uploads %}<p class="field-error">画像回収待ち：{{ stale_uploads }}件。画像回収ジョブの実行を確認してください。</p>{% endif %}
+  <p class="hint">API受付済みは、利用者の受信・既読を保証しません。失敗通知は理由を確認し、当事者へ対応を案内してください。</p>
+  {% for notification in notifications %}<details><summary>{{ notification.status }} · {{ notification.notification_id }}（{{ notification.attempts }}回）</summary><p>{{ notification.reason }}</p></details>{% endfor %}
+</section>
+<section class="card">
+  <h2>投稿の管理</h2>
+  <form method="get" class="listing-search">
+    <label>種類<select name="kind"><option value="material" {% if kind == 'material' %}selected{% endif %}>材・募集</option><option value="demolition" {% if kind == 'demolition' %}selected{% endif %}>解体物件</option></select></label>
+    <label>名前・場所・ID<input type="search" name="q" maxlength="100" value="{{ query }}"></label><button>検索</button>
+    <label>状態<select name="status"><option value="">すべて</option>{% for value, label in ([('登録済み', '受付中'), ('受付終了', '受付終了'), ('削除済み', '非公開')] if kind == 'demolition' else [('active', '受付中'), ('closed', '受付終了'), ('expired', '期限切れ'), ('削除済み', '非公開')]) %}<option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  </form>
+  {% for entry in entries %}
+  <article class="history-card">
+    <h3>{{ entry.title or entry.id }}</h3><p>{{ entry.location }} · {{ entry.status }}</p>
+    <a href="{{ url_for('materials.demolition_detail', property_id=entry.id) if kind == 'demolition' else url_for('materials.detail', material_id=entry.id) }}">公開画面を確認</a>
+    <form method="post" action="{{ url_for('admin.post_status') }}" data-confirm-message="掲載状態を変更しますか？">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="entry_id" value="{{ entry.id }}">
+      <label>掲載状態<select name="status">
+        {% set choices = [('登録済み', '受付中'), ('受付終了', '受付終了'), ('削除済み', '非公開')] if kind == 'demolition' else [('active', '受付中（30日間）'), ('closed', '受付終了'), ('削除済み', '非公開')] %}
+        {% for value, label in choices %}<option value="{{ value }}" {% if entry.status == value or (entry.status == 'expired' and value == 'closed') or (entry.status == 'deleted' and value == '削除済み') %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></label><button>更新する</button>
+    </form>
+  </article>
+  {% else %}<p>対象の投稿がありません。</p>{% endfor %}
+  <nav aria-label="管理一覧のページ"><span>{{ page }}ページ</span> {% if page > 1 %}<a href="{{ url_for('admin.index', kind=kind, q=query, status=status, page=page-1) }}">前へ</a>{% endif %} {% if has_next %}<a href="{{ url_for('admin.index', kind=kind, q=query, status=status, page=page+1) }}">次へ</a>{% endif %}</nav>
+</section>
+<section class="card"><h2>未確認の通報</h2>
+  {% for report in reports %}<article class="history-card"><p>対象：{{ report.subject_id }}</p><p>{{ report.detail }}</p><a href="{{ url_for('materials.demolition_detail', property_id=report.post_id) if report.post_kind == 'demolition' else url_for('materials.detail', material_id=report.post_id) }}">投稿を確認する</a><form method="post" action="{{ url_for('admin.resolve_report', report_id=report.event_id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button>確認済みにする</button></form></article>{% else %}<p>未確認の通報はありません。</p>{% endfor %}
+</section>
+<section class="card"><h2>最近の操作履歴</h2>{% for event in events %}<details><summary>{{ event.time_label }} · {{ event.label }}</summary><p>対象：{{ event.subject_id }} ／ 更新者：{{ event.actor_id }}</p><p>{{ event.detail }}</p></details>{% else %}<p>操作履歴はありません。</p>{% endfor %}</section>
+{% endblock %}

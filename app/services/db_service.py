@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import json
-from urllib.parse import urlparse
+import hashlib
+from urllib.parse import urlparse, urlencode
 from uuid import uuid4
 import unicodedata
 
@@ -10,6 +11,10 @@ from sqlalchemy import (
     Column,
     delete,
     Index,
+    Integer,
+    func,
+    false,
+    union_all,
     MetaData,
     String,
     Table,
@@ -35,6 +40,44 @@ POST_STATUS_EXPIRED = "expired"
 POST_TTL_DAYS = 30
 
 metadata = MetaData()
+
+operations = Table(
+    "operations", metadata,
+    Column("event_id", String(64), primary_key=True),
+    Column("kind", String(64), nullable=False, index=True),
+    Column("subject_id", String(255), nullable=False, default=""),
+    Column("actor_id", String(255), nullable=False, default=""),
+    Column("detail", Text, nullable=False, default=""),
+    Column("created_at", Integer, nullable=False, index=True),
+)
+Index("ix_operations_kind_subject_created", operations.c.kind, operations.c.subject_id, operations.c.created_at)
+Index("ix_operations_kind_created", operations.c.kind, operations.c.created_at)
+
+image_upload_jobs = Table(
+    "image_upload_jobs", metadata,
+    Column("public_id", String(255), primary_key=True),
+    Column("created_at", Integer, nullable=False, index=True),
+)
+
+request_buckets = Table(
+    "request_buckets", metadata,
+    Column("bucket_key", String(64), primary_key=True),
+    Column("count", Integer, nullable=False),
+    Column("expires_at", Integer, nullable=False, index=True),
+)
+
+notification_outbox = Table(
+    "notification_outbox", metadata,
+    Column("notification_id", String(64), primary_key=True),
+    Column("app_user_id", String(255), nullable=False),
+    Column("target_user_id", String(255), nullable=False),
+    Column("message", Text, nullable=False),
+    Column("retry_key", String(36), nullable=False),
+    Column("status", String(16), nullable=False, index=True),
+    Column("attempts", Integer, nullable=False),
+    Column("created_at", Integer, nullable=False),
+    Column("next_attempt_at", Integer, nullable=False, index=True),
+)
 
 users = Table(
     "users",
@@ -195,6 +238,12 @@ def _now():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def record_operation(conn, kind, subject_id="", actor_id="", detail=""):
+    import time
+    conn.execute(operations.insert().values(event_id=uuid4().hex, kind=kind,
+        subject_id=subject_id, actor_id=actor_id, detail=detail, created_at=int(time.time())))
+
+
 def _expires_after(days=POST_TTL_DAYS):
     return (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -246,6 +295,10 @@ def init_database(app):
         metadata.create_all(
             engine,
             tables=[
+                operations,
+                image_upload_jobs,
+                request_buckets,
+                notification_outbox,
                 line_notification_links,
                 line_notification_link_codes,
                 line_friendships,
@@ -737,10 +790,51 @@ def get_demolition_properties_by_line_user_id(line_user_id, include_all=False):
     return [_decorate_demolition_property_record(record) for record in _select_many(stmt)]
 
 
+def _active_material_conditions():
+    return (
+        func.trim(materials.c.status).not_in((DELETED_STATUS, POST_STATUS_CLOSED, POST_STATUS_EXPIRED, "交渉中", "引取済み", "廃棄予定")),
+        or_(func.trim(materials.c.expires_at) == "", func.trim(materials.c.expires_at) >= _now()),
+    )
+
+
+def get_public_listing_page(display_filter, material_type, page, page_size=24, area="all", query=""):
+    """Page the combined feed in SQL before loading full records."""
+    offer_type = func.lower(func.trim(materials.c.post_type))
+    material_query = select(materials.c.material_id.label("id"), literal("material").label("kind"), materials.c.created_at).where(*_active_material_conditions())
+    if display_filter == "demolitions":
+        material_query = material_query.where(false())
+    elif display_filter == POST_TYPE_REQUEST:
+        material_query = material_query.where(offer_type == POST_TYPE_REQUEST)
+    elif display_filter == POST_TYPE_OFFER:
+        material_query = material_query.where(offer_type != POST_TYPE_REQUEST)
+    if material_type != "all":
+        material_query = material_query.where(materials.c.material_type == material_type)
+    demolition_query = select(demolition_properties.c.property_id.label("id"), literal("demolition").label("kind"), demolition_properties.c.created_at).where(demolition_properties.c.status == DEMOLITION_ACTIVE_STATUS)
+    if area != "all":
+        material_query = material_query.where(materials.c.location.contains(area, autoescape=True))
+        demolition_query = demolition_query.where(demolition_properties.c.location.contains(area, autoescape=True))
+    if query:
+        material_query = material_query.where(or_(materials.c.title.icontains(query, autoescape=True), materials.c.description.icontains(query, autoescape=True), materials.c.material_type.icontains(query, autoescape=True)))
+        demolition_query = demolition_query.where(or_(demolition_properties.c.property_name.icontains(query, autoescape=True), demolition_properties.c.notes.icontains(query, autoescape=True)))
+    if display_filter not in ("all", "demolitions") or material_type != "all":
+        demolition_query = demolition_query.where(false())
+    feed = union_all(material_query, demolition_query).subquery()
+    refs = _select_many(select(feed).order_by(feed.c.created_at.desc(), feed.c.kind, feed.c.id).offset((page - 1) * page_size).limit(page_size + 1))
+    visible = refs[:page_size]
+    material_ids = [r["id"] for r in visible if r["kind"] == "material"]
+    demolition_ids = [r["id"] for r in visible if r["kind"] == "demolition"]
+    material_records = [_decorate_material_record(r) for r in _select_many(select(materials).where(materials.c.material_id.in_(material_ids), *_active_material_conditions()))]
+    demolition_records = _select_many(select(demolition_properties).where(demolition_properties.c.property_id.in_(demolition_ids), demolition_properties.c.status == DEMOLITION_ACTIVE_STATUS))
+    return material_records, demolition_records, visible, len(refs) > page_size
+
+
 def get_materials(include_all=False, post_type=""):
+    stmt = select(materials).order_by(materials.c.created_at)
+    if not include_all:
+        stmt = stmt.where(*_active_material_conditions())
     records = [
         _decorate_material_record(record)
-        for record in _select_many(select(materials).order_by(materials.c.created_at))
+        for record in _select_many(stmt)
     ]
     if post_type in (POST_TYPE_OFFER, POST_TYPE_REQUEST):
         records = [record for record in records if record.get("post_type") == post_type]
@@ -873,10 +967,12 @@ def _decorate_match_record(record):
             record["entry_title"] = entry.get("title", "")
             record["entry_image_url"] = image_urls[0] if image_urls else ""
 
+    record["entry_owner_id"] = entry.get("line_user_id", "") if entry else ""
+    record["entry_status"] = entry.get("effective_status", entry.get("status", "")) if entry else "deleted"
     return record
 
 
-def append_matching_history(data, match_type="material"):
+def append_matching_history(data, match_type="material", prevent_duplicate=False):
     match_id = f"match_{uuid4().hex[:10]}"
     now = _now()
     values = _record_values(
@@ -896,8 +992,59 @@ def append_matching_history(data, match_type="material"):
     values["match_id"] = match_id
 
     with _engine().begin() as conn:
+        if prevent_duplicate:
+            # A write locks the parent row on PostgreSQL and serializes writes
+            # on SQLite. Recheck availability and duplicates under this lock.
+            parent = demolition_properties if match_type == "viewing" else materials
+            key = "property_id" if match_type == "viewing" else "material_id"
+            parent_id = values[key]
+            result = conn.execute(update(parent).where(parent.c[key] == parent_id)
+                                  .values(status=parent.c.status))
+            if not result.rowcount:
+                return None
+            record = _row_to_dict(conn.execute(select(parent).where(parent.c[key] == parent_id)).first())
+            if (match_type == "viewing" and record["status"] != DEMOLITION_ACTIVE_STATUS
+                    or match_type != "viewing" and _effective_post_status(record) != POST_STATUS_ACTIVE):
+                return None
+            duplicate = conn.execute(select(matching_history.c.match_id).where(
+                matching_history.c.match_type == match_type,
+                matching_history.c[key] == parent_id,
+                matching_history.c.provider_user_id == values["provider_user_id"],
+                matching_history.c.requester_user_id == values["requester_user_id"],
+                matching_history.c.created_at >= (datetime.now() - timedelta(seconds=30)).strftime("%Y-%m-%d %H:%M:%S"),
+            ).limit(1)).first()
+            if duplicate:
+                return None
         conn.execute(matching_history.insert().values(**values))
+        if prevent_duplicate:
+            actor_id = values["provider_user_id"] if match_type == "request" else values["requester_user_id"]
+            actor = _row_to_dict(conn.execute(select(users).where(users.c.line_user_id == actor_id)).first()) or {}
+            action_label = {"material": "欲しい通知", "request": "提供の申し出", "viewing": "見学希望"}[match_type]
+            enqueue_notification(conn, match_id, record["line_user_id"],
+                                 "\n".join([
+                                     f"「{record.get('title') or record.get('property_name') or parent_id}」に{action_label}が届きました。",
+                                     f"名前・事業者名: {actor.get('business_name') or actor.get('display_name') or '未登録'}",
+                                     f"エリア: {actor.get('area') or '未登録'}",
+                                     f"メッセージ: {values['message'] or 'なし'}",
+                                     "連絡先を共有する場合は、マイページのマッチング履歴から共有してください。",
+                                 ]), match_id=match_id)
     return match_id
+
+
+def enqueue_notification(conn, notification_id, app_user_id, message, match_id=None):
+    import time
+    from app.services.liff_service import build_liff_url
+    now = int(time.time())
+    target = app_user_id
+    if app_user_id.startswith("anon_"):
+        target = conn.execute(select(line_notification_links.c.line_user_id).where(line_notification_links.c.app_user_id == app_user_id)).scalar() or ""
+    path = '/users/me?' + urlencode({"tab": "matches", "refresh": "1", **({"match": match_id} if match_id else {})})
+    conn.execute(notification_outbox.insert().values(
+        notification_id=notification_id, app_user_id=app_user_id, target_user_id=target,
+        message=f"【えらぶ材すぽっと】\n{message}\n問い合わせの履歴をご確認ください。\n{build_liff_url(path)}",
+        retry_key=str(uuid4()), status="pending", attempts=0,
+        created_at=now, next_attempt_at=now,
+    ))
 
 
 def has_recent_matching_request(match_type, entry_id, requester_user_id, seconds=30):
@@ -997,28 +1144,62 @@ def update_matching_contact_share_status(match_id, match_type, user_id, status):
     return True
 
 
-def update_matching_status(match_id, match_type, user_id, status):
+def update_matching_status(match_id, match_type, user_id, status, expected_status=None, completion_action="keep", expected_updated_at=None):
     if match_type not in ("material", "request", "viewing"):
         return None
 
     with _engine().begin() as conn:
+        if status not in ("未対応", "連絡・調整中", "成立", "辞退") or completion_action not in ("keep", "close"):
+            return None
+        match = _row_to_dict(conn.execute(select(matching_history).where(
+            matching_history.c.match_id == match_id, matching_history.c.match_type == match_type
+        )).first())
+        if not match or user_id not in (match["provider_user_id"], match["requester_user_id"]):
+            return None
+        if expected_status is not None and match["status"] != expected_status:
+            return None
+        if expected_updated_at is not None and match["updated_at"] != expected_updated_at:
+            return None
+        parent = demolition_properties if match_type == "viewing" else materials
+        key = "property_id" if match_type == "viewing" else "material_id"
+        if completion_action == "close":
+            if status != "成立" or match_type == "viewing":
+                return None
+            post = conn.execute(select(parent.c.line_user_id, parent.c.status).where(parent.c[key] == match[key]).with_for_update()).first()
+            if not post or post.line_user_id != user_id or post.status == DELETED_STATUS:
+                return None
         result = conn.execute(
             update(matching_history)
             .where(
                 matching_history.c.match_id == match_id,
                 matching_history.c.match_type == match_type,
+                matching_history.c.status == match["status"],
+                matching_history.c.updated_at == match["updated_at"],
                 or_(
                     matching_history.c.provider_user_id == user_id,
                     matching_history.c.requester_user_id == user_id,
                 ),
             )
-            .values(status=status, updated_at=_now())
+            .values(status=status, updated_at=datetime.now().isoformat(sep=" ", timespec="microseconds"))
         )
-
-    if result.rowcount <= 0:
-        return None
-
-    _, record = get_matching_history_by_id(match_id, match_type)
+        if result.rowcount <= 0:
+            return None
+        if completion_action == "close":
+            conn.execute(update(materials).where(materials.c.material_id == match["material_id"],
+                materials.c.line_user_id == user_id, materials.c.status != DELETED_STATUS
+            ).values(status=POST_STATUS_CLOSED))
+        record_operation(conn, "match_status", match_id, user_id,
+            json.dumps({"from": match["status"], "to": status, "listing": completion_action}, ensure_ascii=False))
+        record = _row_to_dict(conn.execute(select(matching_history).where(matching_history.c.match_id == match_id)).first())
+        target = record["requester_user_id"] if record["provider_user_id"] == user_id else record["provider_user_id"]
+        notification_id = str(uuid4())
+        parent = demolition_properties if match_type == "viewing" else materials
+        key = "property_id" if match_type == "viewing" else "material_id"
+        title_column = parent.c.property_name if match_type == "viewing" else parent.c.title
+        title = conn.execute(select(title_column).where(parent.c[key] == record[key])).scalar() or record[key]
+        enqueue_notification(conn, notification_id, target, f"「{title}」のマッチングの状態が「{status}」に更新されました。", match_id=match_id)
+    record = _decorate_match_record(record)
+    record["notification_id"] = notification_id
     return record
 
 
@@ -1151,7 +1332,11 @@ def upsert_contact_share_log_record(record):
     return _upsert_by_pk(contact_share_logs, "contact_share_id", record, defaults)
 
 
-def record_contact_share(match_id, match_type, from_user_id):
+def contact_card_version(card):
+    return hashlib.sha256(json.dumps(card, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def record_contact_share(match_id, match_type, from_user_id, expected_version=None):
     row_index, match = get_matching_history_by_id(match_id, match_type)
     if not row_index:
         return None, "match_not_found"
@@ -1166,12 +1351,14 @@ def record_contact_share(match_id, match_type, from_user_id):
     card = get_contact_card_by_user(from_user_id)
     if not card or not card.get("contact_value"):
         return None, "contact_card_missing"
+    if expected_version is not None and expected_version != contact_card_version(card):
+        return None, "contact_card_changed"
     if str(card.get("is_active", "TRUE")).upper() in ("FALSE", "0", "NO", "OFF"):
         return None, "contact_card_inactive"
 
     shared_at = _now()
-    share_id = append_contact_share_log(
-        {
+    share_id = f"share_{uuid4().hex}"
+    share_data = {
             "match_id": match_id,
             "match_type": match_type,
             "from_user_id": from_user_id,
@@ -1184,8 +1371,22 @@ def record_contact_share(match_id, match_type, from_user_id):
             "shared_message": card.get("message", ""),
             "shared_at": shared_at,
         }
-    )
-    update_matching_contact_share_status(match_id, match_type, from_user_id, "shared")
+    share_data.update(contact_share_id=share_id, consent_version="contact_share_v1", created_at=shared_at, updated_at=shared_at)
+    role = "provider" if match["provider_user_id"] == from_user_id else "requester"
+    with _engine().begin() as conn:
+        conn.execute(contact_share_logs.insert().values(**_record_values(contact_share_logs, share_data)))
+        conn.execute(update(matching_history).where(
+            matching_history.c.match_id == match_id,
+            matching_history.c.match_type == match_type,
+        ).values(**{f"{role}_contact_share_status": "shared", f"{role}_contact_shared_at": shared_at, "updated_at": shared_at}))
+        enqueue_notification(conn, share_id, to_user_id, "\n".join([
+            "連絡先カードが共有されました。",
+            f"お名前: {card.get('display_name', '')}",
+            f"連絡方法: {card.get('contact_method', '')}",
+            f"連絡先: {card.get('contact_value', '')}",
+            f"連絡可能時間: {card.get('available_time', '')}",
+            card.get("message", ""),
+        ]), match_id=match_id)
     return {
         "contact_share_id": share_id,
         "match": match,

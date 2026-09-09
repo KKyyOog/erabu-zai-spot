@@ -167,7 +167,7 @@ def liff_link():
             "message": "LINE authentication failed",
         }), 401
 
-    legacy_guest_user_id = (session.get("line_user_id") or "").strip()
+    legacy_guest_user_id = (session.get("legacy_guest_user_id") or session.get("line_user_id") or "").strip()
     migrated = False
     if legacy_guest_user_id.startswith("anon_"):
         migrated = migrate_guest_identity(
@@ -179,6 +179,7 @@ def liff_link():
         if migrated:
             refresh_user_profile_cache(verified_user_id)
 
+    session.pop("legacy_guest_user_id", None)
     session["line_user_id"] = verified_user_id
     session["line_authenticated_at"] = int(time.time())
     session.permanent = False

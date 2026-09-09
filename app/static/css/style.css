@@ -307,6 +307,57 @@ body {
   display: inline-block;
 }
 
+/* Shared navigation and task guidance. */
+.main-navigation {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #fffdf7;
+  border-bottom: 1px solid #d8d0bd;
+}
+.main-navigation a {
+  flex: 1;
+  max-width: 220px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #374d32;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: 700;
+}
+.main-navigation a[aria-current="page"] { background: #466642; color: #fff; }
+.next-step-card, .draft-note {
+  padding: 16px;
+  margin: 16px 0;
+  border: 1px solid #a1b79b;
+  border-radius: 12px;
+  background: #f2f8ee;
+}
+.next-step-card h3 { margin-top: 0; }
+.draft-note button { margin: 6px 8px 0 0; }
+.flow-actions, .pagination { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 20px 0; }
+.pagination { justify-content: center; }
+.pagination .button-link { width: auto; }
+.listing-search { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 12px; align-items: end; margin: 20px 0; }
+.listing-search input, .listing-search select, .listing-search button { margin: 0; }
+.filter-summary { overflow-wrap: anywhere; }
+.field-error { color: #a52b26; font-size: 14px; font-weight: 600; margin: 4px 0 12px; }
+[aria-invalid="true"] { border: 2px solid #a52b26; }
+.match-next-step { padding: 12px; border-left: 3px solid #466642; background: #f2f8ee; line-height: 1.7; }
+.share-confirmation dd { overflow-wrap: anywhere; white-space: pre-wrap; }
+:where(a, button, input, select, textarea, summary):focus-visible { outline: 3px solid #b66015; outline-offset: 3px; }
+@media (max-width: 600px) {
+  .listing-search { grid-template-columns: minmax(0, 1fr); }
+  .site-header { padding: 16px; }
+  .main-navigation { padding: 6px 8px; gap: 4px; }
+}
+
 body.has-open-dialog {
   overflow: hidden;
 }
@@ -1638,3 +1689,30 @@ td {
     min-height: 220px;
   }
 }
+
+/* Keep text and controls legible in the compact mobile layout. */
+@media (max-width: 600px) {
+  .site-header { padding: 16px; }
+  .site-header h1 { font-size: 24px; }
+  .container { padding: 16px 12px; }
+  .card { padding: 16px; }
+  input, select, textarea { font-size: 16px; }
+  .listing-card .summary-list, .listing-card .summary-list dt,
+  .listing-card .summary-list dd, .listing-card .entry-badge,
+  .listing-date, .history-card .match-meta, .hint { font-size: 14px; }
+  button, .button-link, .button-link.compact, .listing-actions button,
+  .listing-card__detail-trigger, .page-tab { min-height: 46px; font-size: 15px; padding: 10px 12px; }
+  .listing-search { grid-template-columns: minmax(0, 1fr); }
+  .listing-search button { width: 100%; }
+  .pagination { gap: 8px; }
+  .main-navigation a { font-size: 16px; }
+  .page-tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .page-tab { white-space: nowrap; }
+}
+/* Public post confirmation, including narrow LINE webviews. */
+.post-preview-dialog { width: min(640px, calc(100% - 32px)); max-height: 85dvh; overflow: auto; border: 0; border-radius: 16px; padding: 24px; box-sizing: border-box; }
+.post-preview-dialog::backdrop { background: rgb(0 0 0 / 50%); }
+.post-preview-dialog img { width: 100%; max-height: 300px; object-fit: contain; margin-block: 8px; }
+.post-preview-dialog button { margin: 8px 8px 0 0; }
+.post-preview-dialog dd { white-space: pre-wrap; overflow-wrap: anywhere; }
+.linked-match { outline: 3px solid #27734a; outline-offset: 4px; scroll-margin-top: 100px; }

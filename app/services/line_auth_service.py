@@ -1,4 +1,5 @@
 import json
+import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -112,14 +113,31 @@ def verify_id_token(id_token, expected_user_id=""):
     return claims
 
 
+def session_identity_is_fresh(max_age=None):
+    user_id = session.get("line_user_id", "")
+    if not user_id:
+        return False
+    if user_id.startswith("anon_"):
+        return not current_app.config.get("LINE_LOGIN_ENABLED", True)
+    try:
+        age = time.time() - int(session.get("line_authenticated_at", 0))
+    except (TypeError, ValueError):
+        return False
+    limit = max_age if max_age is not None else current_app.config["LINE_SESSION_SECONDS"]
+    return 0 <= age < max(1, int(limit))
+
+
 def require_verified_line_user_id(expected_user_id=""):
     session_user_id = (session.get("line_user_id") or "").strip()
-    if session_user_id and (not expected_user_id or session_user_id == expected_user_id):
+    if session_identity_is_fresh() and (not expected_user_id or session_user_id == expected_user_id):
         return session_user_id
 
     token = extract_id_token()
     if token:
         claims = verify_id_token(token, expected_user_id=expected_user_id)
+        session["line_user_id"] = claims["sub"]
+        session["line_authenticated_at"] = int(time.time())
+        session.permanent = False
         return claims["sub"]
 
     raise LineAuthError("LINE ID token is required")

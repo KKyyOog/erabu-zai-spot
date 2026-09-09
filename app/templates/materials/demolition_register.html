@@ -18,7 +18,7 @@
     <p><a class="button-link" href="{{ url_for('users.me') }}">マイページで登録する</a></p>
   </div>
 
-  <form method="post" action="{{ url_for('materials.submit_demolition') }}" enctype="multipart/form-data" data-requires-user-registration hidden>
+  <form method="post" action="{{ url_for('materials.submit_demolition') }}" enctype="multipart/form-data" data-draft-kind="demolition" data-requires-user-registration hidden>
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="display_name" id="display_name">
     <p class="hint">登録にはマイページ登録が必要です。建物の状態や見学可能期間が分かる範囲で入力してください。</p>
@@ -35,7 +35,8 @@
     <label>物件名 *</label>
     <input type="text" name="property_name" required placeholder="例：旧山田邸、知名町の空き家など">
 
-    <label>所在地 *</label>
+    <label>所在地（詳しい住所は非公開） *</label>
+    <p class="hint">公開する場所は町名までです。番地や現場への行き方は、見学相手と個別に共有してください。所有者名は公開しません。</p>
     <input type="text" name="location" required placeholder="例：知名町、和泊町、字名、現場名など">
 
     <label>所有者</label>

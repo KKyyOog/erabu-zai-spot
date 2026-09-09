@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>えらぶ材すぽっと</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260908-compact-listing') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260908-ui-navigation') }}">
   <script>
     window.LIFF_TRACE_ID = window.LIFF_TRACE_ID || (
       window.crypto && typeof window.crypto.randomUUID === 'function'
@@ -268,10 +268,17 @@
     <p>沖永良部島の材を、必要な人へ。</p>
   </header>
 
+  <nav class="main-navigation" aria-label="メインメニュー">
+    {% set active_section = 'me' if request.path == '/' or request.path.startswith('/users') else ('post' if 'register' in request.path else 'browse') %}
+    <a href="{{ url_for('materials.list_materials') }}" {% if active_section == 'browse' %}aria-current="page"{% endif %}>探す</a>
+    <a href="{{ url_for('materials.register') }}" {% if active_section == 'post' %}aria-current="page"{% endif %}>投稿する</a>
+    <a href="{{ url_for('users.me') }}" {% if active_section == 'me' %}aria-current="page"{% endif %}>マイページ</a>
+  </nav>
+
   <main class="container">
     {% with messages = get_flashed_messages() %}
       {% if messages %}
-        <div class="flash">
+        <div class="flash" role="status" aria-live="polite">
           {% for message in messages %}
             <p>{{ message }}</p>
           {% endfor %}
@@ -281,5 +288,8 @@
 
     {% block content %}{% endblock %}
   </main>
+  <script>window.COMPLETED_DRAFT = {{ completed_draft|tojson }};</script>
+  <script src="{{ url_for('static', filename='js/ui.js', v='20260908-ui-flow') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/post_preview.js', v='20260909') }}" defer></script>
 </body>
 </html>

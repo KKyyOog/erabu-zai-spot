@@ -15,7 +15,7 @@ LINE_PROFILE_CACHE_SECONDS = 300
 _line_profile_cache = {}
 
 
-def send_line_message(user_id, text):
+def send_line_message(user_id, text, retry_key=None):
     if not user_id:
         return False
 
@@ -28,12 +28,17 @@ def send_line_message(user_id, text):
 
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
-        line_bot_api.push_message(
-            PushMessageRequest(
-                to=user_id,
-                messages=[TextMessage(text=text)],
+        try:
+            line_bot_api.push_message(
+                PushMessageRequest(to=user_id, messages=[TextMessage(text=text)]),
+                x_line_retry_key=retry_key,
+                _request_timeout=(5, 15),
             )
-        )
+        except Exception as exc:
+            headers = getattr(exc, "headers", None) or {}
+            if not (retry_key and getattr(exc, "status", None) == 409
+                    and headers.get("x-line-accepted-request-id")):
+                raise
 
     return True
 

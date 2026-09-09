@@ -1,6 +1,6 @@
 import time
 
-from flask import Blueprint, jsonify, render_template, request, redirect, url_for, flash, session
+from flask import Blueprint, abort, jsonify, make_response, render_template, request, redirect, url_for, flash, session
 
 from app.services.db_service import (
     append_user,
@@ -8,15 +8,17 @@ from app.services.db_service import (
     get_user_by_line_user_id,
     get_materials_by_line_user_id,
     get_matching_history_by_user,
-    get_notification_line_user_id,
     get_contact_card_by_user,
     get_me_profile_by_line_user_id,
     record_contact_share,
+    get_matching_history_by_id,
+    contact_card_version,
     upsert_contact_card,
     update_matching_status,
     update_user,
 )
 from app.services.line_service import send_line_message
+from app.services.notification_service import deliver_notification
 from app.services.line_auth_service import LineAuthError, require_verified_line_user_id
 from app.services.user_cache_service import (
     get_user_profile_snapshot,
@@ -25,6 +27,12 @@ from app.services.user_cache_service import (
 from app.validation import first_overlong_field
 
 users_bp = Blueprint("users", __name__, url_prefix="/users")
+
+
+@users_bp.after_request
+def private_response(response):
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 ME_DATA_CACHE_SECONDS = 20
 _me_data_cache = {}
@@ -102,29 +110,6 @@ def _save_contact_card_if_present(line_user_id, form):
     if any(form.get(field) for field in card_fields):
         return upsert_contact_card(line_user_id, form)
     return None
-
-
-def _format_contact_share_message(share_result):
-    card = share_result["card"]
-    match = share_result["match"]
-    entry_label = {
-        "material": "材",
-        "request": "探している材",
-        "viewing": "見学",
-    }.get(match.get("match_type"), "投稿")
-    lines = [
-        "【えらぶ材すぽっと】",
-        f"{entry_label}のマッチ相手が連絡先カードを共有しました。",
-        "",
-        f"表示名: {card.get('display_name', '')}",
-        f"連絡方法: {card.get('contact_method', '')}",
-        f"連絡先: {card.get('contact_value', '')}",
-    ]
-    if card.get("available_time"):
-        lines.append(f"連絡しやすい時間: {card.get('available_time')}")
-    if card.get("message"):
-        lines.extend(["", card.get("message")])
-    return "\n".join(lines)
 
 
 @users_bp.route("/register", methods=["GET"])
@@ -363,10 +348,10 @@ def me_save():
     else:
         flash("ユーザー情報の保存に失敗しました。")
 
-    return redirect(url_for("users.me"))
+    return redirect(url_for("users.me", tab="profile"))
 
 
-@users_bp.route("/matches/<match_type>/<match_id>/share-contact", methods=["POST"])
+@users_bp.route("/matches/<match_type>/<match_id>/share-contact", methods=["GET", "POST"])
 def share_contact(match_type, match_id):
     if match_type not in ("material", "request", "viewing"):
         flash("マッチ種別が不正です。")
@@ -383,7 +368,26 @@ def share_contact(match_type, match_id):
         flash("LINE user ID を取得できませんでした。")
         return redirect(url_for("users.me"))
 
-    share_result, error = record_contact_share(match_id, match_type, line_user_id)
+    _, match = get_matching_history_by_id(match_id, match_type)
+    if not match or line_user_id not in (match["provider_user_id"], match["requester_user_id"]):
+        abort(404)
+    target_id = match["requester_user_id"] if match["provider_user_id"] == line_user_id else match["provider_user_id"]
+    card = get_contact_card_by_user(line_user_id)
+    if not card or not card.get("contact_value"):
+        flash("先に連絡先カードを入力してください。保存後、マッチング履歴から共有できます。")
+        return redirect(url_for("users.me", tab="profile"))
+    if request.method == "GET" or not request.form.get("contact_version"):
+        target = get_user_by_line_user_id(target_id) or {}
+        response = make_response(render_template("users/share_contact.html", match=match, card=card,
+            target_name=target.get("business_name") or target.get("display_name") or "マッチ相手",
+            contact_version=contact_card_version(card)))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    share_result, error = record_contact_share(match_id, match_type, line_user_id, request.form["contact_version"])
+    if error == "contact_card_changed":
+        flash("連絡先が更新されています。内容をもう一度確認してください。")
+        return redirect(url_for("users.share_contact", match_type=match_type, match_id=match_id))
     if error == "contact_card_missing":
         flash("連絡先カードを入力してから共有してください。")
         return redirect(url_for("users.me"))
@@ -398,16 +402,7 @@ def share_contact(match_type, match_id):
     _clear_me_data_cache(line_user_id)
     _clear_me_data_cache(to_user_id)
 
-    notification_sent = False
-    notification_line_user_id = get_notification_line_user_id(to_user_id)
-    if notification_line_user_id:
-        try:
-            notification_sent = send_line_message(
-                notification_line_user_id,
-                _format_contact_share_message(share_result),
-            )
-        except Exception:
-            notification_sent = False
+    notification_sent = deliver_notification(share_result["contact_share_id"], sender=send_line_message)
 
     if notification_sent:
         flash("連絡先カードを共有し、相手へLINE通知を送信しました。")
@@ -416,36 +411,39 @@ def share_contact(match_type, match_id):
             "連絡先カードは共有履歴に保存しましたが、相手へのLINE通知に失敗しました。"
             "必要に応じて運営者へ連絡してください。"
         )
-    return redirect(url_for("users.me", refresh="1"))
+    return redirect(url_for("users.me", refresh="1", tab="matches"))
 
 
 @users_bp.route("/matches/<match_type>/<match_id>/status", methods=["POST"])
 def update_match_status(match_type, match_id):
     if match_type not in ("material", "request", "viewing"):
         flash("マッチ種別が不正です。")
-        return redirect(url_for("users.me", refresh="1"))
+        return redirect(url_for("users.me", refresh="1", tab="matches"))
 
     status = (request.form.get("status") or "").strip()
     if status not in MATCH_STATUS_OPTIONS:
         flash("マッチング状態が不正です。")
-        return redirect(url_for("users.me", refresh="1"))
+        return redirect(url_for("users.me", refresh="1", tab="matches"))
 
     line_user_id = _resolve_user_id(request.form)
     try:
         line_user_id = require_verified_line_user_id(line_user_id)
     except LineAuthError:
         flash("LINE login verification failed. Please reopen this page from LINE.")
-        return redirect(url_for("users.me"))
+        return redirect(url_for("users.me", tab="matches"))
 
     updated_match = update_matching_status(
         match_id,
         match_type,
         line_user_id,
         status,
+        expected_status=request.form.get("expected_status"),
+        completion_action=request.form.get("completion_action", "keep"),
+        expected_updated_at=request.form.get("expected_updated_at"),
     )
     if not updated_match:
-        flash("このマッチングの状態は変更できません。")
-        return redirect(url_for("users.me", refresh="1"))
+        flash("状態が変更されたか、この操作を行えません。最新の内容を確認して、もう一度お試しください。")
+        return redirect(url_for("users.me", refresh="1", tab="matches"))
 
     provider_user_id = updated_match.get("provider_user_id", "")
     requester_user_id = updated_match.get("requester_user_id", "")
@@ -457,22 +455,7 @@ def update_match_status(match_type, match_id):
     _clear_me_data_cache(provider_user_id)
     _clear_me_data_cache(requester_user_id)
 
-    notification_sent = False
-    notification_line_user_id = get_notification_line_user_id(to_user_id)
-    if notification_line_user_id:
-        try:
-            notification_sent = send_line_message(
-                notification_line_user_id,
-                "\n".join(
-                    [
-                        "【えらぶ材すぽっと】",
-                        f"「{updated_match.get('entry_title') or updated_match.get('entry_id') or 'マッチング'}」の状態が「{status}」に更新されました。",
-                        "マイページのマッチング履歴をご確認ください。",
-                    ]
-                ),
-            )
-        except Exception:
-            notification_sent = False
+    notification_sent = deliver_notification(updated_match["notification_id"], sender=send_line_message)
 
     if notification_sent:
         flash(f"マッチング状態を「{status}」に更新し、相手へLINE通知を送信しました。")
@@ -481,4 +464,4 @@ def update_match_status(match_type, match_id):
             f"マッチング状態は「{status}」に更新しましたが、相手へのLINE通知に失敗しました。"
             "必要に応じて運営者へ連絡してください。"
         )
-    return redirect(url_for("users.me"))
+    return redirect(url_for("users.me", tab="matches", refresh="1", match=match_id))

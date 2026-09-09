@@ -37,7 +37,8 @@
     <label>物件名 *</label>
     <input type="text" name="property_name" value="{{ property_record.property_name }}" required>
 
-    <label>所在地 *</label>
+    <label>所在地（詳しい住所は非公開） *</label>
+    <p class="hint">公開する場所は町名までです。詳しい住所は見学相手と個別に共有してください。</p>
     <input type="text" name="location" value="{{ property_record.location }}" required>
 
     <label>所有者</label>

@@ -35,7 +35,7 @@
 <nav class="page-tabs" aria-label="マイページの表示切り替え">
   <button type="button" class="page-tab active" data-tab-target="profile-panel">プロフィール</button>
   <button type="button" class="page-tab" data-tab-target="materials-panel">登録した情報</button>
-  <button type="button" class="page-tab" data-tab-target="matches-panel">マッチング</button>
+  <button type="button" class="page-tab" data-tab-target="matches-panel">マッチング<span id="pending-match-count"></span></button>
 </nav>
 
 <section class="card user-page-card tab-panel active" id="profile-panel">
@@ -66,7 +66,7 @@
     </button>
   </aside>
 
-  <form id="user-form" method="post" action="{{ url_for('users.me_save') }}">
+  <form id="user-form" method="post" action="{{ url_for('users.me_save') }}" data-unsaved>
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="user_id" id="user_id">
     <input type="hidden" name="userid" id="userid">
@@ -157,6 +157,7 @@
     <div>
       <h3>自分の登録履歴</h3>
       <p class="hint">登録した材と解体物件をここから編集・削除できます。</p>
+      <a class="button-link compact" href="{{ url_for('materials.register') }}">新しく投稿する</a>
     </div>
   </div>
   <h4>材</h4>
@@ -237,7 +238,13 @@
   }
 
   function liffLoginRedirectUrl() {
-    return `${window.location.origin}${window.location.pathname}`;
+    const base = `${window.location.origin}${window.location.pathname}`;
+    const incoming = new URLSearchParams(window.location.search || '');
+    const safe = new URLSearchParams();
+    for (const key of ['tab', 'match', 'refresh', 'notification_required']) {
+      if (incoming.has(key)) safe.set(key, incoming.get(key).slice(0, 100));
+    }
+    return base + (safe.size ? `?${safe}` : '');
   }
 
   function hasFreshIdToken(idToken) {
@@ -278,20 +285,56 @@
     return true;
   }
 
+  let hasRegisteredProfile = false;
+  let userSelectedTab = false;
+  const pageTabIds = {profile: 'profile-panel', materials: 'materials-panel', matches: 'matches-panel'};
+
+  function selectPageTab(name, remember = false) {
+    const targetId = pageTabIds[name] || pageTabIds.profile;
+    document.querySelectorAll('[data-tab-target]').forEach(tab => {
+      const active = tab.dataset.tabTarget === targetId;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+    });
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+      const active = panel.id === targetId;
+      panel.classList.toggle('active', active);
+      panel.hidden = !active;
+    });
+    if (remember) {
+      userSelectedTab = true;
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', name);
+      window.history.replaceState(null, '', url);
+    }
+  }
+
   function initializePageTabs() {
-    document.querySelectorAll('[data-tab-target]').forEach((button) => {
+    const tabs = Array.from(document.querySelectorAll('[data-tab-target]'));
+    document.querySelector('.page-tabs').setAttribute('role', 'tablist');
+    tabs.forEach((button, index) => {
+      button.id = `page-tab-${index}`;
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-controls', button.dataset.tabTarget);
+      const panel = document.getElementById(button.dataset.tabTarget);
+      panel.setAttribute('role', 'tabpanel');
+      panel.setAttribute('aria-labelledby', button.id);
       button.addEventListener('click', () => {
-        const targetId = button.dataset.tabTarget;
-        document.querySelectorAll('[data-tab-target]').forEach((tab) => {
-          tab.classList.toggle('active', tab === button);
-        });
-        document.querySelectorAll('.tab-panel').forEach((panel) => {
-          const active = panel.id === targetId;
-          panel.classList.toggle('active', active);
-          panel.hidden = !active;
-        });
+        const name = Object.keys(pageTabIds).find(key => pageTabIds[key] === button.dataset.tabTarget);
+        selectPageTab(name, true);
+      });
+      button.addEventListener('keydown', event => {
+        let next;
+        if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+        if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+        if (event.key === 'Home') next = 0;
+        if (event.key === 'End') next = tabs.length - 1;
+        if (next === undefined) return;
+        event.preventDefault(); tabs[next].click(); tabs[next].focus();
       });
     });
+    selectPageTab('profile');
   }
 
   function getLiffDebugContext() {
@@ -619,8 +662,9 @@
             <select name="quantity_level" required>${renderOptions(quantityLevelOptions, material.quantity_level || '', '選択してください')}</select>
           </div>
           <div>
-            <label>受け渡しエリア *</label>
-            <select name="location" required>${renderOptions(['和泊町', '知名町', 'その他'], material.location || '', '選択してください')}</select>
+            <label>受け渡し場所（詳しい住所は非公開） *</label>
+            <input type="text" name="location" required maxlength="300" value="${escapeHtml(material.location || '')}">
+            <p class="hint">公開する場所は町名までです。詳しい住所は相手と個別に共有してください。</p>
           </div>
           <div>
             <label>寸法</label>
@@ -701,6 +745,7 @@
         return;
       }
 
+      form.dispatchEvent(new Event('form-saved', {bubbles: true}));
       currentMaterials = currentMaterials.map((item) => item.material_id === materialId ? body.material : item);
       renderMaterials(currentMaterials, document.getElementById('line_user_id').value);
     } catch (errorObj) {
@@ -742,26 +787,31 @@
       const shareControl = shareStatus === 'shared'
         ? '<p class="share-status shared">連絡先カード共有済み</p>'
         : `
-          <form method="post" action="${shareAction}">
-            <input type="hidden" name="line_user_id" value="${escapeHtml(currentUserId)}">
-            <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
-            <button type="submit">連絡先カードを共有する</button>
-          </form>
+          <a class="button-link" href="${shareAction}">\u9023\u7d61\u5148\u3092\u78ba\u8a8d\u3057\u3066\u5171\u6709</a>
         `;
       const statusControl = `
         <form class="match-status-form" method="post" action="${statusAction}" data-confirm-message="マッチング状態を変更します。よろしいですか？">
+          <input type="hidden" name="expected_status" value="${escapeHtml(match.status || '未対応')}">
+          <input type="hidden" name="expected_updated_at" value="${escapeHtml(match.updated_at || '')}">
           <input type="hidden" name="line_user_id" value="${escapeHtml(currentUserId)}">
           <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
           <label>マッチング状態</label>
           <select name="status">
             ${renderOptions(matchStatusOptions, match.status || '未対応')}
           </select>
+          ${match.entry_owner_id === currentUserId && matchType !== 'viewing' ? `
+            <label>「成立」にする場合の掲載</label>
+            <select name="completion_action">
+              <option value="keep">残りがある・引き続き募集する</option>
+              <option value="close">すべて譲った・必要な材が見つかったので終了する</option>
+            </select>
+            <p class="hint">終了する場合は、マッチング状態を「成立」にしてください。</p>` : ''}
           <button type="submit" class="secondary-button">状態を更新する</button>
         </form>
       `;
 
       return `
-        <div class="history-card matching-history-item">
+        <div class="history-card matching-history-item" id="match-${escapeHtml(match.match_id)}" tabindex="-1">
           <div class="history-card__header">
             <div class="history-card__title">
               <span class="entry-badge ${matchType === 'viewing' ? 'demolition' : (matchType === 'request' ? 'request' : 'offer')}">${entryLabel}マッチング</span>
@@ -778,6 +828,7 @@
                 <span>${escapeHtml(match.status || '状態未設定')}</span>
               </div>
               ${match.message ? `<p class="match-message">${escapeHtml(match.message)}</p>` : ''}
+              <p class="match-next-step">${match.status === '成立' ? (match.entry_status === 'closed' ? '成立し、投稿の受付も終了しています。' : match.entry_owner_id === currentUserId && matchType !== 'viewing' ? '残りがなければ、掲載を「終了する」にして更新してください。残りがあれば引き続き募集できます。' : '成立しました。受け渡し・見学の詳細を相手と確認してください。') : match.status === '辞退' ? 'この問い合わせは辞退になっています。' : shareStatus === 'shared' ? '連絡先を共有済みです。受け渡し方法を相談し、進み具合に合わせて状態を更新してください。' : (matchType === 'request' ? !isProvider : isProvider) ? '問い合わせが届いています。連絡先を共有して、相手と相談を始められます。' : '相手の返答を待ちましょう。連絡先を共有しておくこともできます。'}</p>
               <div class="match-actions">
                 ${statusControl}
                 ${shareControl}
@@ -1025,7 +1076,8 @@
   }
 
   function showRegistrationPrompt() {
-    window.alert('ユーザー情報がまだ登録されていません。続けてユーザー情報を登録してください。');
+    selectPageTab('profile');
+    document.getElementById('profile-note').textContent = '初めての方は、名前・拠点・運搬情報を登録してください。連絡先カードは後から入力できます。';
   }
 
   async function loadMeActivity(userId, forceRefresh) {
@@ -1054,6 +1106,25 @@
       renderMaterials(body.materials || [], userId);
       renderDemolitionProperties(body.demolition_properties || [], userId);
       renderMatchingHistory(body.matching_history || []);
+      const pending = (body.matching_history || []).filter(match => match.status === '\u672a\u5bfe\u5fdc').length;
+      document.getElementById('pending-match-count').textContent = pending ? ` (${pending})` : '';
+      if (!userSelectedTab) {
+        const params = new URLSearchParams(window.location.search);
+        const requested = params.get('notification_required') === '1' ? 'profile' : params.get('tab');
+        selectPageTab(hasRegisteredProfile ? (pageTabIds[requested] ? requested : pending ? 'matches' : 'materials') : 'profile');
+      }
+      const linkedMatch = new URLSearchParams(window.location.search).get('match');
+      if (linkedMatch && !userSelectedTab) {
+        const target = document.getElementById(`match-${linkedMatch}`);
+        if (target) {
+          target.classList.add('linked-match');
+          target.scrollIntoView({block: 'start'}); target.focus({preventScroll: true});
+        } else {
+          const note = document.createElement('p'); note.setAttribute('role', 'status');
+          note.textContent = '指定された問い合わせは表示できません。ご自身の履歴をご確認ください。';
+          document.getElementById('matching-history-container').prepend(note);
+        }
+      }
     } catch (error) {
       console.warn('Failed to load user activity:', error);
       const message = '<p class="hint">一覧の読み込みに失敗しました。画面を開き直してください。</p>';
@@ -1102,6 +1173,7 @@
     }
 
     setSubmitEnabled(true);
+    hasRegisteredProfile = body.exists === true;
     if (body.exists) {
       window.cacheUserRegistration?.(userId);
       document.getElementById('form-title').textContent = 'ユーザー情報（更新）';

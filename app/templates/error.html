@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card" role="alert">
+  <h2>処理を完了できませんでした</h2>
+  <p>{{ message }}</p>
+  <button type="button" onclick="history.back()">前の画面に戻る</button>
+  <a class="button-link secondary-button" href="{{ url_for('users.me', refresh='1') }}">マイページで確認する</a>
+</section>
+{% endblock %}

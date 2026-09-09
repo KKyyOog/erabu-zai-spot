@@ -49,6 +49,7 @@ class WorkflowTestCase(unittest.TestCase):
     def authenticate(self, line_user_id):
         with self.client.session_transaction() as session:
             session["line_user_id"] = line_user_id
+            session["line_authenticated_at"] = int(time.time())
             session["_csrf_token"] = self.csrf_token
 
     def post_form(self, path, data, follow_redirects=False):
@@ -160,6 +161,10 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertEqual(
             table_names,
             {
+                "request_buckets",
+                "operations",
+                "image_upload_jobs",
+                "notification_outbox",
                 "line_friendships",
                 "line_notification_link_codes",
                 "line_notification_links",

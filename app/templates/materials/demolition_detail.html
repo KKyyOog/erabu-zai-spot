@@ -66,12 +66,15 @@
     {% endif %}
   </dl>
 
+  {% if property_record.status == '登録済み' %}
   <form method="post" action="{{ url_for('materials.visit_interest') }}">
     <input type="hidden" name="property_id" value="{{ property_record.property_id }}">
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="user_id" id="user_id">
     <button type="submit">見学したい</button>
   </form>
+  {% else %}<p>この物件は見学の受付を終了しています。</p>{% endif %}
+  {% set report_kind = 'demolition' %}{% set report_id = property_record.property_id %}{% include 'materials/_report.html' %}
 </article>
 
 <script>

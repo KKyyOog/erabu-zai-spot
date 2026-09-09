@@ -16,7 +16,7 @@ function setup({ token = 'expired', inClient = false, loggedIn = true, status = 
   const calls = [];
   const storage = new Map();
   const context = vm.createContext({
-    performance, Date, console,
+    performance, Date, console, URLSearchParams,
     LIFF_LOGIN_ATTEMPT_KEY: 'attempt', LIFF_LOGIN_RETRY_DELAY_MS: 60000,
     LIFF_TRACE_ID: 'test', currentIdToken: 'stale', currentAuthMode: '',
     window: {
