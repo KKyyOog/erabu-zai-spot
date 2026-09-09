@@ -1365,6 +1365,11 @@
       }),
     });
     if (!linkResponse.ok) {
+      if (linkResponse.status === 429) {
+        const seconds = Math.max(1, Math.min(3600, Number(linkResponse.headers.get('Retry-After')) || 60));
+        showUnavailableState(`LINE認証の送信回数が上限に達しました。${seconds}秒ほど待ってから、この画面を開き直してください。`);
+        return true;
+      }
       logLiffDebug('auth.server_link_failed', {
         httpStatus: linkResponse.status,
         durationMs: Math.round(performance.now() - startedAt),

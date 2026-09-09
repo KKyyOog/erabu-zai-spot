@@ -621,6 +621,17 @@ async function initializeLiff() {
       keepalive: true,
     });
     if (!linkResponse.ok) {
+      if (linkResponse.status === 429) {
+        const seconds = Math.max(1, Math.min(3600, Number(linkResponse.headers.get('Retry-After')) || 60));
+        setUserRegistrationState("error");
+        setLineAuthControls(false, `${seconds}秒ほど待って開き直してください`);
+        const status = document.getElementById('user-registration-check-status');
+        if (status) {
+          status.hidden = false;
+          status.textContent = `LINE認証の送信回数が上限に達しました。${seconds}秒ほど待ってから、この画面を開き直してください。`;
+        }
+        return;
+      }
       logToServer("liff.server_auth_failed", {
         httpStatus: linkResponse.status,
         durationMs: Math.round(performance.now() - startedAt),

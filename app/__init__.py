@@ -6,7 +6,8 @@ import time
 from datetime import datetime
 
 import truststore
-from flask import Flask, abort, g, render_template, request, session
+from flask import Flask, abort, g, jsonify, render_template, request, session
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.routes.materials import materials_bp
 from app.routes.users import users_bp
@@ -26,6 +27,12 @@ def create_app():
 
     app = Flask(__name__)
     app.config.from_object(Config)
+    proxy_hops = app.config["TRUSTED_PROXY_HOPS"]
+    if not 0 <= proxy_hops <= 10:
+        raise RuntimeError("TRUSTED_PROXY_HOPS must be between 0 and 10")
+    if proxy_hops:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_hops, x_proto=0,
+            x_host=0, x_port=0, x_prefix=0)
     app.config["LIFF_ID"] = str(app.config.get("LIFF_ID") or "").strip()
     app.logger.info(
         "[LINE CONFIG] login_enabled=%s liff_id_present=%s liff_id_length=%d",
@@ -200,7 +207,14 @@ def create_app():
         limit, seconds = limits[endpoint]
         principal = (request.remote_addr or "unknown") if endpoint.startswith("link.") else session.get("line_user_id", request.remote_addr or "unknown")
         if not allow_request(endpoint, principal, limit, seconds):
-            return "送信回数の上限に達しました。時間をおいて再度お試しください。", 429, {"Retry-After": str(seconds)}
+            retry_after = seconds - int(time.time()) % seconds
+            app.logger.warning("[RATE LIMIT] endpoint=%s limit=%s window_seconds=%s proxy_hops=%s forwarded_present=%s",
+                endpoint, limit, seconds, proxy_hops, bool(request.headers.get("X-Forwarded-For")))
+            message = f"送信回数の上限に達しました。{retry_after}秒ほど待ってから再度お試しください。"
+            headers = {"Retry-After": str(retry_after), "Cache-Control": "no-store"}
+            if endpoint.startswith("link."):
+                return jsonify(ok=False, code="rate_limited", message=message, retry_after=retry_after), 429, headers
+            return message, 429, headers
 
     @app.before_request
     def log_debug_request():

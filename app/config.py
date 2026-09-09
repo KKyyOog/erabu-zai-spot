@@ -7,6 +7,9 @@ load_dotenv()
 
 
 class Config:
+    # Render forwards requests through its managed proxy. Other deployments
+    # must explicitly configure the number of trusted X-Forwarded-For hops.
+    TRUSTED_PROXY_HOPS = int(os.getenv("TRUSTED_PROXY_HOPS", "1" if os.getenv("RENDER", "").lower() == "true" else "0"))
     SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret")
     ALLOW_INSECURE_DEV_CONFIG = os.getenv("ALLOW_INSECURE_DEV_CONFIG", "false").lower() in (
         "1",

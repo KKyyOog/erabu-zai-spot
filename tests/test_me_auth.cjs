@@ -40,7 +40,7 @@ function setup({ token = 'expired', inClient = false, loggedIn = true, status = 
     setSubmitEnabled: value => calls.push(['submit', value]), setLoading() {},
     showUnavailableState: message => calls.push(['unavailable', message]),
     getCurrentLineProfile: async () => ({ userId: 'Utest' }),
-    fetch: async () => { calls.push('fetch'); return { ok: status === 200, status, json: async () => ({}) }; },
+    fetch: async () => { calls.push('fetch'); return { ok: status === 200, status, headers: {get: () => '12'}, json: async () => ({}) }; },
     setIdentityReadiness() {}, syncFriendshipStatus: async () => {},
     loadMeProfile: async () => calls.push('profile'),
   });
@@ -95,4 +95,13 @@ test('server failure does not trigger repeated logins', async () => {
   const { context, calls } = setup({ token: 'fresh', status: 500 });
   await assert.rejects(context.connectLineIdentity(true), /LINE authentication failed/);
   assert.deepEqual(calls, ['fetch']);
+});
+
+test('rate limiting explains the waiting time without restarting login', async () => {
+  const {context, calls} = setup({token: 'fresh', status: 429});
+  assert.equal(await context.connectLineIdentity(true), true);
+  assert.equal(calls[0], 'fetch');
+  assert.equal(calls[1][0], 'unavailable');
+  assert.match(calls[1][1], /12秒/);
+  assert.equal(calls.length, 2);
 });
