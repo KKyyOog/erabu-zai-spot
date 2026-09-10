@@ -21,7 +21,10 @@ def allow_request(scope, principal, limit, seconds):
         index_elements=[request_buckets.c.bucket_key],
         set_={"count": request_buckets.c.count + 1},
         where=request_buckets.c.count < limit,
-    )
+    ).returning(request_buckets.c.count)
     with engine.begin() as conn:
         conn.execute(delete(request_buckets).where(request_buckets.c.expires_at <= now))
-        return conn.execute(stmt).rowcount == 1
+        # INSERT rowcount is not portable: psycopg resets it on cursor close.
+        # RETURNING yields a count only when this atomic insert/update succeeds;
+        # the ON CONFLICT WHERE clause returns no row once the quota is full.
+        return conn.execute(stmt).scalar_one_or_none() is not None
