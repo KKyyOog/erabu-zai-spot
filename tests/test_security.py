@@ -21,6 +21,14 @@ class SecurityTestCase(unittest.TestCase):
     authenticate = fixtures.WorkflowTestCase.authenticate
     post_form = fixtures.WorkflowTestCase.post_form
 
+    def test_login_rejects_malformed_fields_without_verification(self):
+        self.app.config["LINE_LOGIN_ENABLED"] = True
+        for payload in ([1], {"idToken": 123}, {"userId": [], "idToken": "token"}):
+            with self.subTest(payload=payload), patch("app.routes.link.verify_id_token") as verify:
+                response = self.client.post("/link/liff", json=payload)
+                self.assertEqual(response.status_code, 400)
+                verify.assert_not_called()
+
     def test_deleted_demolition_cannot_be_viewed_or_requested(self):
         with self.app.app_context():
             entry = db.append_demolition_property({"line_user_id": "owner", "location": "private location"})

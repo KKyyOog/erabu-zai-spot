@@ -114,6 +114,13 @@ def liff_link():
 
     data = request.get_json(silent=True) or {}
 
+    if not isinstance(data, dict) or any(
+        key in data and not isinstance(data[key], str)
+        for key in ("userId", "idToken", "id_token")
+    ):
+        logger.warning("[LIFF AUTH] rejected reason=invalid_payload trace=%s", _liff_trace_id())
+        return jsonify({"ok": False, "message": "Authentication fields must be strings"}), 400
+
     user_id = (data.get("userId") or "").strip()
     id_token = (data.get("idToken") or data.get("id_token") or "").strip()
     trace_id = _liff_trace_id(data)
@@ -141,6 +148,7 @@ def liff_link():
         claims = verify_id_token(id_token, expected_user_id=user_id)
     except LineAuthError as exc:
         session.pop("line_user_id", None)
+        session.pop("line_authenticated_at", None)
         logger.warning(
             "[LIFF AUTH] rejected reason=invalid_token trace=%s error=%s duration_ms=%d",
             trace_id,
@@ -156,6 +164,7 @@ def liff_link():
     verified_user_id = (claims.get("sub") or "").strip()
     if not verified_user_id or (user_id and user_id != verified_user_id):
         session.pop("line_user_id", None)
+        session.pop("line_authenticated_at", None)
         logger.warning(
             "[LIFF AUTH] rejected reason=user_mismatch trace=%s duration_ms=%d",
             trace_id,
