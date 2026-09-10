@@ -55,6 +55,7 @@ test('login preserves matching link but removes authentication callback paramete
     origin: 'https://example.com', pathname: '/users/me',
     search: '?tab=matches&match=match1&refresh=1&code=secret&state=secret&redirect=https://other.example'
   }}});
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../app/static/js/line-auth-common.js'), 'utf8'), context);
   vm.runInContext(source('liffLoginRedirectUrl'), context);
   assert.equal(context.liffLoginRedirectUrl(), 'https://example.com/users/me?tab=matches&match=match1&refresh=1');
 });

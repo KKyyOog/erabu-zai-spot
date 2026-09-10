@@ -808,7 +808,7 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertIn("trace=trace-test-1", log_output)
         self.assertIn('"errorCode":"400"', log_output)
         self.assertIn('"friendFlag":false', log_output)
-        self.assertIn("referer_path=/users/me", log_output)
+        self.assertNotIn("referer_path=", log_output)
         self.assertIn("[redacted]", log_output)
         self.assertNotIn("secret-id-token", log_output)
         self.assertNotIn("secret-code", log_output)

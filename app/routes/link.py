@@ -5,7 +5,6 @@ import re
 import secrets
 import time
 from datetime import datetime, timedelta
-from urllib.parse import urlsplit
 
 from flask import Blueprint, current_app, jsonify, request, session
 
@@ -17,6 +16,7 @@ from app.services.db_service import (
     set_line_friendship,
 )
 from app.services.line_auth_service import LineAuthError, verify_id_token
+from app.services.liff_diagnostics import DIAGNOSTIC_SCHEMA, sanitize_details
 from app.services.line_service import (
     build_line_official_account_message_url,
     get_line_user_profile,
@@ -32,20 +32,6 @@ logger = logging.getLogger(__name__)
 NOTIFICATION_LINK_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 NOTIFICATION_LINK_CODE_LENGTH = 10
 LIFF_TRACE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-LIFF_LOG_SENSITIVE_KEY_PARTS = (
-    "authorization",
-    "code",
-    "email",
-    "href",
-    "idtoken",
-    "lineuserid",
-    "phone",
-    "search",
-    "token",
-    "userid",
-)
-
-
 def _notification_link_code_hash(code):
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
@@ -71,30 +57,6 @@ def _liff_trace_id(data=None):
         if LIFF_TRACE_ID_PATTERN.fullmatch(candidate):
             return candidate
     return "none"
-
-
-def _sanitize_liff_log_details(value, depth=0):
-    if depth > 3:
-        return "[depth-limited]"
-    if isinstance(value, dict):
-        result = {}
-        for raw_key, raw_value in list(value.items())[:30]:
-            key = _safe_log_text(raw_key, 80)
-            normalized_key = key.lower().replace("-", "").replace("_", "")
-            is_sensitive = (
-                normalized_key in LIFF_LOG_SENSITIVE_KEY_PARTS
-                or normalized_key.endswith(("email", "phone", "token", "userid"))
-            )
-            if is_sensitive and not isinstance(raw_value, bool):
-                result[key] = "[redacted]"
-            else:
-                result[key] = _sanitize_liff_log_details(raw_value, depth + 1)
-        return result
-    if isinstance(value, (list, tuple)):
-        return [_sanitize_liff_log_details(item, depth + 1) for item in value[:10]]
-    if isinstance(value, bool) or value is None or isinstance(value, (int, float)):
-        return value
-    return _safe_log_text(value)
 
 
 @link_bp.route("/liff", methods=["POST"])
@@ -127,13 +89,11 @@ def liff_link():
 
     logger.info(
         "[LIFF AUTH] received trace=%s session_user=%s user_id_present=%s "
-        "id_token_present=%s path=%s user_agent=%s",
+        "id_token_present=%s",
         trace_id,
         _session_user_log_key(),
         bool(user_id),
         bool(id_token),
-        request.path,
-        request.headers.get("User-Agent", ""),
     )
 
     if not id_token:
@@ -414,30 +374,26 @@ def liff_debug():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify({"ok": False, "message": "JSON object is required"}), 400
-    event = _safe_log_text(data.get("event") or data.get("message") or "unknown", 120)
-    level = _safe_log_text(data.get("level") or "info", 10).lower()
-    if level not in ("debug", "info", "warning", "error"):
-        level = "info"
-    timestamp = _safe_log_text(data.get("timestamp"), 100)
+    events = data.get("events", [data])
+    if not isinstance(events, list) or len(events) > 10:
+        return jsonify(ok=False, message="At most 10 events are allowed"), 400
+    # Validate the entire batch before emitting anything, including event names.
+    for item in events:
+        if not isinstance(item, dict) or item.get("event") not in DIAGNOSTIC_SCHEMA["events"]:
+            return jsonify(ok=False, message="Unknown diagnostic event"), 400
     trace_id = _liff_trace_id(data)
-    details = _sanitize_liff_log_details(data.get("details") or {})
-    try:
-        referer_path = urlsplit(request.headers.get("Referer", "")).path
-    except ValueError:
-        referer_path = ""
-
-    log_method = logger.warning if level in ("warning", "error") else logger.info
-    log_method(
-        "[LIFF CLIENT] event=%s level=%s trace=%s client_timestamp=%s "
-        "session_user=%s referer_path=%s details=%s user_agent=%s",
-        event,
-        level,
-        trace_id,
-        timestamp,
-        _session_user_log_key(),
-        _safe_log_text(referer_path, 200),
-        json.dumps(details, ensure_ascii=False, separators=(",", ":")),
-        _safe_log_text(request.headers.get("User-Agent", ""), 300),
-    )
+    dropped = data.get("dropped", 0)
+    if type(dropped) is int and dropped > 0:
+        logger.warning("[LIFF CLIENT] event=diagnostics.dropped trace=%s count=%d", trace_id, min(dropped, 1000000))
+    for item in events:
+        level = item.get("level", "info")
+        if level not in ("debug", "info", "warning", "error"):
+            level = "info"
+        log_method = logger.warning if level in ("warning", "error") else logger.info
+        log_method(
+            "[LIFF CLIENT] event=%s level=%s trace=%s details=%s",
+            item["event"], level, trace_id,
+            json.dumps(sanitize_details(item.get("details")), ensure_ascii=False, separators=(",", ":")),
+        )
 
     return "", 204

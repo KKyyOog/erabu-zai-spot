@@ -6,42 +6,17 @@
   <title>えらぶ材すぽっと</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260908-ui-navigation') }}">
   <script>
+    window.LIFF_DEBUG_LOGGING = {{ LIFF_DEBUG_LOGGING|tojson }};
+    window.LIFF_DIAGNOSTIC_SCHEMA = {{ LIFF_DIAGNOSTIC_SCHEMA|tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='js/line-auth-common.js', v='20260910') }}"></script>
+  <script src="{{ url_for('static', filename='js/liff-diagnostics.js', v='20260910') }}"></script>
+  <script>
     window.LIFF_TRACE_ID = window.LIFF_TRACE_ID || (
       window.crypto && typeof window.crypto.randomUUID === 'function'
         ? window.crypto.randomUUID()
         : `liff-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
     );
-    window.sendClientDiagnostic = function sendClientDiagnostic(eventName, details = {}, level = 'info') {
-      const payload = JSON.stringify({
-        event: eventName,
-        level,
-        traceId: window.LIFF_TRACE_ID,
-        details,
-        timestamp: new Date().toISOString(),
-      });
-      try {
-        if (navigator.sendBeacon) {
-          const sent = navigator.sendBeacon(
-            '/link/liff-debug',
-            new Blob([payload], { type: 'application/json' }),
-          );
-          if (sent) {
-            return;
-          }
-        }
-        fetch('/link/liff-debug', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-LIFF-Trace-ID': window.LIFF_TRACE_ID,
-          },
-          body: payload,
-          keepalive: true,
-        }).catch(function () {});
-      } catch (error) {
-        // Diagnostics must never stop the page itself from loading.
-      }
-    };
     window.addEventListener('error', function (event) {
       if (event.target && event.target !== window) {
         const source = event.target.src || event.target.href || '';

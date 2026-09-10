@@ -42,8 +42,13 @@ function setup({ token = 'expired', inClient = false, loggedIn = true, status = 
     getCurrentLineProfile: async () => ({ userId: 'Utest' }),
     fetch: async () => { calls.push('fetch'); return { ok: status === 200, status, headers: {get: () => '12'}, json: async () => ({}) }; },
     setIdentityReadiness() {}, syncFriendshipStatus: async () => {},
+    setUserPageSkeleton() {}, initMeFlow: async () => {},
     loadMeProfile: async () => calls.push('profile'),
   });
+  context.window.liff = context.liff;
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../app/static/js/line-auth-common.js'), 'utf8'), context);
+  context.window.LineAuth.clearRetry = () => {};
+  context.window.LineAuth.showRetry = () => calls.push('retry');
   for (const name of ['clearLiffLoginAttempt', 'recentlyAttemptedLiffLogin', 'rememberLiffLoginAttempt',
     'liffLoginRedirectUrl', 'hasFreshIdToken', 'restartLineAuthentication', 'connectLineIdentity']) {
     vm.runInContext(source(name), context);
@@ -79,10 +84,10 @@ test('optional authentication does not redirect for an expired token', async () 
 
 test('fresh token loads profile and clears retry guard', async () => {
   const { context, calls, storage } = setup({ token: 'fresh' });
-  storage.set('attempt', String(Date.now()));
+    storage.set('erabu_zai_spot_liff_login_attempted_at', String(Date.now()));
   assert.equal(await context.connectLineIdentity(true), true);
   assert.deepEqual(calls, ['fetch', 'profile']);
-  assert.equal(storage.has('attempt'), false);
+    assert.equal(storage.has('erabu_zai_spot_liff_login_attempted_at'), false);
 });
 
 test('server rejection restarts authentication before loading profile', async () => {
@@ -104,4 +109,18 @@ test('rate limiting explains the waiting time without restarting login', async (
   assert.equal(calls[1][0], 'unavailable');
   assert.match(calls[1][1], /12秒/);
   assert.equal(calls.length, 2);
+});
+
+test('temporary outage offers retry without logout or clearing credentials', async () => {
+  const {context, calls} = setup({token: 'fresh', status: 503});
+  assert.equal(await context.connectLineIdentity(true), true);
+  assert.deepEqual(calls, ['fetch', 'retry']);
+  assert.equal(context.currentIdToken, 'stale');
+});
+
+test('network outage offers retry without logout', async () => {
+  const {context, calls} = setup({token: 'fresh'});
+  context.fetch = async () => { throw new TypeError('network unavailable'); };
+  assert.equal(await context.connectLineIdentity(true), true);
+  assert.deepEqual(calls, ['retry']);
 });

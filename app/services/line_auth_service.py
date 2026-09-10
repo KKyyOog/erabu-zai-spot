@@ -15,6 +15,10 @@ class LineAuthError(Exception):
     pass
 
 
+class LineAuthUnavailable(Exception):
+    """Temporary verification failure; must not be treated as invalid credentials."""
+
+
 def _log_auth_event(event, started_at=None, warning=False):
     trace = request.headers.get("X-LIFF-Trace-ID", "") if has_request_context() else ""
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", trace):
@@ -25,37 +29,11 @@ def _log_auth_event(event, started_at=None, warning=False):
             round((time.perf_counter() - started_at) * 1000) if started_at is not None else 0)
 
 
-def _safe_line_error_text(value, max_length=300):
-    return " ".join(str(value or "").split())[:max_length]
-
-
 def _log_verification_http_error(exc):
-    line_error = ""
-    description = ""
-
-    try:
-        response_body = exc.read().decode("utf-8", errors="replace")
-        error_payload = json.loads(response_body)
-        if isinstance(error_payload, dict):
-            line_error = _safe_line_error_text(error_payload.get("error"))
-            description = _safe_line_error_text(
-                error_payload.get("error_description")
-            )
-    except (AttributeError, OSError, TypeError, ValueError):
-        pass
-
-    request_id = ""
-    if exc.headers:
-        request_id = _safe_line_error_text(
-            exc.headers.get("x-line-request-id", ""), max_length=100
-        )
-
+    # Upstream descriptions may echo credentials. Record only the HTTP status.
     current_app.logger.warning(
-        "[LINE AUTH] ID token rejected status=%s error=%s description=%s request_id=%s",
+        "[LINE AUTH] verification_http_error status=%s",
         exc.code,
-        line_error or "unknown",
-        description or "not_provided",
-        request_id or "not_provided",
     )
 
 
@@ -91,7 +69,8 @@ def verify_id_token(id_token, expected_user_id=""):
 
     channel_id = current_app.config.get("LINE_CHANNEL_ID", "")
     if not channel_id:
-        raise LineAuthError("LINE_CHANNEL_ID is not configured")
+        _log_auth_event("verification_not_configured", started_at, warning=True)
+        raise LineAuthUnavailable("LINE_CHANNEL_ID is not configured")
 
     payload = {
         "id_token": id_token,
@@ -113,21 +92,27 @@ def verify_id_token(id_token, expected_user_id=""):
             response_body = response.read().decode("utf-8")
     except HTTPError as exc:
         _log_verification_http_error(exc)
+        if exc.code == 429 or exc.code >= 500:
+            _log_auth_event("verification_unavailable", started_at, warning=True)
+            raise LineAuthUnavailable("LINE verification is temporarily unavailable") from exc
         _log_auth_event("verification_rejected", started_at, warning=True)
         raise LineAuthError("LINE ID token verification failed") from exc
     except (URLError, OSError) as exc:
         _log_auth_event("verification_unavailable", started_at, warning=True)
-        raise LineAuthError("LINE ID token verification unavailable") from exc
+        raise LineAuthUnavailable("LINE ID token verification unavailable") from exc
+    except UnicodeDecodeError as exc:
+        _log_auth_event("verification_invalid_json", started_at, warning=True)
+        raise LineAuthUnavailable("LINE verification returned invalid encoding") from exc
 
     try:
         claims = json.loads(response_body)
     except json.JSONDecodeError as exc:
         _log_auth_event("verification_invalid_json", started_at, warning=True)
-        raise LineAuthError("LINE ID token verification returned invalid JSON") from exc
+        raise LineAuthUnavailable("LINE ID token verification returned invalid JSON") from exc
 
     if not isinstance(claims, dict):
         _log_auth_event("verification_invalid_claims", started_at, warning=True)
-        raise LineAuthError("LINE ID token verification returned invalid claims")
+        raise LineAuthUnavailable("LINE ID token verification returned invalid claims")
     user_id = claims.get("sub", "")
     if not isinstance(user_id, str) or not user_id.strip():
         _log_auth_event("verification_missing_subject", started_at, warning=True)

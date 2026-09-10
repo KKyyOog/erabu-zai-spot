@@ -21,6 +21,48 @@ class SecurityTestCase(unittest.TestCase):
     authenticate = fixtures.WorkflowTestCase.authenticate
     post_form = fixtures.WorkflowTestCase.post_form
 
+    def test_temporary_verification_failure_preserves_session(self):
+        from app.services.line_auth_service import LineAuthUnavailable
+        self.app.config["LINE_LOGIN_ENABLED"] = True
+        self.authenticate("owner")
+        with self.client.session_transaction() as saved:
+            authenticated_at = saved["line_authenticated_at"]
+        with patch("app.routes.link.verify_id_token", side_effect=LineAuthUnavailable()):
+            response = self.client.post("/link/liff", json={"userId": "owner", "idToken": "token"})
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json["code"], "line_auth_unavailable")
+        self.assertEqual(response.headers["Retry-After"], "10")
+        with self.client.session_transaction() as saved:
+            self.assertEqual(saved["line_user_id"], "owner")
+            self.assertEqual(saved["line_authenticated_at"], authenticated_at)
+
+    def test_temporary_verification_failure_in_shared_auth_is_503(self):
+        from app.services.line_auth_service import LineAuthUnavailable
+        self.authenticate("owner")
+        with self.client.session_transaction() as saved:
+            saved["line_authenticated_at"] = 1
+        with patch("app.services.line_auth_service.verify_id_token", side_effect=LineAuthUnavailable()):
+            response = self.client.post("/users/me/data", json={"userId": "owner", "idToken": "token"},
+                                        headers={"X-CSRF-Token": self.csrf_token})
+        self.assertEqual(response.status_code, 503)
+
+    def test_diagnostic_batch_is_bounded_and_does_not_log_arbitrary_text(self):
+        self.app.config["LIFF_DEBUG_LOGGING"] = True
+        item = {"event": "auth.flow_started", "details": {
+            "errorMessage": "private-token", "errorName": "private-token",
+            "private-token": "private-token", "durationMs": "private-token",
+            "userId": "private-token", "pathname": "/private-token"}}
+        with self.assertLogs("app.routes.link", level="INFO") as logs:
+            response = self.client.post("/link/liff-debug", json={"events": [item] * 10, "dropped": 3},
+                                        headers={"User-Agent": "private-token", "Referer": "https://example.com/private-token"})
+        self.assertEqual(response.status_code, 204)
+        output = " ".join(logs.output)
+        self.assertNotIn("private-token", output)
+        self.assertIn("diagnostics.dropped", output)
+        self.assertIn("count=3", output)
+        self.assertEqual(self.client.post("/link/liff-debug", json={"events": [item] * 11}).status_code, 400)
+        self.assertEqual(self.client.post("/link/liff-debug", json={"event": "private-token"}).status_code, 400)
+
     def test_login_rejects_malformed_fields_without_verification(self):
         self.app.config["LINE_LOGIN_ENABLED"] = True
         for payload in ([1], {"idToken": 123}, {"userId": [], "idToken": "token"}):
@@ -186,5 +228,5 @@ class SecurityTestCase(unittest.TestCase):
         self.app.config["LIFF_DEBUG_LOGGING"] = True
         with patch("app.routes.link.logger.info"), patch("app.services.rate_limit_service.time.time", return_value=time.time()):
             for _ in range(30):
-                self.assertEqual(self.client.post("/link/liff-debug", json={"event": "test"}).status_code, 204)
+                self.assertEqual(self.client.post("/link/liff-debug", json={"event": "auth.flow_started"}).status_code, 204)
             self.assertEqual(self.client.post("/link/liff-debug", json={"event": "test"}).status_code, 429)

@@ -1,10 +1,12 @@
 import json
 import unittest
 from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError
+from io import BytesIO
 
 from flask import Flask
 
-from app.services.line_auth_service import LineAuthError, extract_id_token, verify_id_token
+from app.services.line_auth_service import LineAuthError, LineAuthUnavailable, extract_id_token, verify_id_token
 
 
 class LineAuthServiceTests(unittest.TestCase):
@@ -16,7 +18,7 @@ class LineAuthServiceTests(unittest.TestCase):
         with self.app.test_request_context(headers={"X-LIFF-Trace-ID": "trace-123"}):
             with patch("app.services.line_auth_service.urlopen", side_effect=TimeoutError("secret-token")):
                 with self.assertLogs(self.app.logger, level="WARNING") as logs:
-                    with self.assertRaises(LineAuthError):
+                    with self.assertRaises(LineAuthUnavailable):
                         verify_id_token("secret-token")
             output = " ".join(logs.output)
             self.assertIn("verification_unavailable", output)
@@ -29,7 +31,7 @@ class LineAuthServiceTests(unittest.TestCase):
                 response = MagicMock()
                 response.__enter__.return_value.read.return_value = json.dumps(claims).encode()
                 with patch("app.services.line_auth_service.urlopen", return_value=response):
-                    with self.assertRaises(LineAuthError):
+                    with self.assertRaises(LineAuthError if isinstance(claims, dict) else LineAuthUnavailable):
                         verify_id_token("token", expected_user_id="expected")
 
     def test_success_logs_metadata_only(self):
@@ -43,6 +45,17 @@ class LineAuthServiceTests(unittest.TestCase):
             self.assertIn("verification_succeeded", output)
             self.assertNotIn("private-user", output)
             self.assertNotIn("secret-token", output)
+
+    def test_http_failure_classification_and_safe_logging(self):
+        for status in (400, 401, 429, 500, 503):
+            with self.subTest(status=status), self.app.app_context():
+                error = HTTPError("https://example.com", status, "secret-token", {},
+                                  BytesIO(b'{"error_description":"secret-token"}'))
+                with patch("app.services.line_auth_service.urlopen", side_effect=error):
+                    with self.assertLogs(self.app.logger, level="WARNING") as logs:
+                        with self.assertRaises(LineAuthUnavailable if status >= 500 or status == 429 else LineAuthError):
+                            verify_id_token("secret-token")
+                self.assertNotIn("secret-token", " ".join(logs.output))
 
     def test_invalid_json_token_input_is_handled(self):
         for payload in ([1], {"idToken": 123}, {"idToken": ["token"]}):

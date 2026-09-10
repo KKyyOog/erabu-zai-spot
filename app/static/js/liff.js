@@ -6,8 +6,6 @@ function clearLegacyLiffReturnUrl() {
   }
 }
 
-const LIFF_LOGIN_ATTEMPT_KEY = "erabu_zai_spot_liff_login_attempted_at";
-const LIFF_LOGIN_RETRY_DELAY_MS = 60 * 1000;
 const LIFF_TRACE_ID = window.LIFF_TRACE_ID || (
   window.crypto?.randomUUID?.() || `liff-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 );
@@ -23,79 +21,35 @@ function liffErrorDetails(error) {
 }
 
 function recentlyAttemptedLiffLogin() {
-  try {
-    const attemptedAt = Number(window.sessionStorage.getItem(LIFF_LOGIN_ATTEMPT_KEY) || 0);
-    return attemptedAt > 0 && Date.now() - attemptedAt < LIFF_LOGIN_RETRY_DELAY_MS;
-  } catch (error) {
-    console.warn("Failed to read LIFF login attempt:", error);
-    return false;
-  }
+  return window.LineAuth.recentlyAttempted();
 }
 
 function rememberLiffLoginAttempt() {
-  try {
-    window.sessionStorage.setItem(LIFF_LOGIN_ATTEMPT_KEY, String(Date.now()));
-  } catch (error) {
-    console.warn("Failed to store LIFF login attempt:", error);
-  }
+  return window.LineAuth.rememberAttempt();
 }
 
 function clearLiffLoginAttempt() {
-  try {
-    window.sessionStorage.removeItem(LIFF_LOGIN_ATTEMPT_KEY);
-  } catch (error) {
-    console.warn("Failed to clear LIFF login attempt:", error);
-  }
+  return window.LineAuth.clearAttempt();
 }
 
 function liffLoginRedirectUrl() {
-  const base = `${window.location.origin}${window.location.pathname}`;
-  const incoming = new URLSearchParams(window.location.search || '');
-  const safe = new URLSearchParams();
-  for (const key of ['tab', 'match', 'refresh', 'notification_required', 'q', 'area', 'type', 'material_type', 'page']) {
-    if (incoming.has(key)) safe.set(key, incoming.get(key).slice(0, 100));
-  }
-  return base + (safe.size ? `?${safe}` : '');
+  return window.LineAuth.redirectUrl();
 }
 
 function hasFreshIdToken(idToken) {
-  if (!idToken || !liff.getDecodedIDToken) {
-    return false;
-  }
-
-  const decodedToken = liff.getDecodedIDToken();
-  const expiresAt = Number(decodedToken?.exp || 0) * 1000;
-  return expiresAt > Date.now() + 30 * 1000;
+  return window.LineAuth.hasFreshIdToken(idToken);
 }
 
 function restartLineAuthentication(reason) {
-  logToServer(`Restarting LINE authentication: ${reason}`, getLiffDebugContext());
-  if (window.clearCachedUserRegistration) {
-    window.clearCachedUserRegistration(window.LINE_USER_ID || "");
-  }
+  logToServer("auth.restart_requested", getLiffDebugContext(), "warning");
+  window.clearCachedUserRegistration?.(window.LINE_USER_ID || "");
   window.LINE_ID_TOKEN = "";
   window.LINE_SESSION_AUTHENTICATED = false;
   setAllLineUserInputs("");
-
-  if (liff.isInClient && liff.isInClient()) {
+  return window.LineAuth.restart(reason => {
     setUserRegistrationState("error");
-    setLineAuthControls(false, "LINEから開き直してください");
-    return false;
-  }
-
-  if (recentlyAttemptedLiffLogin()) {
-    setUserRegistrationState("error");
-    setLineAuthControls(false, "再認証できませんでした");
-    return false;
-  }
-
-  rememberLiffLoginAttempt();
-  setLineAuthControls(false, "LINEへ再ログイン中...");
-  if (liff.isLoggedIn()) {
-    liff.logout();
-  }
-  liff.login({ redirectUri: liffLoginRedirectUrl() });
-  return true;
+    setLineAuthControls(false, reason === "in_client" ? "LINEから開き直してください" : "再認証できませんでした");
+  }, () => setLineAuthControls(false, "LINEへ再ログイン中..."));
 }
 
 function getLiffDebugContext() {
@@ -207,6 +161,12 @@ async function confirmUserRegistration(userId, idToken = "") {
       headers,
       credentials: "same-origin",
     });
+    if (response.status === 503) {
+      window.LineAuth.showRetry(() => confirmUserRegistration(userId, idToken).then(ready => {
+        if (ready) { window.LineAuth.clearRetry(); setLineAuthControls(true); }
+      }));
+      return false;
+    }
     const body = await response.json();
 
     if (response.ok && body.exists === true) {
@@ -369,6 +329,8 @@ async function syncLineFriendshipStatus() {
 }
 
 function installLineAuthSubmitGuard() {
+  if (window.lineAuthSubmitGuardInstalled) return;
+  window.lineAuthSubmitGuardInstalled = true;
   document.addEventListener("submit", (event) => {
     const form = event.target;
     if (!form || !form.matches("form") || !form.querySelector('input[name="line_user_id"], input[name="user_id"], input[name="userid"]')) {
@@ -462,6 +424,7 @@ function installImagePreviews() {
 }
 
 async function initializeLiff() {
+  window.LineAuth.clearRetry();
   const liffId = typeof window.LIFF_ID === "string" ? window.LIFF_ID.trim() : "";
   const startedAt = performance.now();
   console.log("LIFF initialization started. LIFF ID:", liffId);
@@ -508,7 +471,7 @@ async function initializeLiff() {
   }
 
   try {
-    await liff.init({ liffId });
+    await window.LineAuth.initialize(liffId);
     liffInitialized = true;
     console.log("LIFF initialized successfully.");
     await logToServer("liff.initialization_succeeded", {
@@ -608,7 +571,7 @@ async function initializeLiff() {
       await logToServer("WARNING: display_name input not found");
     }
 
-    const linkResponse = await fetch("/link/liff", {
+    const linkResponse = await window.LineAuth.verify("/link/liff", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -621,6 +584,11 @@ async function initializeLiff() {
       keepalive: true,
     });
     if (!linkResponse.ok) {
+      if (linkResponse.status === 503) {
+        setLineAuthControls(false, "LINE認証を再試行してください");
+        window.LineAuth.showRetry(initializeLiff);
+        return;
+      }
       if (linkResponse.status === 429) {
         const seconds = Math.max(1, Math.min(3600, Number(linkResponse.headers.get('Retry-After')) || 60));
         setUserRegistrationState("error");
@@ -645,6 +613,7 @@ async function initializeLiff() {
       return;
     }
 
+    window.LineAuth.clearRetry();
     window.LINE_SESSION_AUTHENTICATED = true;
     logToServer("liff.server_auth_succeeded", {
       httpStatus: linkResponse.status,
@@ -670,36 +639,7 @@ async function initializeLiff() {
 }
 
 function logToServer(event, details = {}, level = "info") {
-  const payload = JSON.stringify({
-    event,
-    level,
-    traceId: LIFF_TRACE_ID,
-    details,
-    timestamp: new Date().toISOString(),
-  });
-
-  try {
-    if (navigator.sendBeacon) {
-      const sent = navigator.sendBeacon("/link/liff-debug", new Blob([payload], { type: "application/json" }));
-      if (sent) {
-        return;
-      }
-    }
-
-    fetch("/link/liff-debug", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-LIFF-Trace-ID": LIFF_TRACE_ID,
-      },
-      body: payload,
-      keepalive: true,
-    }).catch((error) => {
-      console.error("Failed to send debug log:", error);
-    });
-  } catch (e) {
-    console.error("Failed to send debug log:", e);
-  }
+  window.sendClientDiagnostic(event, details, level);
 }
 
 function startLiffInitialization() {

@@ -17,7 +17,8 @@ from app.routes.admin import admin_bp
 from app.config import Config
 from app.services.db_service import init_database
 from app.services.liff_service import liff_url_for
-from app.services.line_auth_service import session_identity_is_fresh
+from app.services.liff_diagnostics import DIAGNOSTIC_SCHEMA
+from app.services.line_auth_service import LineAuthUnavailable, session_identity_is_fresh
 from app.services.rate_limit_service import allow_request
 
 
@@ -92,6 +93,14 @@ def create_app():
     def server_error(error):
         return render_template("error.html", message="処理を完了できませんでした。マイページで保存状況を確認してから、再度お試しください。"), 500
 
+    @app.errorhandler(LineAuthUnavailable)
+    def line_auth_unavailable(error):
+        message = "LINE認証に一時的につながりません。少し待ってから再試行してください。"
+        headers = {"Retry-After": "10", "Cache-Control": "no-store"}
+        if request.is_json or request.path.startswith("/link/") or request.accept_mimetypes.best == "application/json":
+            return jsonify(ok=False, code="line_auth_unavailable", message=message), 503, headers
+        return render_template("error.html", message=message), 503, headers
+
     @app.context_processor
     def inject_liff_id():
         def csrf_token():
@@ -104,6 +113,8 @@ def create_app():
         return {
             "LIFF_ID": app.config["LIFF_ID"],
             "LINE_LOGIN_ENABLED": app.config["LINE_LOGIN_ENABLED"],
+            "LIFF_DEBUG_LOGGING": app.config["LIFF_DEBUG_LOGGING"],
+            "LIFF_DIAGNOSTIC_SCHEMA": DIAGNOSTIC_SCHEMA,
             "USER_INFO_CACHE_SECONDS": app.config["USER_INFO_CACHE_SECONDS"],
             "liff_url_for": liff_url_for,
             "csrf_token": csrf_token,
@@ -228,14 +239,10 @@ def create_app():
             g.liff_debug_started_at = time.perf_counter()
             g.liff_debug_trace_id = trace_id
             app.logger.info(
-                "[REQUEST DEBUG] started method=%s path=%s trace=%s "
-                "remote_addr=%s referer_present=%s user_agent=%s",
+                "[REQUEST DEBUG] started method=%s endpoint=%s trace=%s",
                 request.method,
-                request.path,
+                request.endpoint,
                 trace_id,
-                request.headers.get("X-Forwarded-For", request.remote_addr),
-                bool(request.headers.get("Referer", "")),
-                request.headers.get("User-Agent", ""),
             )
 
     @app.after_request
@@ -243,10 +250,10 @@ def create_app():
         debug_started_at = getattr(g, "liff_debug_started_at", None)
         if debug_started_at is not None:
             app.logger.info(
-                "[REQUEST DEBUG] completed method=%s path=%s trace=%s "
+                "[REQUEST DEBUG] completed method=%s endpoint=%s trace=%s "
                 "status=%s duration_ms=%d",
                 request.method,
-                request.path,
+                request.endpoint,
                 getattr(g, "liff_debug_trace_id", "none"),
                 response.status_code,
                 round((time.perf_counter() - debug_started_at) * 1000),
