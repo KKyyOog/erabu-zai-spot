@@ -50,6 +50,29 @@ test('viewing requests never offer material post closure', () => {
   assert.ok(!nodes.get('matching-history-container').innerHTML.includes('name="completion_action"'));
 });
 
+test('inquiries show separate sharing directions and never render unsafe contact links', () => {
+  const {context, nodes} = setup();
+  context.renderMatchingHistory([{match_id: 'm', provider_user_id: 'owner', status: '連絡・調整中',
+    provider_contact_share_status: 'shared', other_display_name: '<script>bad</script>',
+    received_contact: {contact_method: 'LINE', contact_value: 'javascript:alert(1)', message: '<img src=x>'}}]);
+  const html = nodes.get('matching-history-container').innerHTML;
+  assert.ok(html.includes('あなたの連絡先は送信済み'));
+  assert.ok(html.includes('相手の連絡先が届いています'));
+  assert.ok(!html.includes('href="javascript:'));
+  assert.ok(!html.includes('<script>'));
+  assert.ok(!html.includes('<img src=x>'));
+  assert.ok(!html.includes('<select name="status">'));
+});
+
+test('finished inquiries do not offer sharing or repeat completion', () => {
+  const {context, nodes} = setup();
+  context.renderMatchingHistory([{match_id: 'm', provider_user_id: 'owner', status: '成立'}]);
+  const html = nodes.get('matching-history-container').innerHTML;
+  assert.ok(html.includes('完了・見送り（1）'));
+  assert.ok(!html.includes('/share-contact'));
+  assert.ok(!html.includes('/status'));
+});
+
 test('login preserves matching link but removes authentication callback parameters', () => {
   const context = vm.createContext({URLSearchParams, window: { location: {
     origin: 'https://example.com', pathname: '/users/me',

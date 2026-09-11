@@ -373,9 +373,18 @@ def share_contact(match_type, match_id):
         abort(404)
     target_id = match["requester_user_id"] if match["provider_user_id"] == line_user_id else match["provider_user_id"]
     card = get_contact_card_by_user(line_user_id)
-    if not card or not card.get("contact_value"):
-        flash("先に連絡先カードを入力してください。保存後、マッチング履歴から共有できます。")
-        return redirect(url_for("users.me", tab="profile"))
+    if request.method == "POST" and request.form.get("action") == "save_contact":
+        if _reject_overlong_user_input(request.form) or not request.form.get("contact_value", "").strip():
+            flash("連絡先を入力し、文字数をご確認ください。")
+            return redirect(url_for("users.share_contact", match_type=match_type, match_id=match_id, edit="1"))
+        upsert_contact_card(line_user_id, request.form)
+        refresh_user_profile_cache(line_user_id)
+        _clear_me_data_cache(line_user_id)
+        return redirect(url_for("users.share_contact", match_type=match_type, match_id=match_id))
+    if not card or not card.get("contact_value") or request.args.get("edit") == "1":
+        target = get_user_by_line_user_id(target_id) or {}
+        return render_template("users/share_contact.html", match=match, card=card or {}, editing=True,
+            target_name=target.get("business_name") or target.get("display_name") or "相手")
     if request.method == "GET" or not request.form.get("contact_version"):
         target = get_user_by_line_user_id(target_id) or {}
         response = make_response(render_template("users/share_contact.html", match=match, card=card,
@@ -411,7 +420,7 @@ def share_contact(match_type, match_id):
             "連絡先カードは共有履歴に保存しましたが、相手へのLINE通知に失敗しました。"
             "必要に応じて運営者へ連絡してください。"
         )
-    return redirect(url_for("users.me", refresh="1", tab="matches"))
+    return redirect(url_for("users.me", refresh="1", tab="matches", match=match_id))
 
 
 @users_bp.route("/matches/<match_type>/<match_id>/status", methods=["POST"])
@@ -457,11 +466,12 @@ def update_match_status(match_type, match_id):
 
     notification_sent = deliver_notification(updated_match["notification_id"], sender=send_line_message)
 
+    status_label = {"成立": "完了", "辞退": "見送り", "連絡・調整中": "相談中", "未対応": "問い合わせ受付"}.get(status, status)
     if notification_sent:
-        flash(f"マッチング状態を「{status}」に更新し、相手へLINE通知を送信しました。")
+        flash(f"問い合わせを「{status_label}」にして、相手へLINE通知を送信しました。")
     else:
         flash(
-            f"マッチング状態は「{status}」に更新しましたが、相手へのLINE通知に失敗しました。"
+            f"問い合わせは「{status_label}」にしましたが、相手へのLINE通知に失敗しました。"
             "必要に応じて運営者へ連絡してください。"
         )
     return redirect(url_for("users.me", tab="matches", refresh="1", match=match_id))

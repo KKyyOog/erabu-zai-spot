@@ -1099,8 +1099,23 @@ def get_matching_history_by_user(line_user_id):
         .order_by(matching_history.c.created_at.desc())
     )
     history = _select_many(stmt)
+    # Only expose the snapshot explicitly sent to this viewer, never a live profile card.
+    received = _select_many(select(contact_share_logs).where(
+        contact_share_logs.c.to_user_id == line_user_id,
+        contact_share_logs.c.share_status == "shared",
+    ).order_by(contact_share_logs.c.shared_at.desc(), contact_share_logs.c.created_at.desc()))
+    cards = {}
+    for share in received:
+        cards.setdefault((share["match_type"], share["match_id"], share["from_user_id"]), {
+            key: share.get("shared_" + key, "")
+            for key in ("display_name", "contact_method", "contact_value", "available_time", "message")
+        })
     for record in history:
         _decorate_match_record(record)
+        other_id = record["requester_user_id"] if record["provider_user_id"] == line_user_id else record["provider_user_id"]
+        other = get_user_by_line_user_id(other_id) or {}
+        record["other_display_name"] = other.get("business_name") or other.get("display_name") or "相手"
+        record["received_contact"] = cards.get((record["match_type"], record["match_id"], other_id))
     return history
 
 
@@ -1197,7 +1212,8 @@ def update_matching_status(match_id, match_type, user_id, status, expected_statu
         key = "property_id" if match_type == "viewing" else "material_id"
         title_column = parent.c.property_name if match_type == "viewing" else parent.c.title
         title = conn.execute(select(title_column).where(parent.c[key] == record[key])).scalar() or record[key]
-        enqueue_notification(conn, notification_id, target, f"「{title}」のマッチングの状態が「{status}」に更新されました。", match_id=match_id)
+        status_label = {"成立": "見学完了" if match_type == "viewing" else "受け渡し完了", "辞退": "今回は見送り", "連絡・調整中": "連絡先の共有・相談中", "未対応": "問い合わせ受付"}.get(status, status)
+        enqueue_notification(conn, notification_id, target, f"「{title}」について、相手から「{status_label}」の連絡がありました。", match_id=match_id)
     record = _decorate_match_record(record)
     record["notification_id"] = notification_id
     return record
@@ -1379,6 +1395,11 @@ def record_contact_share(match_id, match_type, from_user_id, expected_version=No
             matching_history.c.match_id == match_id,
             matching_history.c.match_type == match_type,
         ).values(**{f"{role}_contact_share_status": "shared", f"{role}_contact_shared_at": shared_at, "updated_at": shared_at}))
+        conn.execute(update(matching_history).where(
+            matching_history.c.match_id == match_id,
+            matching_history.c.match_type == match_type,
+            matching_history.c.status == "未対応",
+        ).values(status="連絡・調整中"))
         enqueue_notification(conn, share_id, to_user_id, "\n".join([
             "連絡先カードが共有されました。",
             f"お名前: {card.get('display_name', '')}",

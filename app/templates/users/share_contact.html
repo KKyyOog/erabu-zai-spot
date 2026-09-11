@@ -1,10 +1,31 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="card share-confirmation">
-  <p class="entry-badge">共有前の確認</p>
-  <h2>この連絡先を共有しますか？</h2>
-  <p><strong>{{ target_name }}</strong>さんへ、以下の内容を共有します。</p>
-  <p class="hint">対象：{{ match.entry_title or 'マッチング中の投稿' }}</p>
+  <p class="entry-badge">{{ '1. 連絡先の入力' if editing else '2. 送る内容の確認' }}</p>
+  <h2>{{ 'あなたの連絡先を入力' if editing else target_name ~ 'さんに連絡先を送る' }}</h2>
+  <p class="hint">対象：{{ match.entry_title or '問い合わせ中の投稿' }}</p>
+  {% if editing %}
+  <p>保存後に、{{ target_name }}さんへ送る内容を確認します。保存だけでは相手に送られません。</p>
+  <form method="post" action="{{ url_for('users.share_contact', match_type=match.match_type, match_id=match.match_id) }}" data-unsaved>
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="save_contact">
+    <label for="share-name">相手に伝える名前</label>
+    <input id="share-name" name="contact_display_name" maxlength="100" value="{{ card.display_name or '' }}">
+    <label for="share-method">連絡方法</label>
+    <select id="share-method" name="contact_method" required>
+      <option value="">選択してください</option>
+      {% for method in ['LINE', 'メール', '電話', 'その他'] %}<option {% if card.contact_method == method %}selected{% endif %}>{{ method }}</option>{% endfor %}
+    </select>
+    <label for="share-value">連絡先</label>
+    <input id="share-value" name="contact_value" required maxlength="300" value="{{ card.contact_value or '' }}" placeholder="LINE ID、メールアドレス、電話番号など">
+    <label for="share-time">連絡しやすい時間（任意）</label>
+    <input id="share-time" name="contact_available_time" maxlength="100" value="{{ card.available_time or '' }}">
+    <label for="share-message">ひとこと（任意）</label>
+    <textarea id="share-message" name="contact_message" maxlength="1000" rows="2">{{ card.message or '' }}</textarea>
+    <button type="submit">保存して、送る内容を確認する</button>
+  </form>
+  {% else %}
+  <p><strong>あなたの連絡先</strong>を、{{ target_name }}さんだけに送ります。</p>
   <dl class="detail-list">
     <div><dt>表示名</dt><dd>{{ card.display_name or '未設定' }}</dd></div>
     <div><dt>連絡方法</dt><dd>{{ card.contact_method or '未設定' }}</dd></div>
@@ -16,11 +37,13 @@
   <form method="post">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="contact_version" value="{{ contact_version }}">
-    <button type="submit">この内容で共有する</button>
+    <button type="submit">この連絡先を{{ target_name }}さんに送る</button>
   </form>
+  {% endif %}
+  <p class="hint">公式アカウントのLINEはお知らせ用です。相談は、共有された連絡先へ直接お願いします。</p>
   <div class="flow-actions">
-    <a href="{{ url_for('users.me', tab='matches') }}">共有せずに戻る</a>
-    <a href="{{ url_for('users.me', tab='profile') }}">連絡先を修正する</a>
+    <a href="{{ url_for('users.me', tab='matches', match=match.match_id) }}">問い合わせに戻る</a>
+    {% if not editing %}<a href="{{ url_for('users.share_contact', match_type=match.match_type, match_id=match.match_id, edit='1') }}">連絡先を修正する</a>{% endif %}
   </div>
 </section>
 {% endblock %}

@@ -33,9 +33,9 @@
 
 <div id="user-page-live" class="user-page-live" hidden aria-busy="true">
 <nav class="page-tabs" aria-label="マイページの表示切り替え">
+  <button type="button" class="page-tab" data-tab-target="matches-panel">問い合わせ<span id="pending-match-count"></span></button>
+  <button type="button" class="page-tab" data-tab-target="materials-panel">自分の投稿</button>
   <button type="button" class="page-tab active" data-tab-target="profile-panel">プロフィール</button>
-  <button type="button" class="page-tab" data-tab-target="materials-panel">登録した情報</button>
-  <button type="button" class="page-tab" data-tab-target="matches-panel">マッチング<span id="pending-match-count"></span></button>
 </nav>
 
 <section class="card user-page-card tab-panel active" id="profile-panel">
@@ -50,7 +50,7 @@
     </div>
   </div>
 
-  <aside id="notification-readiness" class="readiness-card">
+  <aside id="notification-readiness" class="readiness-card readiness-card--compact">
     <strong>利用状況</strong>
     <div class="readiness-list">
       <p id="identity-readiness" class="readiness-item is-checking">LINE本人確認　確認中</p>
@@ -112,9 +112,9 @@
       <section class="profile-panel">
         <div class="panel-heading">
           <span class="entry-badge">連絡先共有カード</span>
-          <h3>マッチ後に共有する連絡先</h3>
+          <h3>相手に送るあなたの連絡先</h3>
         </div>
-        <p class="hint">同意した相手だけへ共有されます。</p>
+        <p class="hint">ここで保存しただけでは送られません。問い合わせごとに、送る相手と内容を確認できます。</p>
 
         <label>共有用の表示名</label>
         <input type="text" name="contact_display_name" id="contact_display_name" placeholder="例：山田">
@@ -167,7 +167,7 @@
 </section>
 
 <section class="card tab-panel" id="matches-panel" hidden>
-  <h3>マッチング履歴</h3>
+  <h3>問い合わせ</h3><p class="hint">連絡先を送る → 相手と直接相談する → 受け渡しが終わったら完了。連絡先の送受信状況は自動で反映されます。</p>
   <div id="matching-history-container"><p>読み込み中...</p></div>
 </section>
 </div>
@@ -685,86 +685,60 @@
 
   function renderMatchingHistory(history) {
     const container = document.getElementById('matching-history-container');
-    const currentUserId = document.getElementById('line_user_id').value;
-    if (!history || history.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <p>まだマッチング履歴はありません。</p>
-          <a class="button-link compact" href="/materials/list">一覧を見る</a>
-        </div>
-      `;
+    const userId = document.getElementById('line_user_id').value;
+    if (!history || !history.length) {
+      container.innerHTML = '<div class="empty-state"><h4>まだ問い合わせはありません</h4><p>気になる材に問い合わせると、ここで連絡先や進み具合を確認できます。</p><a class="button-link" href="/materials/list">材の一覧を見る</a></div>';
       return;
     }
-
-    container.innerHTML = history.map((match) => {
-      const isProvider = match.provider_user_id === currentUserId;
-      const shareStatus = isProvider ? match.provider_contact_share_status : match.requester_contact_share_status;
-      const matchType = match.match_type || 'material';
-      const entryLabel = matchType === 'viewing' ? '見学' : (matchType === 'request' ? '探している材' : '材');
-      const roleLabel = matchType === 'request'
-        ? (isProvider ? '提供を申し出た側' : '探している側')
-        : (isProvider ? '登録者側' : '希望者側');
-      const entryId = match.entry_id || match.material_id || match.property_id || '';
-      const title = match.entry_title || entryId || 'ID未設定';
-      const thumb = match.entry_image_url
-        ? `<img class="history-thumb history-thumb--small" src="${escapeHtml(match.entry_image_url)}" alt="${escapeHtml(title)}" loading="lazy" decoding="async">`
-        : '<div class="history-thumb history-thumb--small history-thumb--empty">写真なし</div>';
-      const shareAction = `/users/matches/${encodeURIComponent(matchType)}/${encodeURIComponent(match.match_id)}/share-contact`;
-      const statusAction = `/users/matches/${encodeURIComponent(matchType)}/${encodeURIComponent(match.match_id)}/status`;
-      const shareControl = shareStatus === 'shared'
-        ? '<p class="share-status shared">連絡先カード共有済み</p>'
-        : `
-          <a class="button-link" href="${shareAction}">\u9023\u7d61\u5148\u3092\u78ba\u8a8d\u3057\u3066\u5171\u6709</a>
-        `;
-      const statusControl = `
-        <form class="match-status-form" method="post" action="${statusAction}" data-confirm-message="マッチング状態を変更します。よろしいですか？">
-          <input type="hidden" name="expected_status" value="${escapeHtml(match.status || '未対応')}">
-          <input type="hidden" name="expected_updated_at" value="${escapeHtml(match.updated_at || '')}">
-          <input type="hidden" name="line_user_id" value="${escapeHtml(currentUserId)}">
-          <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">
-          <label>マッチング状態</label>
-          <select name="status">
-            ${renderOptions(matchStatusOptions, match.status || '未対応')}
-          </select>
-          ${match.entry_owner_id === currentUserId && matchType !== 'viewing' ? `
-            <label>「成立」にする場合の掲載</label>
-            <select name="completion_action">
-              <option value="keep">残りがある・引き続き募集する</option>
-              <option value="close">すべて譲った・必要な材が見つかったので終了する</option>
-            </select>
-            <p class="hint">終了する場合は、マッチング状態を「成立」にしてください。</p>` : ''}
-          <button type="submit" class="secondary-button">状態を更新する</button>
-        </form>
-      `;
-
-      return `
-        <div class="history-card matching-history-item" id="match-${escapeHtml(match.match_id)}" tabindex="-1">
-          <div class="history-card__header">
-            <div class="history-card__title">
-              <span class="entry-badge ${matchType === 'viewing' ? 'demolition' : (matchType === 'request' ? 'request' : 'offer')}">${entryLabel}マッチング</span>
-              <h4>${escapeHtml(title)}</h4>
-            </div>
-            <span class="listing-date">${escapeHtml(formatDateJp(match.created_at))}</span>
-          </div>
-          <div class="history-card__bodyline">
-            ${thumb}
-            <div>
-              <div class="match-meta">
-                <span>${escapeHtml(roleLabel)}</span>
-                <span>${escapeHtml(match.action || '操作未設定')}</span>
-                <span>${escapeHtml(match.status || '状態未設定')}</span>
-              </div>
-              ${match.message ? `<p class="match-message">${escapeHtml(match.message)}</p>` : ''}
-              <p class="match-next-step">${match.status === '成立' ? (match.entry_status === 'closed' ? '成立し、投稿の受付も終了しています。' : match.entry_owner_id === currentUserId && matchType !== 'viewing' ? '残りがなければ、掲載を「終了する」にして更新してください。残りがあれば引き続き募集できます。' : '成立しました。受け渡し・見学の詳細を相手と確認してください。') : match.status === '辞退' ? 'この問い合わせは辞退になっています。' : shareStatus === 'shared' ? '連絡先を共有済みです。受け渡し方法を相談し、進み具合に合わせて状態を更新してください。' : (matchType === 'request' ? !isProvider : isProvider) ? '問い合わせが届いています。連絡先を共有して、相手と相談を始められます。' : '相手の返答を待ちましょう。連絡先を共有しておくこともできます。'}</p>
-              <div class="match-actions">
-                ${statusControl}
-                ${shareControl}
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
+    const render = match => {
+      const type = match.match_type || 'material';
+      const provider = match.provider_user_id === userId;
+      const sent = (provider ? match.provider_contact_share_status : match.requester_contact_share_status) === 'shared';
+      const received = match.received_contact;
+      const incoming = type === 'request' ? !provider : provider;
+      const done = ['成立', '辞退'].includes(match.status);
+      const name = escapeHtml(match.other_display_name || '相手');
+      const action = `/users/matches/${encodeURIComponent(type)}/${encodeURIComponent(match.match_id)}`;
+      const label = match.status === '成立' ? '完了' : match.status === '辞退' ? '見送り' : received ? '相手の連絡先が届いています' : sent ? 'あなたの連絡先は送信済み' : incoming ? '問い合わせが届いています' : '相手の返答待ち';
+      let contact = '';
+      if (received) {
+        const value = received.contact_value || '';
+        let href = '';
+        if (received.contact_method === '電話' && /^[+0-9() -]+$/.test(value)) href = 'tel:' + value.replace(/[() -]/g, '');
+        if (received.contact_method === 'メール' && /^[^\s@]+@[^\s@]+$/.test(value)) href = 'mailto:' + encodeURIComponent(value);
+        if (received.contact_method === 'LINE' && /^https:\/\/(line\.me|lin\.ee)\//i.test(value)) href = value;
+        contact = `<section class="received-contact"><h5>${name}さんから届いた連絡先</h5>
+          <p>${escapeHtml(received.display_name || '')} · ${escapeHtml(received.contact_method || '')}</p>
+          <p class="contact-value">${escapeHtml(value)}</p>
+          ${received.available_time ? `<p>連絡しやすい時間：${escapeHtml(received.available_time)}</p>` : ''}
+          ${received.message ? `<p>${escapeHtml(received.message)}</p>` : ''}
+          ${href ? `<a class="button-link" href="${escapeHtml(href)}">${received.contact_method === '電話' ? '電話する' : received.contact_method === 'メール' ? 'メールを作成する' : 'LINEを開く'}</a>` : '<p class="hint">この連絡先を使って、相手に直接ご連絡ください。</p>'}
+        </section>`;
+      }
+      const fields = `<input type="hidden" name="expected_status" value="${escapeHtml(match.status || '未対応')}">
+        <input type="hidden" name="expected_updated_at" value="${escapeHtml(match.updated_at || '')}">
+        <input type="hidden" name="line_user_id" value="${escapeHtml(userId)}">
+        <input type="hidden" name="id_token" value="${escapeHtml(currentIdToken)}">`;
+      const completion = `<details class="match-completion"><summary>${type === 'viewing' ? '見学が終わったら' : '受け渡しが終わったら'}</summary>
+        <form method="post" action="${action}/status" data-confirm-message="この問い合わせを完了にして、相手に通知します。よろしいですか？">
+          ${fields}<input type="hidden" name="status" value="成立">
+          ${match.entry_owner_id === userId && type !== 'viewing' ? `<label>この投稿で、ほかの問い合わせも受け付けますか？<select name="completion_action"><option value="keep">まだ受け付ける</option><option value="close">掲載を終了する</option></select></label>` : ''}
+          <button type="submit">${type === 'viewing' ? '見学' : '受け渡し'}完了を伝える</button>
+        </form></details>
+        <details class="match-completion"><summary>今回は見送る</summary><form method="post" action="${action}/status" data-confirm-message="この問い合わせを見送りにして、相手に通知します。よろしいですか？">${fields}<input type="hidden" name="status" value="辞退"><p class="hint">この問い合わせを終了します。投稿の掲載は続きます。</p><button type="submit" class="secondary-button">見送りを伝える</button></form></details>`;
+      return `<article class="history-card matching-history-item" id="match-${escapeHtml(match.match_id)}" tabindex="-1">
+        <div class="history-card__header"><div><span class="entry-badge">${incoming ? '届いた問い合わせ' : '送った問い合わせ'}</span><h4>${escapeHtml(match.entry_title || '投稿への問い合わせ')}</h4><p>${name}さんとの問い合わせ</p></div><span class="listing-date">${escapeHtml(formatDateJp(match.created_at))}</span></div>
+        ${match.message ? `<blockquote class="match-message">${escapeHtml(match.message)}</blockquote>` : ''}
+        <p class="match-next-step">${label}</p>
+        ${contact}
+        <div class="contact-progress"><p>${sent ? '✓ あなたの連絡先は送信済みです' : 'あなたの連絡先はまだ送っていません'}</p>${!received ? '<p>相手の連絡先はまだ届いていません</p>' : ''}</div>
+        ${!done ? `${!sent ? `<a class="button-link" href="${action}/share-contact">自分の連絡先を送る</a><p class="hint">送る前に、相手と内容を確認できます。</p>` : ''}<p class="hint">公式アカウントのLINEはお知らせ用です。相談は相手の連絡先へ直接お願いします。</p>${completion}` : '<p class="hint">この問い合わせは終了しました。投稿の掲載状況は「自分の投稿」で確認できます。</p>'}
+      </article>`;
+    };
+    const active = history.filter(match => !['成立', '辞退'].includes(match.status));
+    const finished = history.filter(match => ['成立', '辞退'].includes(match.status));
+    container.innerHTML = `<h4 class="inquiry-group-title">進行中（${active.length}）</h4>${active.length ? active.map(render).join('') : '<p class="hint">進行中の問い合わせはありません。</p>'}
+      ${finished.length ? `<h4 class="inquiry-group-title">完了・見送り（${finished.length}）</h4>${finished.map(render).join('')}` : ''}`;
   }
 
   function fillUserForm(user) {
@@ -1033,12 +1007,12 @@
       renderMaterials(body.materials || [], userId);
       renderDemolitionProperties(body.demolition_properties || [], userId);
       renderMatchingHistory(body.matching_history || []);
-      const pending = (body.matching_history || []).filter(match => match.status === '\u672a\u5bfe\u5fdc').length;
+      const pending = (body.matching_history || []).filter(match => !['成立', '辞退'].includes(match.status) && !(match.provider_user_id === userId ? match.provider_contact_share_status === 'shared' : match.requester_contact_share_status === 'shared') && (match.match_type === 'request' ? match.requester_user_id === userId : match.provider_user_id === userId)).length;
       document.getElementById('pending-match-count').textContent = pending ? ` (${pending})` : '';
       if (!userSelectedTab) {
         const params = new URLSearchParams(window.location.search);
         const requested = params.get('notification_required') === '1' ? 'profile' : params.get('tab');
-        selectPageTab(hasRegisteredProfile ? (pageTabIds[requested] ? requested : pending ? 'matches' : 'materials') : 'profile');
+        selectPageTab(hasRegisteredProfile ? (pageTabIds[requested] ? requested : 'matches') : 'profile');
       }
       const linkedMatch = new URLSearchParams(window.location.search).get('match');
       if (linkedMatch && !userSelectedTab) {
@@ -1103,10 +1077,10 @@
     hasRegisteredProfile = body.exists === true;
     if (body.exists) {
       window.cacheUserRegistration?.(userId);
-      document.getElementById('form-title').textContent = 'ユーザー情報（更新）';
+      document.getElementById('form-title').textContent = 'プロフィール';
       fillUserForm(body.user || {});
       fillContactCard(body.contact_card || {}, body.user || {});
-      document.getElementById('submit-button').textContent = '更新する';
+      document.getElementById('submit-button').textContent = '変更を保存する';
       setLoading(false, '登録済みの情報を読み込みました。');
     } else {
       window.clearCachedUserRegistration?.(userId);

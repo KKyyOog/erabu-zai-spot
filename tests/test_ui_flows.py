@@ -50,7 +50,7 @@ class UiFlowTestCase(unittest.TestCase):
     def test_direct_post_without_confirmation_does_not_share(self):
         response = self.post_form(self.prepare_match(), {})
         self.assertEqual(response.status_code, 200)
-        self.assertIn("この内容で共有する", response.get_data(as_text=True))
+        self.assertIn("この連絡先を問い合わせ相手さんに送る", response.get_data(as_text=True))
         self.assertEqual(self.shares(), [])
 
     def test_changed_contact_requires_new_confirmation(self):
@@ -70,6 +70,37 @@ class UiFlowTestCase(unittest.TestCase):
         response = self.client.get(route)
         self.assertEqual(response.status_code, 404)
         self.assertNotIn("090-1234-5678", response.get_data(as_text=True))
+
+    def test_contact_edit_stays_in_inquiry_and_requires_confirmation(self):
+        route = self.prepare_match()
+        with self.app.app_context(), db._engine().begin() as conn:
+            conn.execute(db.contact_cards.delete())
+        page = self.client.get(route)
+        self.assertIn('保存して、送る内容を確認する', page.get_data(as_text=True))
+        with patch('app.routes.users.send_line_message') as send:
+            saved = self.post_form(route, {'action': 'save_contact', 'contact_method': 'メール', 'contact_value': 'owner@example.com'})
+            self.assertEqual(saved.location, route)
+            preview = self.client.get(saved.location).get_data(as_text=True)
+            self.assertIn('owner@example.com', preview)
+            self.assertIn('name="contact_version"', preview)
+            self.assertEqual(self.shares(), [])
+            send.assert_not_called()
+
+    def test_only_recipient_sees_shared_snapshot_and_status_advances(self):
+        route = self.prepare_match()
+        match_id = route.split('/')[-2]
+        with self.app.app_context():
+            self.assertIsNone(db.get_matching_history_by_user('visitor')[0]['received_contact'])
+            db.record_contact_share(match_id, 'material', 'owner')
+            db.upsert_contact_card('owner', {'contact_value': 'private-new-value'})
+            received = db.get_matching_history_by_user('visitor')[0]
+            self.assertEqual(received['status'], '連絡・調整中')
+            self.assertEqual(received['received_contact']['contact_value'], '090-1234-5678')
+            self.assertIsNone(db.get_matching_history_by_user('owner')[0]['received_contact'])
+            self.assertEqual(db.get_matching_history_by_user('stranger'), [])
+            db.update_matching_status(match_id, 'material', 'owner', '成立')
+            db.record_contact_share(match_id, 'material', 'owner')
+            self.assertEqual(db.get_matching_history_by_user('visitor')[0]['status'], '成立')
 
     def test_search_area_and_pagination_preserve_conditions(self):
         with self.app.app_context():

@@ -68,6 +68,7 @@
                 {{ '探しています' if item.post_type == 'request' else '材があります' }}
               </p>
               <h3>{{ item.title }}</h3>
+              <button class="listing-detail-plus" type="button" data-open-dialog="{{ dialog_id }}" aria-haspopup="dialog" aria-controls="{{ dialog_id }}" aria-label="{{ item.title }}の詳細を見る" title="詳細を見る"><span aria-hidden="true">＋</span></button>
               <dl class="summary-list">
                 <div><dt>材種</dt><dd>{{ item.material_type or '未設定' }}</dd></div>
                 {% if item.post_type == 'request' %}
@@ -77,9 +78,6 @@
                 {% endif %}
                 <div><dt>場所</dt><dd>{{ item.location or '指定なし' }}</dd></div>
               </dl>
-              <button class="listing-card__detail-trigger secondary-button" type="button" data-open-dialog="{{ dialog_id }}" aria-haspopup="dialog">
-                詳細を見る
-              </button>
             </div>
           </article>
 
@@ -166,13 +164,11 @@
             <div class="listing-card__body">
               <p class="entry-badge demolition">解体物件</p>
               <h3>{{ item.title or item.location or '物件名未設定' }}</h3>
+              <button class="listing-detail-plus" type="button" data-open-dialog="{{ dialog_id }}" aria-haspopup="dialog" aria-controls="{{ dialog_id }}" aria-label="{{ item.title or item.location or '解体物件' }}の詳細を見る" title="詳細を見る"><span aria-hidden="true">＋</span></button>
               <dl class="summary-list">
                 <div><dt>場所</dt><dd>{{ item.location or '未設定' }}</dd></div>
                 <div><dt>解体日</dt><dd>{{ item.demolition_date|date_jp if item.demolition_date else '未定' }}</dd></div>
               </dl>
-              <button class="listing-card__detail-trigger secondary-button" type="button" data-open-dialog="{{ dialog_id }}" aria-haspopup="dialog">
-                詳細を見る
-              </button>
             </div>
           </article>
 
