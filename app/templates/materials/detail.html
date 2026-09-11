@@ -13,7 +13,7 @@
   {% if material.image_urls %}
     <div class="detail-carousel" aria-label="{{ material.title or '投稿写真' }}">
       {% for image_url in material.image_urls %}
-        <img class="detail-image" src="{{ image_url }}" alt="{{ material.title or '投稿写真' }}" loading="lazy" decoding="async">
+        <img class="detail-image" src="{{ image_url|image_delivery(1280) }}" alt="{{ material.title or '投稿写真' }}" loading="lazy" decoding="async">
       {% endfor %}
     </div>
   {% endif %}

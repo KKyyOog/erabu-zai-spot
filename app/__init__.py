@@ -16,6 +16,7 @@ from app.routes.callback import callback_bp
 from app.routes.admin import admin_bp
 from app.config import Config
 from app.services.db_service import init_database
+from app.services.image_service import image_delivery_url
 from app.services.liff_service import liff_url_for
 from app.services.liff_diagnostics import DIAGNOSTIC_SCHEMA
 from app.services.line_auth_service import LineAuthUnavailable, session_identity_is_fresh
@@ -27,6 +28,7 @@ def create_app():
     truststore.inject_into_ssl()
 
     app = Flask(__name__)
+    app.add_template_filter(image_delivery_url, "image_delivery")
     app.config.from_object(Config)
     proxy_hops = app.config["TRUSTED_PROXY_HOPS"]
     if not 0 <= proxy_hops <= 10:

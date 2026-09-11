@@ -1193,8 +1193,7 @@
       setIdentityReadiness(true);
       document.getElementById('profile-note').textContent = 'LINE本人確認済み';
       clearLiffLoginAttempt();
-      await loadCachedFriendshipStatus();
-      await loadMeProfile(body.line_user_id);
+      await Promise.all([loadCachedFriendshipStatus(), loadMeProfile(body.line_user_id)]);
       logLiffDebug('auth.session_cache_hit', {
         expiresInSeconds: Number(body.cache_expires_in || 0),
         durationMs: Math.round(performance.now() - startedAt),
@@ -1304,8 +1303,7 @@
       ? `LINE表示名: ${profile.displayName}`
       : 'LINE本人確認済み';
     clearLiffLoginAttempt();
-    await syncFriendshipStatus();
-    await loadMeProfile(profile.userId, profile.displayName || '');
+    await Promise.all([syncFriendshipStatus(), loadMeProfile(profile.userId, profile.displayName || '')]);
     logLiffDebug('auth.flow_succeeded', {
       durationMs: Math.round(performance.now() - startedAt),
     });

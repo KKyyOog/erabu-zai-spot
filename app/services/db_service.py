@@ -949,19 +949,21 @@ def _decorate_demolition_property_record(record):
     return record
 
 
-def _decorate_match_record(record):
+def _decorate_match_record(record, entries=None):
     record["entry_id"] = record.get("material_id") or record.get("property_id")
     record["entry_title"] = ""
     record["entry_image_url"] = ""
 
     if record.get("match_type") == "viewing":
-        entry = get_demolition_property_by_id(record.get("property_id", ""))
+        entry_id = record.get("property_id", "")
+        entry = entries.get(("viewing", entry_id)) if entries is not None else get_demolition_property_by_id(entry_id)
         if entry:
             image_urls = _collect_image_urls(entry, "building_photo_url", "building_photo_urls")
             record["entry_title"] = entry.get("property_name", "")
             record["entry_image_url"] = image_urls[0] if image_urls else ""
     else:
-        entry = get_material_by_id(record.get("material_id", ""))
+        entry_id = record.get("material_id", "")
+        entry = entries.get(("material", entry_id)) if entries is not None else get_material_by_id(entry_id)
         if entry:
             image_urls = _collect_image_urls(entry, "image_url", "image_urls")
             record["entry_title"] = entry.get("title", "")
@@ -1099,6 +1101,23 @@ def get_matching_history_by_user(line_user_id):
         .order_by(matching_history.c.created_at.desc())
     )
     history = _select_many(stmt)
+    if not history:
+        return []
+    material_ids = {r["material_id"] for r in history if r.get("match_type") != "viewing"}
+    property_ids = {r["property_id"] for r in history if r.get("match_type") == "viewing"}
+    entries = {}
+    if material_ids:
+        entries.update({("material", r["material_id"]): _decorate_material_record(r)
+                        for r in _select_many(select(materials).where(materials.c.material_id.in_(material_ids)))})
+    if property_ids:
+        entries.update({("viewing", r["property_id"]): r
+                        for r in _select_many(select(demolition_properties).where(demolition_properties.c.property_id.in_(property_ids)))})
+    other_ids = {r["requester_user_id"] if r["provider_user_id"] == line_user_id else r["provider_user_id"] for r in history}
+    other_users = {}
+    for user in _select_many(select(users).where(or_(users.c.line_user_id.in_(other_ids), users.c.user_id.in_(other_ids), users.c.userid.in_(other_ids)))):
+        for key in ("line_user_id", "user_id", "userid"):
+            if user.get(key):
+                other_users.setdefault(user[key], user)
     # Only expose the snapshot explicitly sent to this viewer, never a live profile card.
     received = _select_many(select(contact_share_logs).where(
         contact_share_logs.c.to_user_id == line_user_id,
@@ -1111,9 +1130,9 @@ def get_matching_history_by_user(line_user_id):
             for key in ("display_name", "contact_method", "contact_value", "available_time", "message")
         })
     for record in history:
-        _decorate_match_record(record)
+        _decorate_match_record(record, entries)
         other_id = record["requester_user_id"] if record["provider_user_id"] == line_user_id else record["provider_user_id"]
-        other = get_user_by_line_user_id(other_id) or {}
+        other = other_users.get(other_id, {})
         record["other_display_name"] = other.get("business_name") or other.get("display_name") or "相手"
         record["received_contact"] = cards.get((record["match_type"], record["match_id"], other_id))
     return history

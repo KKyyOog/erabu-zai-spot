@@ -90,6 +90,21 @@ test('fresh token loads profile and clears retry guard', async () => {
     assert.equal(storage.has('erabu_zai_spot_liff_login_attempted_at'), false);
 });
 
+test('profile starts while friendship confirmation is still pending', async () => {
+  const { context, calls } = setup({ token: 'fresh' });
+  let releaseFriendship;
+  let profileStarted;
+  const started = new Promise(resolve => { profileStarted = resolve; });
+  context.syncFriendshipStatus = () => new Promise(resolve => { releaseFriendship = resolve; });
+  context.loadMeProfile = async () => { calls.push('profile'); profileStarted(); };
+  const connecting = context.connectLineIdentity(true);
+  await started;
+  assert.ok(releaseFriendship);
+  assert.deepEqual(calls, ['fetch', 'profile']);
+  releaseFriendship();
+  assert.equal(await connecting, true);
+});
+
 test('server rejection restarts authentication before loading profile', async () => {
   const { context, calls } = setup({ token: 'fresh', status: 401 });
   assert.equal(await context.connectLineIdentity(true), true);

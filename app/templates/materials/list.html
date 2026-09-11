@@ -55,7 +55,7 @@
               {% if item.image_urls %}
                 <div class="image-carousel" aria-label="{{ item.title or '投稿写真' }}">
                   {% for image_url in item.image_urls %}
-                    <img src="{{ image_url }}" alt="{{ item.title or '投稿写真' }}" loading="lazy" decoding="async">
+                    <img src="{{ image_url|image_delivery(640) }}" alt="{{ item.title or '投稿写真' }}" loading="lazy" decoding="async">
                   {% endfor %}
                 </div>
               {% else %}
@@ -89,7 +89,7 @@
                   {% if item.image_urls %}
                     <div class="image-carousel" aria-label="{{ item.title or '投稿写真' }}">
                       {% for image_url in item.image_urls %}
-                        <img src="{{ image_url }}" alt="{{ item.title or '投稿写真' }}" loading="lazy" decoding="async">
+                        <img src="{{ image_url|image_delivery(1280) }}" alt="{{ item.title or '投稿写真' }}" loading="lazy" decoding="async">
                       {% endfor %}
                     </div>
                   {% else %}
@@ -154,7 +154,7 @@
               {% if item.image_urls %}
                 <div class="image-carousel" aria-label="{{ item.title or item.location or '解体物件写真' }}">
                   {% for image_url in item.image_urls %}
-                    <img src="{{ image_url }}" alt="{{ item.title or item.location or '解体物件写真' }}" loading="lazy" decoding="async">
+                    <img src="{{ image_url|image_delivery(640) }}" alt="{{ item.title or item.location or '解体物件写真' }}" loading="lazy" decoding="async">
                   {% endfor %}
                 </div>
               {% else %}
@@ -180,7 +180,7 @@
                   {% if item.image_urls %}
                     <div class="image-carousel" aria-label="{{ item.title or item.location or '解体物件写真' }}">
                       {% for image_url in item.image_urls %}
-                        <img src="{{ image_url }}" alt="{{ item.title or item.location or '解体物件写真' }}" loading="lazy" decoding="async">
+                        <img src="{{ image_url|image_delivery(1280) }}" alt="{{ item.title or item.location or '解体物件写真' }}" loading="lazy" decoding="async">
                       {% endfor %}
                     </div>
                   {% else %}
