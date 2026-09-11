@@ -79,6 +79,12 @@
   });
 
   window.addEventListener('user-registration-confirmed', (event) => {
+    if (event.detail?.profileLocation) {
+      profileLocation = formatProfileLocation(event.detail.profileLocation);
+      profileLabel.textContent = profileLocation || '拠点情報が未登録です';
+      updateLocationState();
+      return;
+    }
     loadProfileLocation(event.detail?.userId || window.LINE_USER_ID || '');
   });
 

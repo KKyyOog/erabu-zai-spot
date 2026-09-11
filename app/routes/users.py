@@ -165,6 +165,9 @@ def check(line_user_id):
 
     user, _, cache_hit = get_user_profile_snapshot(verified_user_id)
     response = jsonify({"exists": user is not None, "cached": cache_hit})
+    if request.args.get("include") == "location" and user:
+        response = jsonify({"exists": True, "cached": cache_hit,
+                            "profile_location": {key: user.get(key, "") for key in ("area", "address")}})
     response.headers["Cache-Control"] = "no-store"
     return response
 

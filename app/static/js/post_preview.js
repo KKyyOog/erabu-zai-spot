@@ -34,9 +34,22 @@
     const release = () => { urls.forEach(url => URL.revokeObjectURL(url)); urls = []; };
     back.addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', release);
-    confirm.addEventListener('click', () => {
-      dialog.close(); approved = true;
-      try { form.requestSubmit(submit); } finally { approved = false; }
+    let preparing = false;
+    dialog.addEventListener('cancel', event => { if (preparing) event.preventDefault(); });
+    confirm.addEventListener('click', async () => {
+      if (preparing) return;
+      preparing = true;
+      confirm.disabled = true; back.disabled = true;
+      confirm.textContent = '写真を準備しています…';
+      try {
+        await window.preparePostImages?.(form);
+        dialog.close(); approved = true;
+        form.requestSubmit(submit);
+      } finally {
+        approved = false; preparing = false;
+        confirm.disabled = false; back.disabled = false;
+        confirm.textContent = 'この内容で投稿する';
+      }
     });
     form.addEventListener('submit', event => {
       if (event.defaultPrevented) return;

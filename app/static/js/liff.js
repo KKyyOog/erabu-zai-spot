@@ -130,9 +130,9 @@ function setUserRegistrationState(state) {
   });
 }
 
-function notifyUserRegistrationConfirmed(userId) {
+function notifyUserRegistrationConfirmed(userId, profileLocation) {
   window.dispatchEvent(new CustomEvent("user-registration-confirmed", {
-    detail: { userId },
+    detail: { userId, profileLocation },
   }));
 }
 
@@ -141,7 +141,8 @@ async function confirmUserRegistration(userId, idToken = "") {
     return true;
   }
 
-  if (window.getCachedUserRegistration?.(userId) === true) {
+  const needsLocation = Boolean(document.querySelector('[data-location-choice]'));
+  if (!needsLocation && window.getCachedUserRegistration?.(userId) === true) {
     setUserRegistrationState("registered");
     notifyUserRegistrationConfirmed(userId);
     logToServer("user_registration.cache_hit", { registered: true });
@@ -156,7 +157,7 @@ async function confirmUserRegistration(userId, idToken = "") {
     if (idToken) {
       headers["X-Line-ID-Token"] = idToken;
     }
-    const response = await fetch(`/users/check/${encodeURIComponent(userId)}`, {
+    const response = await fetch(`/users/check/${encodeURIComponent(userId)}${needsLocation ? '?include=location' : ''}`, {
       method: "GET",
       headers,
       credentials: "same-origin",
@@ -172,7 +173,7 @@ async function confirmUserRegistration(userId, idToken = "") {
     if (response.ok && body.exists === true) {
       window.cacheUserRegistration?.(userId);
       setUserRegistrationState("registered");
-      notifyUserRegistrationConfirmed(userId);
+      notifyUserRegistrationConfirmed(userId, body.profile_location);
       logToServer("user_registration.loaded", {
         registered: true,
         serverCacheHit: body.cached === true,
@@ -620,11 +621,12 @@ async function initializeLiff() {
       durationMs: Math.round(performance.now() - startedAt),
     });
     clearLiffLoginAttempt();
-    await syncLineFriendshipStatus();
+    const friendshipSync = syncLineFriendshipStatus();
     if (!await confirmUserRegistration(profile.userId)) {
       return;
     }
     setLineAuthControls(true);
+    await friendshipSync;
     console.log("LIFF link endpoint called successfully.");
     logToServer("LIFF link endpoint called successfully.");
     window.dispatchEvent(new Event("line-authenticated"));

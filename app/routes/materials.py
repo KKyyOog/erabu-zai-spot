@@ -3,6 +3,7 @@ import os
 import re
 import time
 from uuid import uuid4
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import unquote, urlparse
 
 import cloudinary
@@ -149,7 +150,7 @@ cloudinary.config(
 )
 
 
-def _upload_image(image_file):
+def _validate_upload_file(image_file):
     allowed_extensions = {
         ".png": "png",
         ".jpg": "jpeg",
@@ -173,16 +174,12 @@ def _upload_image(image_file):
         getattr(image_file, "content_type", ""),
     )
 
-    public_id = f"erabu-zai-spot/uploads/{uuid4().hex}"
-    with _engine().begin() as conn:
-        conn.execute(image_upload_jobs.insert().values(public_id=public_id, created_at=int(time.time())))
-    g.upload_jobs = getattr(g, "upload_jobs", []) + [public_id]
-    upload_result = cloudinary.uploader.upload(
-        image_file,
-        public_id=public_id,
-        resource_type="image",
-    )
-    image_url = upload_result.get("secure_url", "")
+
+
+def _send_upload(image_file, public_id):
+    # Workers perform network I/O only; Flask state and DB work stay on the request thread.
+    result = cloudinary.uploader.upload(image_file, public_id=public_id, resource_type="image")
+    image_url = result.get("secure_url", "")
     if not image_url or not _is_allowed_image_url(image_url):
         raise ValueError("写真の保存結果を確認できませんでした。写真を選び直してください。")
     return image_url
@@ -191,15 +188,25 @@ def _upload_image(image_file):
 def _upload_images(image_files):
     if len(image_files) > MAX_IMAGES_PER_ENTRY:
         raise ValueError(f"画像は{MAX_IMAGES_PER_ENTRY}枚までアップロードできます。")
+    files = [file for file in image_files if file and file.filename]
+    if not files:
+        return []
+    for file in files:
+        _validate_upload_file(file)
+    public_ids = [f"erabu-zai-spot/uploads/{uuid4().hex}" for _ in files]
+    with _engine().begin() as conn:
+        conn.execute(image_upload_jobs.insert(), [
+            {"public_id": public_id, "created_at": int(time.time())} for public_id in public_ids
+        ])
+    g.upload_jobs = getattr(g, "upload_jobs", []) + public_ids
+    # Preserve photo order and wait for every worker before failure cleanup can run.
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        return list(executor.map(_send_upload, files, public_ids))
 
-    image_urls = []
-    for image_file in image_files:
-        if not image_file or not image_file.filename:
-            continue
-        image_url = _upload_image(image_file)
-        if image_url:
-            image_urls.append(image_url)
-    return image_urls
+
+def _mark_uploads_saved():
+    # Called only after the post transaction committed with all uploaded URLs.
+    g.saved_upload_jobs = list(getattr(g, "upload_jobs", []))
 
 
 def clean_upload_jobs(public_ids=None):
@@ -234,7 +241,13 @@ def clean_upload_jobs(public_ids=None):
 def finish_upload_jobs(response):
     if getattr(g, "upload_jobs", None):
         try:
-            clean_upload_jobs(g.upload_jobs)
+            saved = getattr(g, "saved_upload_jobs", [])
+            if saved:
+                with _engine().begin() as conn:
+                    conn.execute(sql_delete(image_upload_jobs).where(image_upload_jobs.c.public_id.in_(saved)))
+            remaining = [public_id for public_id in g.upload_jobs if public_id not in saved]
+            if remaining:
+                clean_upload_jobs(remaining)
         except Exception:
             current_app.logger.exception("[UPLOAD CLEANUP] deferred to scheduled job")
     return response
@@ -696,6 +709,7 @@ def submit():
     )
 
     append_material(form)
+    _mark_uploads_saved()
     flash("「材があります」を投稿しました。掲載期間は30日です。")
     session["completed_draft"] = {"kind": "offer", "owner": form["line_user_id"]}
     return redirect(url_for("materials.list_materials", type="offer"))
@@ -764,6 +778,7 @@ def submit_request():
     form["image_url"] = final_image_urls[0] if final_image_urls else ""
     form["image_urls"] = json.dumps(final_image_urls, ensure_ascii=False)
     append_material(form)
+    _mark_uploads_saved()
     flash("「材を探しています」を投稿しました。掲載期間は30日です。")
     session["completed_draft"] = {"kind": "request", "owner": form["line_user_id"]}
     return redirect(url_for("materials.list_materials", type="request"))
@@ -832,6 +847,7 @@ def submit_demolition():
     form["building_photo_url"] = final_image_urls[0] if final_image_urls else ""
     form["building_photo_urls"] = json.dumps(final_image_urls, ensure_ascii=False)
     append_demolition_property(form)
+    _mark_uploads_saved()
     flash("解体物件を登録しました。")
     session["completed_draft"] = {"kind": "demolition", "owner": form["line_user_id"]}
     return redirect(url_for("materials.list_materials"))
@@ -988,6 +1004,7 @@ def update_demolition_entry(property_id):
         flash("解体物件の更新に失敗しました。")
         return redirect(url_for("materials.edit_demolition", property_id=property_id))
 
+    _mark_uploads_saved()
     flash("解体物件を更新しました。")
     return redirect(url_for("users.me", refresh="1"))
 
@@ -1186,6 +1203,7 @@ def update_material_entry(material_id):
     if not updated_material:
         return jsonify({"ok": False, "message": "材登録の更新に失敗しました。"}), 500
 
+    _mark_uploads_saved()
     return jsonify({"ok": True, "material": updated_material})
 
 
