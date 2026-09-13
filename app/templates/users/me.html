@@ -167,7 +167,13 @@
 </section>
 
 <section class="card tab-panel" id="matches-panel" hidden>
-  <h3>問い合わせ</h3><p class="hint">連絡先を送る → 相手と直接相談する → 受け渡しが終わったら完了。連絡先の送受信状況は自動で反映されます。</p>
+  <h3>問い合わせ</h3>
+  <p class="hint">相手との連絡・進み具合を確認できます。</p>
+  <details class="inquiry-help">
+    <summary>やりとりの流れ</summary>
+    <ol><li>連絡先を送る（送信前に内容を確認）</li><li>相手の連絡先へ直接相談する</li><li>受け渡し・見学が終わったら完了を伝える</li></ol>
+    <p class="hint">公式アカウントのLINEはお知らせ用です。連絡先の送受信状況は自動で反映されます。</p>
+  </details>
   <div id="matching-history-container"><p>読み込み中...</p></div>
 </section>
 </div>
@@ -699,7 +705,7 @@
       const done = ['成立', '辞退'].includes(match.status);
       const name = escapeHtml(match.other_display_name || '相手');
       const action = `/users/matches/${encodeURIComponent(type)}/${encodeURIComponent(match.match_id)}`;
-      const label = match.status === '成立' ? '完了' : match.status === '辞退' ? '見送り' : received ? '相手の連絡先が届いています' : sent ? 'あなたの連絡先は送信済み' : incoming ? '問い合わせが届いています' : '相手の返答待ち';
+      const label = match.status === '成立' ? '完了' : match.status === '辞退' ? '見送り' : received ? '連絡先が届いています' : sent ? '相手の連絡先待ち' : incoming ? '連絡先を送って返信' : '相手の返答待ち';
       let contact = '';
       if (received) {
         const value = received.contact_value || '';
@@ -707,13 +713,13 @@
         if (received.contact_method === '電話' && /^[+0-9() -]+$/.test(value)) href = 'tel:' + value.replace(/[() -]/g, '');
         if (received.contact_method === 'メール' && /^[^\s@]+@[^\s@]+$/.test(value)) href = 'mailto:' + encodeURIComponent(value);
         if (received.contact_method === 'LINE' && /^https:\/\/(line\.me|lin\.ee)\//i.test(value)) href = value;
-        contact = `<section class="received-contact"><h5>${name}さんから届いた連絡先</h5>
+        contact = `<details class="received-contact"${!done ? ' open' : ''}><summary>相手の連絡先</summary>
           <p>${escapeHtml(received.display_name || '')} · ${escapeHtml(received.contact_method || '')}</p>
           <p class="contact-value">${escapeHtml(value)}</p>
           ${received.available_time ? `<p>連絡しやすい時間：${escapeHtml(received.available_time)}</p>` : ''}
           ${received.message ? `<p>${escapeHtml(received.message)}</p>` : ''}
           ${href ? `<a class="button-link" href="${escapeHtml(href)}">${received.contact_method === '電話' ? '電話する' : received.contact_method === 'メール' ? 'メールを作成する' : 'LINEを開く'}</a>` : '<p class="hint">この連絡先を使って、相手に直接ご連絡ください。</p>'}
-        </section>`;
+        </details>`;
       }
       const fields = `<input type="hidden" name="expected_status" value="${escapeHtml(match.status || '未対応')}">
         <input type="hidden" name="expected_updated_at" value="${escapeHtml(match.updated_at || '')}">
@@ -726,13 +732,15 @@
           <button type="submit">${type === 'viewing' ? '見学' : '受け渡し'}完了を伝える</button>
         </form></details>
         <details class="match-completion"><summary>今回は見送る</summary><form method="post" action="${action}/status" data-confirm-message="この問い合わせを見送りにして、相手に通知します。よろしいですか？">${fields}<input type="hidden" name="status" value="辞退"><p class="hint">この問い合わせを終了します。投稿の掲載は続きます。</p><button type="submit" class="secondary-button">見送りを伝える</button></form></details>`;
-      return `<article class="history-card matching-history-item" id="match-${escapeHtml(match.match_id)}" tabindex="-1">
-        <div class="history-card__header"><div><span class="entry-badge">${incoming ? '届いた問い合わせ' : '送った問い合わせ'}</span><h4>${escapeHtml(match.entry_title || '投稿への問い合わせ')}</h4><p>${name}さんとの問い合わせ</p></div><span class="listing-date">${escapeHtml(formatDateJp(match.created_at))}</span></div>
-        ${match.message ? `<blockquote class="match-message">${escapeHtml(match.message)}</blockquote>` : ''}
-        <p class="match-next-step">${label}</p>
+      return `<article class="history-card matching-history-item${done ? ' is-finished' : ''}" id="match-${escapeHtml(match.match_id)}" tabindex="-1">
+        <div class="inquiry-card-heading"><span class="inquiry-direction">${incoming ? '受信' : '送信'}</span><span class="inquiry-status${done ? ' is-finished' : received || !sent && incoming ? ' is-actionable' : ''}">${label}</span></div>
+        <h4 class="inquiry-title">${escapeHtml(match.entry_title || '投稿への問い合わせ')}</h4>
+        <div class="inquiry-meta"><span>${name}さん</span><span class="listing-date">${escapeHtml(formatDateJp(match.created_at))}</span></div>
+        ${match.message ? `<details class="inquiry-message"><summary>問い合わせメッセージ</summary><blockquote class="match-message">${escapeHtml(match.message)}</blockquote></details>` : ''}
         ${contact}
-        <div class="contact-progress"><p>${sent ? '✓ あなたの連絡先は送信済みです' : 'あなたの連絡先はまだ送っていません'}</p>${!received ? '<p>相手の連絡先はまだ届いていません</p>' : ''}</div>
-        ${!done ? `${!sent ? `<a class="button-link" href="${action}/share-contact">自分の連絡先を送る</a><p class="hint">送る前に、相手と内容を確認できます。</p>` : ''}<p class="hint">公式アカウントのLINEはお知らせ用です。相談は相手の連絡先へ直接お願いします。</p>${completion}` : '<p class="hint">この問い合わせは終了しました。投稿の掲載状況は「自分の投稿」で確認できます。</p>'}
+        ${!done ? `<dl class="contact-progress" aria-label="連絡先の共有状況"><div><dt>自分の連絡先</dt><dd${sent ? ' class="is-shared"' : ''}>${sent ? '送信済み' : '未送信'}</dd></div><div><dt>相手の連絡先</dt><dd${received ? ' class="is-shared"' : ''}>${received ? '受信済み' : '未受信'}</dd></div></dl>
+        ${!sent ? `<div class="inquiry-primary-action"><a class="button-link${received ? ' secondary' : ''}" href="${action}/share-contact">自分の連絡先を送る</a><span class="hint">送信前に内容を確認できます</span></div>` : ''}
+        <div class="inquiry-completion-actions">${completion}</div>` : ''}
       </article>`;
     };
     const active = history.filter(match => !['成立', '辞退'].includes(match.status));

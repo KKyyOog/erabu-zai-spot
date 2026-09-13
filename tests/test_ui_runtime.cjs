@@ -56,8 +56,9 @@ test('inquiries show separate sharing directions and never render unsafe contact
     provider_contact_share_status: 'shared', other_display_name: '<script>bad</script>',
     received_contact: {contact_method: 'LINE', contact_value: 'javascript:alert(1)', message: '<img src=x>'}}]);
   const html = nodes.get('matching-history-container').innerHTML;
-  assert.ok(html.includes('あなたの連絡先は送信済み'));
-  assert.ok(html.includes('相手の連絡先が届いています'));
+  assert.ok(html.includes('<dt>自分の連絡先</dt><dd class="is-shared">送信済み</dd>'));
+  assert.ok(html.includes('<dt>相手の連絡先</dt><dd class="is-shared">受信済み</dd>'));
+  assert.ok(html.includes('連絡先が届いています'));
   assert.ok(!html.includes('href="javascript:'));
   assert.ok(!html.includes('<script>'));
   assert.ok(!html.includes('<img src=x>'));

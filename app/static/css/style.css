@@ -542,16 +542,39 @@ body.has-open-dialog {
 .readiness-card.readiness-card--compact > strong { font-size: 12px; }
 .readiness-card--compact > .hint { flex-basis: 100%; margin: 3px 0; }
 .received-contact { background: #f0f5e9; padding: 16px; border-radius: 12px; margin: 12px 0; }
-.received-contact h5 { font-size: 16px; margin: 0 0 8px; }
+.received-contact summary { font-size: 15px; font-weight: 700; cursor: pointer; padding: 4px 0; }
 .received-contact p { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .contact-value { font-weight: 700; }
-.contact-progress { font-size: 13px; color: #5d5548; margin: 12px 0; }
-.contact-progress p { margin: 4px 0; }
+.contact-progress { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; font-size: 13px; color: #5d5548; margin: 16px 0; }
+.contact-progress > div { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 10px; background: #f6f4ef; border-radius: 8px; }
+.contact-progress dd { margin: 0; font-weight: 700; }
+.contact-progress .is-shared { color: #36552f; }
 .match-completion { border-top: 1px solid #ded8cd; margin-top: 14px; padding-top: 10px; }
 .match-completion summary { cursor: pointer; padding: 8px 0; }
 .match-message { margin: 12px 0; padding: 12px; background: #f6f4ef; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .inquiry-group-title { margin: 24px 0 12px; }
 .matching-history-item { scroll-margin-top: 24px; }
+.inquiry-help { margin-top: 12px; border-bottom: 1px solid #ded8cd; padding-bottom: 12px; }
+.inquiry-help summary, .inquiry-message summary { cursor: pointer; padding: 10px 0; color: #5d5548; font-size: 14px; }
+.inquiry-help ol { padding-left: 24px; line-height: 1.9; }
+.inquiry-card-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.inquiry-direction { font-size: 13px; color: #5d5548; }
+.inquiry-status { padding: 5px 10px; border-radius: 6px; background: #eeeae2; color: #5d5548; font-size: 13px; font-weight: 700; }
+.inquiry-status.is-actionable { color: #36552f; background: #e7f0dc; }
+.matching-history-item .inquiry-title { margin: 14px 0 8px; font-size: 18px; overflow-wrap: anywhere; }
+.inquiry-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; color: #5d5548; font-size: 14px; overflow-wrap: anywhere; }
+.inquiry-message { margin-top: 8px; }
+.inquiry-primary-action { display: grid; gap: 6px; justify-items: start; }
+.inquiry-primary-action .button-link { margin: 0; }
+.inquiry-primary-action .hint { margin: 0; }
+.inquiry-completion-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.inquiry-completion-actions:has(details[open]) { grid-template-columns: 1fr; }
+.inquiry-completion-actions summary { font-size: 14px; }
+.matching-history-item.is-finished { background: #f6f4ef; }
+@media (max-width: 480px) {
+  .inquiry-primary-action { justify-items: stretch; text-align: center; }
+  .inquiry-completion-actions { grid-template-columns: 1fr; }
+}
 
 .readiness-card > strong {
   color: #2f2a23;
