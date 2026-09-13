@@ -139,3 +139,61 @@ test('network outage offers retry without logout', async () => {
   assert.equal(await context.connectLineIdentity(true), true);
   assert.deepEqual(calls, ['retry']);
 });
+
+test('valid server session skips LIFF even after the profile cache expires', async () => {
+  const {context, calls} = setup({token: 'expired'});
+  context.fetch = async () => ({ok: true, json: async () => ({
+    ok: true, auth_mode: 'line', line_user_id: 'Utest',
+    cache_valid: false, session_valid: true, session_expires_in: 40000,
+  })});
+  context.setIdentityFields = () => {};
+  context.loadCachedFriendshipStatus = async () => calls.push('saved friendship');
+  context.initializeLiffClient = async () => { throw new Error('LIFF must not initialize'); };
+  vm.runInContext(source('restoreCachedLineIdentity'), context);
+  assert.equal(await context.connectLineIdentity(true), true);
+  assert.deepEqual(calls, ['saved friendship', 'profile']);
+  assert.equal(context.currentIdToken, '');
+});
+
+test('expired server session is not reused even with a valid profile cache', async () => {
+  const {context, calls} = setup();
+  context.fetch = async () => ({ok: true, json: async () => ({
+    ok: true, auth_mode: 'line', line_user_id: 'Utest',
+    cache_valid: true, session_valid: false,
+  })});
+  vm.runInContext(source('restoreCachedLineIdentity'), context);
+  assert.equal(await context.restoreCachedLineIdentity(), false);
+  assert.deepEqual(calls, []);
+});
+
+for (const search of ['?tab=profile', '?tab=materials', '?match=123', '?notification_required=1']) {
+  test(`profile and requested tab display before delayed activity: ${search}`, async () => {
+    const {context} = setup({token: 'fresh'});
+    const events = [];
+    let releaseActivity;
+    context.window.location.search = search;
+    context.userSelectedTab = false;
+    context.pageTabIds = {profile: 'profile-panel', materials: 'materials-panel', matches: 'matches-panel'};
+    context.setIdentityFields = () => {};
+    context.fillUserForm = () => events.push('profile filled');
+    context.fillContactCard = () => {};
+    context.selectPageTab = name => events.push(name);
+    context.setUserPageSkeleton = value => events.push(['skeleton', value]);
+    context.fetch = async () => ({ok: true, status: 200,
+      json: async () => ({ok: true, exists: true, user: {}, contact_card: {}})});
+    const started = new Promise(resolve => {
+      context.loadMeActivity = () => {
+        events.push('activity started');
+        resolve();
+        return new Promise(finish => { releaseActivity = finish; });
+      };
+    });
+    vm.runInContext(source('loadMeProfile'), context);
+    const loading = context.loadMeProfile('Utest');
+    await started;
+    const expectedTab = search.includes('materials') ? 'materials' : search.includes('match=') ? 'matches' : 'profile';
+    assert.deepEqual(events, ['profile filled', expectedTab, ['skeleton', false], 'activity started']);
+    releaseActivity();
+    await loading;
+  });
+}

@@ -97,7 +97,10 @@ class SecurityTestCase(unittest.TestCase):
             self.post_form(f"/materials/{entry}/close", {"line_user_id": "owner"})
             with self.app.app_context():
                 self.assertEqual(db.get_material_by_id(entry)["effective_status"], "active")
-            self.assertFalse(self.client.get("/link/session").get_json()["ok"])
+            status = self.client.get("/link/session").get_json()
+            self.assertFalse(status["ok"])
+            self.assertFalse(status["session_valid"])
+            self.assertEqual(status["session_expires_in"], 0)
 
     def test_admin_requires_recent_authentication(self):
         self.app.config["ADMIN_LINE_USER_ID"] = "admin"

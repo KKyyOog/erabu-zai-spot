@@ -711,7 +711,7 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertTrue(body["cache_valid"])
         self.assertGreater(body["cache_expires_in"], 0)
 
-    def test_expired_line_session_requires_fresh_liff_authentication(self):
+    def test_expired_profile_cache_does_not_expire_line_session(self):
         line_user_id = "U55555555555555555555555555555555"
         self.app.config["USER_INFO_CACHE_SECONDS"] = 600
         with self.client.session_transaction() as session:
@@ -725,6 +725,10 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertTrue(body["ok"])
         self.assertFalse(body["cache_valid"])
         self.assertEqual(body["cache_expires_in"], 0)
+        self.assertTrue(body["session_valid"])
+        self.assertGreater(body["session_expires_in"], 0)
+        with self.client.session_transaction() as saved:
+            self.assertLess(saved["line_authenticated_at"], time.time() - 600)
 
     def test_user_registration_check_reuses_cached_profile(self):
         line_user_id = "cached-profile-user"

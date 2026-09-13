@@ -1009,11 +1009,6 @@
       renderMatchingHistory(body.matching_history || []);
       const pending = (body.matching_history || []).filter(match => !['成立', '辞退'].includes(match.status) && !(match.provider_user_id === userId ? match.provider_contact_share_status === 'shared' : match.requester_contact_share_status === 'shared') && (match.match_type === 'request' ? match.requester_user_id === userId : match.provider_user_id === userId)).length;
       document.getElementById('pending-match-count').textContent = pending ? ` (${pending})` : '';
-      if (!userSelectedTab) {
-        const params = new URLSearchParams(window.location.search);
-        const requested = params.get('notification_required') === '1' ? 'profile' : params.get('tab');
-        selectPageTab(hasRegisteredProfile ? (pageTabIds[requested] ? requested : 'matches') : 'profile');
-      }
       const linkedMatch = new URLSearchParams(window.location.search).get('match');
       if (linkedMatch && !userSelectedTab) {
         const target = document.getElementById(`match-${linkedMatch}`);
@@ -1097,8 +1092,14 @@
       setLoading(false, 'LINE表示名を取得しました。必要事項を入力してください。');
       setTimeout(showRegistrationPrompt, 0);
     }
-    await loadMeActivity(userId, forceRefresh);
+    if (!userSelectedTab) {
+      const params = new URLSearchParams(window.location.search);
+      const requested = params.get('notification_required') === '1' ? 'profile' : params.get('tab');
+      selectPageTab(hasRegisteredProfile ? (pageTabIds[requested] ? requested : 'matches') : 'profile');
+    }
+    // Show the prepared profile/tabs while activity loads in its own panels.
     setUserPageSkeleton(false);
+    await loadMeActivity(userId, forceRefresh);
   }
 
   async function initializeLiffClient() {
@@ -1175,13 +1176,13 @@
       if (
         !response.ok
         || body.ok !== true
-        || body.cache_valid !== true
+        || body.session_valid !== true
         || body.auth_mode !== 'line'
         || !body.line_user_id
       ) {
         logLiffDebug('auth.session_cache_miss', {
           sessionPresent: body.ok === true,
-          cacheValid: body.cache_valid === true,
+          cacheValid: body.session_valid === true,
           durationMs: Math.round(performance.now() - startedAt),
         });
         return false;
@@ -1195,7 +1196,7 @@
       clearLiffLoginAttempt();
       await Promise.all([loadCachedFriendshipStatus(), loadMeProfile(body.line_user_id)]);
       logLiffDebug('auth.session_cache_hit', {
-        expiresInSeconds: Number(body.cache_expires_in || 0),
+        expiresInSeconds: Number(body.session_expires_in || 0),
         durationMs: Math.round(performance.now() - startedAt),
       });
       return true;

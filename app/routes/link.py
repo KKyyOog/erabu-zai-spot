@@ -15,7 +15,7 @@ from app.services.db_service import (
     migrate_guest_identity,
     set_line_friendship,
 )
-from app.services.line_auth_service import LineAuthError, verify_id_token
+from app.services.line_auth_service import LineAuthError, verify_id_token, session_identity_is_fresh
 from app.services.liff_diagnostics import DIAGNOSTIC_SCHEMA, sanitize_details
 from app.services.line_service import (
     build_line_official_account_message_url,
@@ -348,6 +348,9 @@ def session_status():
         and cache_age_seconds is not None
         and cache_age_seconds <= cache_seconds
     )
+    # Authentication lifetime is independent of the profile refresh interval.
+    session_valid = bool(line_user_id and not line_user_id.startswith("anon_")
+                         and session_identity_is_fresh())
     response = jsonify({
         "ok": bool(line_user_id),
         "line_user_id": line_user_id,
@@ -355,6 +358,9 @@ def session_status():
             "guest" if line_user_id.startswith("anon_") else "line"
         ) if line_user_id else "",
         "cache_valid": cache_valid,
+        "session_valid": session_valid,
+        "session_expires_in": max(0, int(current_app.config["LINE_SESSION_SECONDS"]) - cache_age_seconds)
+        if session_valid and cache_age_seconds is not None else 0,
         "cache_expires_in": max(0, cache_seconds - cache_age_seconds)
         if cache_age_seconds is not None
         else 0,
