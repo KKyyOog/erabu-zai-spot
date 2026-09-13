@@ -832,7 +832,7 @@ class WorkflowTestCase(unittest.TestCase):
         material_page = self.client.get("/materials/register/material").get_data(
             as_text=True
         )
-        self.assertIn("写真を撮る・ライブラリから選ぶ", material_page)
+        self.assertIn("写真を撮る・保存した写真を選ぶ", material_page)
         self.assertIn('name="image_files"', material_page)
         self.assertNotIn('name="image_urls_text"', material_page)
         self.assertIn('class="registration-skeleton skeleton-screen"', material_page)
@@ -840,7 +840,7 @@ class WorkflowTestCase(unittest.TestCase):
         demolition_page = self.client.get(
             "/materials/register/demolition"
         ).get_data(as_text=True)
-        self.assertIn("建物写真を撮る・ライブラリから選ぶ", demolition_page)
+        self.assertIn("建物写真を撮る・保存した写真を選ぶ", demolition_page)
         self.assertIn('name="building_image_files"', demolition_page)
         self.assertNotIn('name="building_photo_urls_text"', demolition_page)
         self.assertIn('class="registration-skeleton skeleton-screen"', demolition_page)
@@ -857,8 +857,8 @@ class WorkflowTestCase(unittest.TestCase):
         selection_page = self.client.get("/materials/register").get_data(
             as_text=True
         )
-        self.assertIn("材があります", selection_page)
-        self.assertIn("材を探しています", selection_page)
+        self.assertIn("材を譲りたい", selection_page)
+        self.assertIn("探している材を知らせたい", selection_page)
         self.assertIn("解体予定物件を登録する", selection_page)
 
     def test_profile_scope_authenticates_and_uses_one_database_query(self):

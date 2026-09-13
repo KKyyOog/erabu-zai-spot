@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
+<p class="back-link"><a href="{{ url_for('materials.list_materials') }}">材の一覧に戻る</a></p>
 <article class="card {{ 'request-post' if material.post_type == 'request' else 'offer-post' }}">
   <div class="badge-row">
     <p class="entry-badge {{ 'request' if material.post_type == 'request' else 'offer' }}">
@@ -92,9 +93,10 @@
       <input type="hidden" name="line_user_id" id="line_user_id">
       <input type="hidden" name="user_id" id="user_id">
 
-      <label>問い合わせメッセージ</label>
-      <textarea name="message" rows="3" placeholder="{{ '提供できそうな材があります。' if material.post_type == 'request' else '受け渡し方法や現物確認について相談したいです。' }}"></textarea>
+      <label>問い合わせメッセージ（任意）</label>
+      <textarea name="message" maxlength="1000" rows="3" placeholder="{{ '提供できそうな材があります。' if material.post_type == 'request' else '受け渡し方法や現物確認について相談したいです。' }}"></textarea>
 
+      <p class="hint">送信後は、マイページの「問い合わせ」で確認できます。</p>
       <button type="submit">
         {{ '提供できます・問い合わせる' if material.post_type == 'request' else 'この材について問い合わせる' }}
       </button>

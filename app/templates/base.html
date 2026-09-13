@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>えらぶ材すぽっと</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260911-photo-plus') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260913-beginner') }}">
   <script>
     window.LIFF_DEBUG_LOGGING = {{ LIFF_DEBUG_LOGGING|tojson }};
     window.LIFF_DIAGNOSTIC_SCHEMA = {{ LIFF_DIAGNOSTIC_SCHEMA|tojson }};
@@ -221,8 +221,9 @@
   {% endif %}
 </head>
 <body>
+  <a class="skip-link" href="#main-content">本文へ移動する</a>
   <div id="page-transition-skeleton" class="page-transition-skeleton" role="status" aria-live="polite" hidden>
-    <span class="visually-hidden">ページを読み込んでいます</span>
+    <p class="loading-message">ページを読み込んでいます。少しお待ちください。</p>
     <div class="page-transition-skeleton__shell" aria-hidden="true">
       <div class="skeleton-line skeleton-line--title"></div>
       <div class="skeleton-line skeleton-line--medium"></div>
@@ -245,12 +246,13 @@
 
   <nav class="main-navigation" aria-label="メインメニュー">
     {% set active_section = 'me' if request.path == '/' or request.path.startswith('/users') else ('post' if 'register' in request.path else 'browse') %}
-    <a href="{{ url_for('materials.list_materials') }}" {% if active_section == 'browse' %}aria-current="page"{% endif %}>探す</a>
+    <a href="{{ url_for('materials.list_materials') }}" {% if active_section == 'browse' %}aria-current="page"{% endif %}>材を探す</a>
     <a href="{{ url_for('materials.register') }}" {% if active_section == 'post' %}aria-current="page"{% endif %}>投稿する</a>
     <a href="{{ url_for('users.me') }}" {% if active_section == 'me' %}aria-current="page"{% endif %}>マイページ</a>
   </nav>
 
-  <main class="container">
+  <main class="container" id="main-content" tabindex="-1">
+    <div class="page-help-link"><a href="#usage-guide">使い方・困ったとき</a></div>
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <div class="flash" role="status" aria-live="polite">
@@ -261,11 +263,20 @@
       {% endif %}
     {% endwith %}
 
+    {% if completed_draft %}
+    <aside class="next-step-card" role="status">
+      <h2>投稿が完了しました</h2>
+      <p>内容の変更や受付終了は、「自分の投稿」からできます。</p>
+      <a class="button-link" href="{{ url_for('users.me', tab='materials', refresh='1') }}">自分の投稿を確認する</a>
+    </aside>
+    {% endif %}
     {% block content %}{% endblock %}
+    {% include '_usage_guide.html' %}
   </main>
   <script>window.COMPLETED_DRAFT = {{ completed_draft|tojson }};</script>
-  <script src="{{ url_for('static', filename='js/ui.js', v='20260908-ui-flow') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/ui.js', v='20260913-beginner') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/photo_controls.js', v='20260913') }}" defer></script>
   <script src="{{ url_for('static', filename='js/image_upload.js', v='20260911') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/post_preview.js', v='20260911-upload') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/post_preview.js', v='20260913-beginner') }}" defer></script>
 </body>
 </html>

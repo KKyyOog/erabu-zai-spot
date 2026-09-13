@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
+<p class="back-link"><a href="{{ url_for('materials.list_materials') }}">材の一覧に戻る</a></p>
 <article class="card">
   <p class="entry-badge demolition">解体物件</p>
   <h2>{{ property_record.property_name or property_record.location or '物件名未設定' }}</h2>
@@ -71,7 +72,8 @@
     <input type="hidden" name="property_id" value="{{ property_record.property_id }}">
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="user_id" id="user_id">
-    <button type="submit">見学したい</button>
+    <p class="hint">見学日時は、申し込み後に相手と相談して決めます。</p>
+    <button type="submit">見学を申し込む</button>
   </form>
   {% else %}<p>この物件は見学の受付を終了しています。</p>{% endif %}
   {% set report_kind = 'demolition' %}{% set report_id = property_record.property_id %}{% include 'materials/_report.html' %}

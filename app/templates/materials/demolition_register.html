@@ -4,8 +4,10 @@
 <section class="card">
   <h2>解体物件を登録する</h2>
 
+  {% include "materials/_post_steps.html" %}
+
   <div id="user-registration-check-status" class="registration-skeleton skeleton-screen" role="status">
-    <span class="visually-hidden">ユーザー情報を確認しています</span>
+    <p class="loading-message">登録情報を確認しています。少しお待ちください。</p>
     <div class="skeleton-card" aria-hidden="true">
       <div class="skeleton-line skeleton-line--medium"></div>
       <div class="skeleton-field"></div>
@@ -23,7 +25,7 @@
     <input type="hidden" name="display_name" id="display_name">
     <p class="hint">登録にはマイページ登録が必要です。建物の状態や見学可能期間が分かる範囲で入力してください。</p>
 
-    <label>登録者 *</label>
+    <label>登録者 <span class="required-label">必須</span></label>
     <select name="registrant_type" required>
       <option value="">選択してください</option>
       <option value="家主">家主</option>
@@ -32,60 +34,63 @@
       <option value="その他">その他</option>
     </select>
 
-    <label>物件名 *</label>
+    <label>物件名 <span class="required-label">必須</span></label>
     <input type="text" name="property_name" required placeholder="例：旧山田邸、知名町の空き家など">
 
-    <label>所在地（詳しい住所は非公開） *</label>
+    <label>所在地（詳しい住所は非公開） <span class="required-label">必須</span></label>
     <p class="hint">公開する場所は町名までです。番地や現場への行き方は、見学相手と個別に共有してください。所有者名は公開しません。</p>
     <input type="text" name="location" required placeholder="例：知名町、和泊町、字名、現場名など">
 
-    <label>所有者</label>
-    <input type="text" name="owner_name" placeholder="例：山田太郎、法人名など">
+    <details class="optional-fields">
+      <summary>建物の詳しい情報・写真を追加する（任意）</summary>
+      <label>所有者</label>
+      <input type="text" name="owner_name" placeholder="例：山田太郎、法人名など">
 
-    <label>解体予定日</label>
-    <input type="date" name="demolition_date">
+      <label>解体予定日</label>
+      <input type="date" name="demolition_date">
 
-    <label>解体業者</label>
-    <input type="text" name="demolition_contractor" placeholder="例：〇〇解体、未定など">
+      <label>解体業者</label>
+      <input type="text" name="demolition_contractor" placeholder="例：〇〇解体、未定など">
 
-    <label>見学期間</label>
-    <input type="text" name="viewing_period" placeholder="例：6月下旬まで、土日の午前中など">
+      <label>見学期間</label>
+      <input type="text" name="viewing_period" placeholder="例：6月下旬まで、土日の午前中など">
 
-    <label>建物用途</label>
-    <select name="building_use">
-      <option value="">選択してください</option>
-      <option value="住宅">住宅</option>
-      <option value="店舗">店舗</option>
-      <option value="倉庫">倉庫</option>
-      <option value="事務所">事務所</option>
-      <option value="その他">その他</option>
-    </select>
+      <label>建物用途</label>
+      <select name="building_use">
+        <option value="">選択してください</option>
+        <option value="住宅">住宅</option>
+        <option value="店舗">店舗</option>
+        <option value="倉庫">倉庫</option>
+        <option value="事務所">事務所</option>
+        <option value="その他">その他</option>
+      </select>
 
-    <label>構造</label>
-    <select name="structure">
-      <option value="">選択してください</option>
-      <option value="木造">木造</option>
-      <option value="鉄骨造">鉄骨造</option>
-      <option value="鉄筋コンクリート造">鉄筋コンクリート造</option>
-      <option value="ブロック造">ブロック造</option>
-      <option value="その他">その他</option>
-    </select>
+      <label>構造</label>
+      <select name="structure">
+        <option value="">選択してください</option>
+        <option value="木造">木造</option>
+        <option value="鉄骨造">鉄骨造</option>
+        <option value="鉄筋コンクリート造">鉄筋コンクリート造</option>
+        <option value="ブロック造">ブロック造</option>
+        <option value="その他">その他</option>
+      </select>
 
-    <label>階数</label>
-    <input type="text" name="floors" placeholder="例：平屋、2階建てなど">
+      <label>階数</label>
+      <input type="text" name="floors" placeholder="例：平屋、2階建てなど">
 
-    <label>築年数</label>
-    <input type="text" name="building_age" placeholder="例：築40年、昭和50年代など">
+      <label>築年数</label>
+      <input type="text" name="building_age" placeholder="例：築40年、昭和50年代など">
 
-    <label>建物写真を撮る・ライブラリから選ぶ（複数選択可）</label>
-    <input type="file" name="building_image_files" accept="image/*" multiple>
-    <p class="hint">画像は6枚まで選択できます。</p>
+      <label>建物写真を撮る・保存した写真を選ぶ（複数選択可）</label>
+      <input type="file" name="building_image_files" accept="image/*" multiple>
+      <p class="hint">画像は6枚まで選択できます。</p>
 
-    <label>状態評価</label>
-    <textarea name="condition_evaluation" rows="4" placeholder="例：柱や建具は再利用できそう、雨漏りあり、現地確認が必要など"></textarea>
+      <label>状態評価</label>
+      <textarea name="condition_evaluation" rows="4" placeholder="例：柱や建具は再利用できそう、雨漏りあり、現地確認が必要など"></textarea>
 
-    <label>備考</label>
-    <textarea name="notes" rows="3" placeholder="連絡時の注意点、駐車場所、立ち入り条件など"></textarea>
+      <label>備考</label>
+      <textarea name="notes" rows="3" placeholder="連絡時の注意点、駐車場所、立ち入り条件など"></textarea>
+    </details>
 
     <button type="submit">解体物件を登録する</button>
   </form>

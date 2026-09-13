@@ -1,0 +1,170 @@
+INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+ERROR:app:[materials.list] failed to load listing items
+Traceback (most recent call last):
+  File "C:\Users\ameky\Desktop\erabu_zai_spot\app\routes\materials.py", line 859, in list_materials
+    material_records, demolition_records, refs, has_next = get_public_listing_page(display_filter, material_type_filter, page, area=area, query=query)
+                                                           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1175, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1179, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1234, in _execute_mock_call
+    raise effect
+RuntimeError: database unavailable
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app:[materials] uploading image filename=first.png content_type=None
+INFO:app:[materials] uploading image filename=second.png content_type=None
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+..WARNING:test_line_auth_service:[LINE AUTH] event=verification_invalid_claims trace=none duration_ms=0
+WARNING:test_line_auth_service:[LINE AUTH] event=verification_invalid_claims trace=none duration_ms=0
+WARNING:test_line_auth_service:[LINE AUTH] event=verification_missing_subject trace=none duration_ms=0
+WARNING:test_line_auth_service:[LINE AUTH] event=verification_missing_subject trace=none duration_ms=0
+WARNING:test_line_auth_service:[LINE AUTH] event=verification_user_mismatch trace=none duration_ms=0
+....INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+WARNING:app:[RATE LIMIT] endpoint=link.liff_link limit=30 window_seconds=60 proxy_hops=0 forwarded_present=True
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+WARNING:app:[RATE LIMIT] endpoint=link.liff_link limit=30 window_seconds=60 proxy_hops=1 forwarded_present=False
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+WARNING:app:[RATE LIMIT] endpoint=link.liff_link limit=30 window_seconds=60 proxy_hops=1 forwarded_present=True
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+WARNING:app:[RATE LIMIT] endpoint=link.liff_link limit=30 window_seconds=60 proxy_hops=1 forwarded_present=True
+..INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+WARNING:app:[RATE LIMIT] endpoint=link.liff_debug limit=30 window_seconds=60 proxy_hops=0 forwarded_present=False
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+WARNING:app:[LINE AUTH] event=credentials_missing trace=none duration_ms=0
+WARNING:app:[LINE AUTH] event=credentials_missing trace=none duration_ms=0
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+ERROR:app:[NOTIFICATION] delivery failed id=job
+Traceback (most recent call last):
+  File "C:\Users\ameky\Desktop\erabu_zai_spot\app\services\notification_service.py", line 33, in deliver_notification
+    sent = bool(sender(target, row["message"], retry_key=row["retry_key"]))
+                ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1175, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1179, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1238, in _execute_mock_call
+    raise result
+TimeoutError
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app.routes.link:[LIFF AUTH] received trace=none session_user=none user_id_present=True id_token_present=True
+INFO:app.routes.link:[LIFF AUTH] accepted trace=none session_user=1c34f88707b5 migrated_guest_data=True duration_ms=8
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+WARNING:app.routes.link:[LIFF AUTH] rejected reason=invalid_payload trace=none
+WARNING:app.routes.link:[LIFF AUTH] rejected reason=invalid_payload trace=none
+WARNING:app.routes.link:[LIFF AUTH] rejected reason=invalid_payload trace=none
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app.routes.link:[LIFF AUTH] received trace=none session_user=4c1029697ee3 user_id_present=True id_token_present=True
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app.routes.link:[LIFF FRIENDSHIP] completed method=POST trace=none session_user=6ad40cb71298 friend=True duration_ms=3
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app:[materials.delete] Cloudinary image is still referenced and will not be deleted url=https://res.cloudinary.com/test-cloud/image/upload/v125/erabu-zai-spot/uploads/shared-image.jpg
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app.routes.link:[GUEST AUTH] guest session created
+INFO:app:[LINE CALLBACK] notification link status=expired
+INFO:app:[LINE CALLBACK] accepted path=/callback body_length=423 remote_addr=127.0.0.1
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app:[LINE CALLBACK] friendship enabled
+INFO:app:[LINE CALLBACK] accepted path=/callback body_length=347 remote_addr=127.0.0.1
+INFO:app:[LINE CALLBACK] friendship disabled
+INFO:app:[LINE CALLBACK] accepted path=/callback body_length=281 remote_addr=127.0.0.1
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app.routes.link:[GUEST AUTH] guest session created
+INFO:app:[materials.submit] final image count before save=1 line_user_id=anon_WA8Ci9Zu3nSjMA3iOoIazhl5RI5jlhlL title=ゲスト登録の材
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app.routes.link:[GUEST AUTH] guest session created
+INFO:app:[LINE CALLBACK] notification link status=linked
+INFO:app:[LINE CALLBACK] accepted path=/callback body_length=423 remote_addr=127.0.0.1
+INFO:app:[LINE CALLBACK] notification link status=already_linked
+INFO:app:[LINE CALLBACK] accepted path=/callback body_length=423 remote_addr=127.0.0.1
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app.routes.link:[GUEST AUTH] guest session created
+WARNING:app:[LINE AUTH] event=credentials_missing trace=none duration_ms=0
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app.routes.link:[GUEST AUTH] guest session created
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app.routes.link:[LIFF AUTH] received trace=none session_user=none user_id_present=True id_token_present=True
+INFO:app.routes.link:[LIFF AUTH] accepted trace=none session_user=9ae5de078c1f migrated_guest_data=False duration_ms=0
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+WARNING:app.routes.link:[LIFF AUTH] rejected reason=disabled trace=none duration_ms=0
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app.routes.link:[GUEST AUTH] guest session created
+INFO:app.routes.link:[LIFF AUTH] received trace=none session_user=none user_id_present=True id_token_present=True
+INFO:app.routes.link:[LIFF AUTH] accepted trace=none session_user=2dc6fff0c46a migrated_guest_data=True duration_ms=15
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+WARNING:app:[LINE CALLBACK] invalid signature path=/callback signature_present=True body_length=13 remote_addr=127.0.0.1 user_agent=Werkzeug/3.1.8
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app.routes.link:[GUEST AUTH] guest session created
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app:[materials.submit] cloudinary upload success count=1
+INFO:app:[materials.submit] final image count before save=1 line_user_id=profile-location-owner title=木材があります
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app:[materials.submit] cloudinary upload success count=2
+INFO:app:[materials.submit] final image count before save=2 line_user_id=offer-owner title=木材があります
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+INFO:app.routes.link:[GUEST AUTH] guest session created
+.INFO:app:[LINE CONFIG] login_enabled=False liff_id_present=True liff_id_length=12
+.
+----------------------------------------------------------------------
+Ran 90 tests in 5.418s
+
+OK

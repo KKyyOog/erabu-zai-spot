@@ -6,8 +6,10 @@
   <h2>余っている材を知らせる</h2>
   <p class="hint">写真・材種・量・受け渡し場所だけで投稿できます。</p>
 
+  {% include "materials/_post_steps.html" %}
+
   <div id="user-registration-check-status" class="registration-skeleton skeleton-screen" role="status">
-    <span class="visually-hidden">ユーザー情報を確認しています</span>
+    <p class="loading-message">登録情報を確認しています。少しお待ちください。</p>
     <div class="skeleton-card" aria-hidden="true">
       <div class="skeleton-line skeleton-line--medium"></div>
       <div class="skeleton-field"></div>
@@ -24,11 +26,11 @@
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="display_name" id="display_name">
 
-    <label>写真を撮る・ライブラリから選ぶ *</label>
+    <label>写真を撮る・保存した写真を選ぶ <span class="required-label">必須</span></label>
     <input type="file" name="image_files" accept="image/*" multiple required data-max-files="6">
     <p class="hint">現状が分かる写真を1〜6枚。</p>
 
-    <label>材の種類 *</label>
+    <label>材の種類 <span class="required-label">必須</span></label>
     <select name="material_type" required>
       <option value="">選択してください</option>
       {% for material_type in material_type_options %}
@@ -36,7 +38,7 @@
       {% endfor %}
     </select>
 
-    <label>量の目安 *</label>
+    <label>量の目安 <span class="required-label">必須</span></label>
     <select name="quantity_level" required>
       <option value="">選択してください</option>
       {% for quantity_level in quantity_level_options %}
@@ -45,7 +47,7 @@
     </select>
 
     <fieldset class="form-fieldset location-choice" data-location-choice data-profile-location="">
-      <legend>受け渡し場所（詳しい住所は非公開） *</legend>
+      <legend>受け渡し場所（詳しい住所は非公開） <span class="required-label">必須</span></legend>
       <p class="hint">公開する場所は町名までです。詳しい住所は、問い合わせ相手と連絡を取り合って共有してください。</p>
       <div class="location-choice__options">
         <label class="location-choice__option">

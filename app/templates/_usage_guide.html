@@ -1,0 +1,32 @@
+<section class="usage-guide" id="usage-guide" aria-labelledby="usage-guide-title" tabindex="-1">
+  <h2 id="usage-guide-title">使い方・困ったとき</h2>
+  <p>知りたい項目を押すと、説明が開きます。</p>
+  <details>
+    <summary>材をもらいたい・探したい</summary>
+    <ol>
+      <li>「材を探す」で、気になる投稿の緑の「＋」を押します。</li>
+      <li>内容を確認し、「この材について問い合わせる」を押します。</li>
+      <li>「マイページ」の「問い合わせ」で連絡先を確認し、相手と直接相談します。</li>
+    </ol>
+    <a class="button-link" href="{{ url_for('materials.list_materials', type='offer') }}">譲ってもらえる材を見る</a>
+  </details>
+  <details>
+    <summary>材を譲りたい・探している材を知らせたい</summary>
+    <p>「投稿する」で目的を選び、内容を入力します。次の確認画面で「この内容で投稿する」を押すと公開されます。</p>
+    <p>公開後の変更や受付終了は、「マイページ」の「自分の投稿」からできます。</p>
+    <a class="button-link" href="{{ url_for('materials.register') }}">投稿する内容を選ぶ</a>
+  </details>
+  <details>
+    <summary>問い合わせ後は、どこでやりとりする？</summary>
+    <p>「マイページ」の「問い合わせ」を開きます。「自分の連絡先を送る」から、相手と送る内容を確認できます。</p>
+    <p>連絡先が届いたら、その電話・メール・LINEへ直接連絡してください。公式アカウントのLINEはお知らせ用です。</p>
+    <a class="button-link" href="{{ url_for('users.me', tab='matches') }}">問い合わせを確認する</a>
+  </details>
+  <details>
+    <summary>初めての登録・画面が進まないとき</summary>
+    <p>投稿や問い合わせには、LINEでの本人確認が必要です。ユーザー情報の登録を求められたら、「必須」の項目を入力してください。</p>
+    <p>入力欄の下に赤い説明が出たら、その項目を直してください。読み込みが終わらない場合は、通信状態を確認してLINEから開き直してください。</p>
+    <p>送信できたか不安なときは、送り直す前に「マイページ」の履歴を確認できます。</p>
+    <a class="button-link" href="{{ url_for('users.me') }}">マイページを開く</a>
+  </details>
+</section>

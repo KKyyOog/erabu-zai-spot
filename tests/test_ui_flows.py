@@ -141,6 +141,9 @@ class UiFlowTestCase(unittest.TestCase):
         self.post_form("/materials/requests/submit", {"material_type": "木材", "description": "角材を探しています"})
         with self.client.session_transaction() as session:
             self.assertEqual(session["completed_draft"], {"kind": "request", "owner": "owner"})
-        self.client.get("/materials/list")
+        page = self.client.get("/materials/list").get_data(as_text=True)
+        self.assertIn("投稿が完了しました", page)
+        self.assertIn("自分の投稿を確認する", page)
         with self.client.session_transaction() as session:
             self.assertNotIn("completed_draft", session)
+        self.assertNotIn("投稿が完了しました", self.client.get("/materials/list").get_data(as_text=True))

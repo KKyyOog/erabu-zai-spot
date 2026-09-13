@@ -6,8 +6,10 @@
   <h2>探している材を知らせる</h2>
   <p class="hint">用途や必要な形が分かる程度で大丈夫です。</p>
 
+  {% include "materials/_post_steps.html" %}
+
   <div id="user-registration-check-status" class="registration-skeleton skeleton-screen" role="status">
-    <span class="visually-hidden">ユーザー情報を確認しています</span>
+    <p class="loading-message">登録情報を確認しています。少しお待ちください。</p>
     <div class="skeleton-card" aria-hidden="true">
       <div class="skeleton-line skeleton-line--medium"></div>
       <div class="skeleton-field"></div>
@@ -24,7 +26,7 @@
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="display_name" id="display_name">
 
-    <label>探している材の種類 *</label>
+    <label>探している材の種類 <span class="required-label">必須</span></label>
     <select name="material_type" required>
       <option value="">選択してください</option>
       {% for material_type in material_type_options %}
@@ -32,7 +34,7 @@
       {% endfor %}
     </select>
 
-    <label>欲しい内容 *</label>
+    <label>欲しい内容 <span class="required-label">必須</span></label>
     <textarea name="description" rows="5" required placeholder="例：2m程度の角材を5本ほど探しています"></textarea>
 
     <label>希望受け取りエリア</label>

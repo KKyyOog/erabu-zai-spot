@@ -19,7 +19,7 @@
     dialog.className = 'post-preview-dialog';
     dialog.setAttribute('aria-label', '投稿の公開内容を確認');
     const title = document.createElement('h2');
-    title.textContent = 'この内容が公開されます';
+    title.textContent = '2. 投稿する内容の確認';
     const hint = document.createElement('p');
     hint.textContent = '写真や本文に、公開したくない住所・氏名・連絡先が含まれていないか確認してください。';
     const body = document.createElement('div');

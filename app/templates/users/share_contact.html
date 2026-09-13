@@ -11,12 +11,12 @@
     <input type="hidden" name="action" value="save_contact">
     <label for="share-name">相手に伝える名前</label>
     <input id="share-name" name="contact_display_name" maxlength="100" value="{{ card.display_name or '' }}">
-    <label for="share-method">連絡方法</label>
+    <label for="share-method">連絡方法 <span class="required-label">必須</span></label>
     <select id="share-method" name="contact_method" required>
       <option value="">選択してください</option>
       {% for method in ['LINE', 'メール', '電話', 'その他'] %}<option {% if card.contact_method == method %}selected{% endif %}>{{ method }}</option>{% endfor %}
     </select>
-    <label for="share-value">連絡先</label>
+    <label for="share-value">連絡先 <span class="required-label">必須</span></label>
     <input id="share-value" name="contact_value" required maxlength="300" value="{{ card.contact_value or '' }}" placeholder="LINE ID、メールアドレス、電話番号など">
     <label for="share-time">連絡しやすい時間（任意）</label>
     <input id="share-time" name="contact_available_time" maxlength="100" value="{{ card.available_time or '' }}">

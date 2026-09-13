@@ -2,13 +2,14 @@
 
 {% block content %}
 <section class="listing-page">
-  <h2>登録情報を見る</h2>
+  <h2>材を探す</h2>
+  <p class="page-intro">気になる投稿の緑の「＋」を押すと、内容の確認や問い合わせができます。</p>
   {% if inquiry_result %}
   <aside class="next-step-card" role="status">
     <h3>問い合わせを受け付けました</h3>
-    <p>マッチング履歴に保存しました。次は相手の返答を待ちましょう。</p>
+    <p>マイページの「問い合わせ」に保存しました。次は相手の返答を待ちましょう。</p>
     {% if not inquiry_result.notification_sent %}<p>LINE通知はまだ送信できていません。問い合わせ自体を送り直す必要はありません。</p>{% endif %}
-    <p class="hint">直接の連絡を希望する場合は、履歴から連絡先カードを確認して共有できます。</p>
+    <p class="hint">自分の連絡先を送る場合は、問い合わせの履歴から確認できます。</p>
     <a class="button-link" href="{{ url_for('users.me', tab='matches', refresh='1') }}">問い合わせの履歴を見る</a>
   </aside>
   {% endif %}
@@ -23,20 +24,23 @@
   {% include "materials/_pagination.html" %}
 
   <nav class="filter-tabs listing-filter-tabs" aria-label="投稿タイプで絞り込み">
-    <a class="{{ 'active' if display_filter == 'all' else '' }}" href="{{ listing_url(type='all', material_type='all') }}">すべて</a>
-    <a class="offer-filter {{ 'active' if display_filter == 'offer' else '' }}" href="{{ listing_url(type='offer', material_type=material_type_filter) }}">材があります</a>
-    <a class="request-filter {{ 'active' if display_filter == 'request' else '' }}" href="{{ listing_url(type='request', material_type=material_type_filter) }}">探しています</a>
-    <a class="{{ 'active' if display_filter == 'demolitions' else '' }}" href="{{ listing_url(type='demolitions', material_type='all') }}">解体物件</a>
+    <a class="{{ 'active' if display_filter == 'all' else '' }}" {% if display_filter == 'all' %}aria-current="true"{% endif %} href="{{ listing_url(type='all', material_type='all') }}">すべて</a>
+    <a class="offer-filter {{ 'active' if display_filter == 'offer' else '' }}" {% if display_filter == 'offer' %}aria-current="true"{% endif %} href="{{ listing_url(type='offer', material_type=material_type_filter) }}">材があります</a>
+    <a class="request-filter {{ 'active' if display_filter == 'request' else '' }}" {% if display_filter == 'request' %}aria-current="true"{% endif %} href="{{ listing_url(type='request', material_type=material_type_filter) }}">探しています</a>
+    <a class="{{ 'active' if display_filter == 'demolitions' else '' }}" {% if display_filter == 'demolitions' %}aria-current="true"{% endif %} href="{{ listing_url(type='demolitions', material_type='all') }}">解体物件</a>
   </nav>
 
   {% if display_filter != 'demolitions' %}
+    <details class="material-filter-disclosure"{% if material_type_filter != 'all' %} open{% endif %}>
+    <summary>材の種類で絞り込む{% if material_type_filter != 'all' %}：{{ material_type_filter }}{% endif %}</summary>
     <nav class="filter-tabs material-type-tabs listing-filter-tabs" aria-label="材の種類で絞り込み">
       <span class="filter-label">材の種類</span>
-      <a class="{{ 'active' if material_type_filter == 'all' else '' }}" href="{{ listing_url(type=display_filter, material_type='all') }}">すべて</a>
+      <a class="{{ 'active' if material_type_filter == 'all' else '' }}" {% if material_type_filter == 'all' %}aria-current="true"{% endif %} href="{{ listing_url(type=display_filter, material_type='all') }}">すべて</a>
       {% for material_type in material_type_options %}
-        <a class="{{ 'active' if material_type_filter == material_type else '' }}" href="{{ listing_url(type=display_filter, material_type=material_type) }}">{{ material_type }}</a>
+        <a class="{{ 'active' if material_type_filter == material_type else '' }}" {% if material_type_filter == material_type %}aria-current="true"{% endif %} href="{{ listing_url(type=display_filter, material_type=material_type) }}">{{ material_type }}</a>
       {% endfor %}
     </nav>
+    </details>
   {% endif %}
 
   {% if load_error %}
@@ -68,7 +72,7 @@
                 {{ '探しています' if item.post_type == 'request' else '材があります' }}
               </p>
               <h3>{{ item.title }}</h3>
-              <button class="listing-detail-plus" type="button" data-open-dialog="{{ dialog_id }}" aria-haspopup="dialog" aria-controls="{{ dialog_id }}" aria-label="{{ item.title }}の詳細を見る" title="詳細を見る"><span aria-hidden="true">＋</span></button>
+              <button class="listing-detail-plus" type="button" data-open-dialog="{{ dialog_id }}" aria-haspopup="dialog" aria-controls="{{ dialog_id }}" aria-label="{{ item.title }}を詳しく見る" title="詳しく見る"><span aria-hidden="true">＋</span></button>
               <dl class="summary-list">
                 <div><dt>材種</dt><dd>{{ item.material_type or '未設定' }}</dd></div>
                 {% if item.post_type == 'request' %}
@@ -83,7 +87,7 @@
 
           <dialog class="listing-detail-modal" id="{{ dialog_id }}" aria-labelledby="{{ dialog_id }}-title">
             <div class="listing-detail-modal__shell">
-              <button class="listing-detail-modal__close" type="button" data-close-dialog aria-label="詳細を閉じる">×</button>
+              <button class="listing-detail-modal__close" type="button" data-close-dialog aria-label="詳細を閉じる">閉じる</button>
               <div class="listing-detail-modal__media">
                 <div class="listing-card__image">
                   {% if item.image_urls %}
@@ -140,8 +144,9 @@
                   <input type="hidden" name="return_q" value="{{ query }}">
                   <input type="hidden" name="return_type" value="{{ display_filter }}">
                     <input type="hidden" name="return_material_type" value="{{ material_type_filter }}">
-                    <label for="message-{{ loop.index }}">問い合わせメッセージ</label>
-                    <textarea id="message-{{ loop.index }}" name="message" rows="3" placeholder="{{ '提供できそうな材があります。' if item.post_type == 'request' else '受け渡し方法について相談したいです。' }}"></textarea>
+                    <label for="message-{{ loop.index }}">問い合わせメッセージ（任意）</label>
+                    <textarea id="message-{{ loop.index }}" name="message" maxlength="1000" rows="3" placeholder="{{ '提供できそうな材があります。' if item.post_type == 'request' else '受け渡し方法について相談したいです。' }}"></textarea>
+                    <p class="hint">送信後は、マイページの「問い合わせ」で確認できます。</p>
                     <button type="submit">{{ '提供できます・問い合わせる' if item.post_type == 'request' else 'この材について問い合わせる' }}</button>
                   </form>
                 {% endif %}
@@ -164,7 +169,7 @@
             <div class="listing-card__body">
               <p class="entry-badge demolition">解体物件</p>
               <h3>{{ item.title or item.location or '物件名未設定' }}</h3>
-              <button class="listing-detail-plus" type="button" data-open-dialog="{{ dialog_id }}" aria-haspopup="dialog" aria-controls="{{ dialog_id }}" aria-label="{{ item.title or item.location or '解体物件' }}の詳細を見る" title="詳細を見る"><span aria-hidden="true">＋</span></button>
+              <button class="listing-detail-plus" type="button" data-open-dialog="{{ dialog_id }}" aria-haspopup="dialog" aria-controls="{{ dialog_id }}" aria-label="{{ item.title or item.location or '解体物件' }}を詳しく見る" title="詳しく見る"><span aria-hidden="true">＋</span></button>
               <dl class="summary-list">
                 <div><dt>場所</dt><dd>{{ item.location or '未設定' }}</dd></div>
                 <div><dt>解体日</dt><dd>{{ item.demolition_date|date_jp if item.demolition_date else '未定' }}</dd></div>
@@ -174,7 +179,7 @@
 
           <dialog class="listing-detail-modal" id="{{ dialog_id }}" aria-labelledby="{{ dialog_id }}-title">
             <div class="listing-detail-modal__shell">
-              <button class="listing-detail-modal__close" type="button" data-close-dialog aria-label="詳細を閉じる">×</button>
+              <button class="listing-detail-modal__close" type="button" data-close-dialog aria-label="詳細を閉じる">閉じる</button>
               <div class="listing-detail-modal__media">
                 <div class="listing-card__image">
                   {% if item.image_urls %}
@@ -219,7 +224,8 @@
                   <input type="hidden" name="return_q" value="{{ query }}">
                   <input type="hidden" name="return_type" value="{{ display_filter }}">
                   <input type="hidden" name="return_material_type" value="{{ material_type_filter }}">
-                  <button type="submit">見学したい</button>
+                  <p class="hint">見学日時は、申し込み後に相手と相談して決めます。</p>
+                  <button type="submit">見学を申し込む</button>
                 </form>
               </div>
             </div>

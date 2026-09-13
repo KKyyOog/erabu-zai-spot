@@ -638,7 +638,7 @@ def submit():
     try:
         line_user_id = require_verified_line_user_id(form.get("line_user_id", ""))
     except LineAuthError:
-        flash("LINE login verification failed. Please reopen this page from LINE.")
+        flash("LINEでの本人確認ができませんでした。LINEから画面を開き直してください。")
         return redirect(url_for("materials.register_material"))
     form["line_user_id"] = line_user_id
 
@@ -728,7 +728,7 @@ def submit_request():
     try:
         line_user_id = require_verified_line_user_id(form.get("line_user_id", ""))
     except LineAuthError:
-        flash("LINE login verification failed. Please reopen this page from LINE.")
+        flash("LINEでの本人確認ができませんでした。LINEから画面を開き直してください。")
         return redirect(url_for("materials.register_request"))
     form["line_user_id"] = line_user_id
 
@@ -797,7 +797,7 @@ def submit_demolition():
     try:
         line_user_id = require_verified_line_user_id(form.get("line_user_id", ""))
     except LineAuthError:
-        flash("LINE login verification failed. Please reopen this page from LINE.")
+        flash("LINEでの本人確認ができませんでした。LINEから画面を開き直してください。")
         return redirect(url_for("materials.register_demolition"))
     form["line_user_id"] = line_user_id
 
@@ -960,7 +960,7 @@ def update_demolition_entry(property_id):
             _resolve_line_user_id(form)
         )
     except LineAuthError:
-        flash("LINE login verification failed. Please reopen this page from LINE.")
+        flash("LINEでの本人確認ができませんでした。LINEから画面を開き直してください。")
         return redirect(url_for("users.me"))
 
     existing = get_demolition_property_by_id(property_id)
@@ -1016,7 +1016,7 @@ def delete_demolition(property_id):
             _resolve_line_user_id(request.form)
         )
     except LineAuthError:
-        flash("LINE login verification failed. Please reopen this page from LINE.")
+        flash("LINEでの本人確認ができませんでした。LINEから画面を開き直してください。")
         return redirect(url_for("users.me"))
 
     existing = get_demolition_property_by_id(property_id)
@@ -1047,12 +1047,12 @@ def delete(material_id):
     try:
         line_user_id = require_verified_line_user_id(line_user_id)
     except LineAuthError:
-        flash("LINE login verification failed. Please reopen this page from LINE.")
+        flash("LINEでの本人確認ができませんでした。LINEから画面を開き直してください。")
         return redirect(url_for("users.me"))
 
     existing = get_material_by_id(material_id)
     if not existing or existing.get("line_user_id") != line_user_id:
-        flash("This material cannot be deleted by the current user.")
+        flash("この投稿は削除できません。自分の投稿か確認してください。")
         return redirect(url_for("users.me"))
 
     image_urls = _collect_image_urls(existing, "image_url", "image_urls")
@@ -1079,7 +1079,7 @@ def close(material_id):
             _resolve_line_user_id(request.form)
         )
     except LineAuthError:
-        flash("LINE login verification failed. Please reopen this page from LINE.")
+        flash("LINEでの本人確認ができませんでした。LINEから画面を開き直してください。")
         return redirect(url_for("users.me"))
 
     material = get_material_by_id(material_id)
@@ -1106,7 +1106,7 @@ def renew(material_id):
             _resolve_line_user_id(request.form)
         )
     except LineAuthError:
-        flash("LINE login verification failed. Please reopen this page from LINE.")
+        flash("LINEでの本人確認ができませんでした。LINEから画面を開き直してください。")
         return redirect(url_for("users.me"))
 
     if renew_material(material_id, line_user_id):
@@ -1214,7 +1214,7 @@ def interest():
     try:
         requester_line_user_id = require_verified_line_user_id(requester_line_user_id)
     except LineAuthError:
-        flash("LINE login verification failed. Please reopen this page from LINE.")
+        flash("LINEでの本人確認ができませんでした。LINEから画面を開き直してください。")
         return _return_to_listing()
 
     notification_setup_redirect = (
@@ -1283,7 +1283,7 @@ def interest():
             "投稿者" if post_type == POST_TYPE_REQUEST else "登録者"
         )
         flash(
-            f"問い合わせはマッチング履歴に保存しましたが、{notification_target_label}へのLINE通知に失敗しました。"
+            f"問い合わせはマイページの問い合わせ履歴に保存しましたが、{notification_target_label}へのLINE通知に失敗しました。"
             "マイページで履歴を確認し、必要に応じて運営者へ連絡してください。"
         )
     return _return_to_listing()
@@ -1296,7 +1296,7 @@ def visit_interest():
     try:
         requester_line_user_id = require_verified_line_user_id(requester_line_user_id)
     except LineAuthError:
-        flash("LINE login verification failed. Please reopen this page from LINE.")
+        flash("LINEでの本人確認ができませんでした。LINEから画面を開き直してください。")
         return _return_to_listing()
 
     notification_setup_redirect = (
@@ -1345,7 +1345,7 @@ def visit_interest():
         flash("見学希望を送信しました。")
     else:
         flash(
-            "見学希望はマッチング履歴に保存しましたが、登録者へのLINE通知に失敗しました。"
+            "見学希望はマイページの問い合わせ履歴に保存しましたが、登録者へのLINE通知に失敗しました。"
             "マイページで履歴を確認し、必要に応じて運営者へ連絡してください。"
         )
     return _return_to_listing()

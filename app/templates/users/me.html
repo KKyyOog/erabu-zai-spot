@@ -2,7 +2,7 @@
 
 {% block content %}
 <section id="user-page-skeleton" class="skeleton-screen user-page-skeleton" role="status" aria-live="polite">
-  <span class="visually-hidden">ユーザー情報を読み込んでいます</span>
+  <p class="loading-message">マイページを準備しています。少しお待ちください。</p>
   <div class="skeleton-line skeleton-line--medium" aria-hidden="true"></div>
   <div class="skeleton-card" aria-hidden="true">
     <div class="skeleton-line skeleton-line--title"></div>
@@ -32,6 +32,8 @@
 </section>
 
 <div id="user-page-live" class="user-page-live" hidden aria-busy="true">
+<h2>マイページ</h2>
+<p class="page-intro">確認したい項目を選んでください。</p>
 <nav class="page-tabs" aria-label="マイページの表示切り替え">
   <button type="button" class="page-tab" data-tab-target="matches-panel">問い合わせ<span id="pending-match-count"></span></button>
   <button type="button" class="page-tab" data-tab-target="materials-panel">自分の投稿</button>
@@ -76,44 +78,44 @@
       <section class="profile-panel profile-panel--primary">
         <div class="panel-heading">
           <span class="entry-badge">基本情報</span>
-          <h3>名前・区分・拠点情報</h3>
+          <h3>名前・住所・運搬方法</h3>
         </div>
+        <p class="hint">「必須」の3項目を入力してください。</p>
 
-        <label>名前 *</label>
+        <label>名前 <span class="required-label">必須</span></label>
         <input type="text" name="display_name" id="display_name" required placeholder="例：山田太郎">
 
-        <label>事業者名</label>
-        <input type="text" name="business_name" id="business_name" placeholder="例：○○建設（個人利用の場合は空欄）">
-
-        <label>ユーザー区分</label>
-        <select name="user_category" id="user_category">
-          <option value="">選択してください</option>
-          <option value="島内事業者">島内事業者</option>
-          <option value="島民">島民</option>
-          <option value="設計・施工関係者">設計・施工関係者</option>
-          <option value="その他">その他</option>
-        </select>
-
-        <label>主なエリア</label>
-        <select name="area" id="area">
-          <option value="">選択してください</option>
-          <option value="和泊町">和泊町</option>
-          <option value="知名町">知名町</option>
-          <option value="その他">その他</option>
-        </select>
-
-        <label>拠点住所 *</label>
+        <label>普段の活動場所・住所 <span class="required-label">必須</span></label>
         <input type="text" name="address" id="address" required placeholder="例：知名町、和泊町、現場名など">
 
-        <label>運搬情報 *</label>
-        <textarea name="transport_info" id="transport_info" rows="4" required placeholder="軽トラで搬送可能、4トンダンプで搬送可能など"></textarea>
+        <label>材を運ぶ方法 <span class="required-label">必須</span></label>
+        <textarea name="transport_info" id="transport_info" rows="3" required placeholder="例：軽トラックで運べます／車がないので相談したいです"></textarea>
+        <details class="optional-fields">
+          <summary>事業者名・利用区分・エリア（任意）</summary>
+          <label>事業者名</label>
+          <input type="text" name="business_name" id="business_name" placeholder="例：○○建設（個人利用の場合は空欄）">
+
+          <label>ユーザー区分</label>
+          <select name="user_category" id="user_category">
+            <option value="">選択してください</option>
+            <option value="島内事業者">島内事業者</option>
+            <option value="島民">島民</option>
+            <option value="設計・施工関係者">設計・施工関係者</option>
+            <option value="その他">その他</option>
+          </select>
+
+          <label>主なエリア</label>
+          <select name="area" id="area">
+            <option value="">選択してください</option>
+            <option value="和泊町">和泊町</option>
+            <option value="知名町">知名町</option>
+            <option value="その他">その他</option>
+          </select>
+        </details>
       </section>
 
-      <section class="profile-panel">
-        <div class="panel-heading">
-          <span class="entry-badge">連絡先共有カード</span>
-          <h3>相手に送るあなたの連絡先</h3>
-        </div>
+      <details class="profile-panel">
+        <summary>相手に送る連絡先（あとで入力できます）</summary>
         <p class="hint">ここで保存しただけでは送られません。問い合わせごとに、送る相手と内容を確認できます。</p>
 
         <label>共有用の表示名</label>
@@ -144,8 +146,8 @@
         </select>
 
         <label>ひとこと</label>
-        <textarea name="contact_message" id="contact_message" rows="3" placeholder="例：まずはLINEで「マッチングの件」と送ってください。"></textarea>
-      </section>
+        <textarea name="contact_message" id="contact_message" rows="3" placeholder="例：まずはLINEで「材の問い合わせの件」と送ってください。"></textarea>
+      </details>
     </div>
 
     <button type="submit" id="submit-button">登録する</button>
@@ -155,7 +157,7 @@
 <section class="card tab-panel" id="materials-panel" hidden>
   <div class="section-heading">
     <div>
-      <h3>自分の登録履歴</h3>
+      <h3>自分の投稿</h3>
       <p class="hint">登録した材と解体物件をここから編集・削除できます。</p>
       <a class="button-link compact" href="{{ url_for('materials.register') }}">新しく投稿する</a>
     </div>
@@ -569,7 +571,7 @@
     const typeSpecificFields = isRequest
       ? `
           <div class="edit-grid__full">
-            <label>欲しい内容 *</label>
+            <label>欲しい内容 <span class="required-label">必須</span></label>
             <textarea name="description" rows="4" required>${escapeHtml(material.description || '')}</textarea>
           </div>
           <div>
@@ -591,11 +593,11 @@
         `
       : `
           <div>
-            <label>量の目安 *</label>
+            <label>量の目安 <span class="required-label">必須</span></label>
             <select name="quantity_level" required>${renderOptions(quantityLevelOptions, material.quantity_level || '', '選択してください')}</select>
           </div>
           <div>
-            <label>受け渡し場所（詳しい住所は非公開） *</label>
+            <label>受け渡し場所（詳しい住所は非公開） <span class="required-label">必須</span></label>
             <input type="text" name="location" required maxlength="300" value="${escapeHtml(material.location || '')}">
             <p class="hint">公開する場所は町名までです。詳しい住所は相手と個別に共有してください。</p>
           </div>
@@ -632,7 +634,7 @@
 
         <div class="edit-grid">
           <div>
-            <label>材の種類 *</label>
+            <label>材の種類 <span class="required-label">必須</span></label>
             <select name="material_type" required>
               ${renderOptions(materialTypeOptions, material.material_type || '', '選択してください')}
             </select>
@@ -986,7 +988,7 @@
 
   function showRegistrationPrompt() {
     selectPageTab('profile');
-    document.getElementById('profile-note').textContent = '初めての方は、名前・拠点・運搬情報を登録してください。連絡先カードは後から入力できます。';
+    document.getElementById('profile-note').textContent = 'まずは名前・活動場所・材を運ぶ方法を入力し、「登録する」を押してください。';
   }
 
   async function loadMeActivity(userId, forceRefresh) {

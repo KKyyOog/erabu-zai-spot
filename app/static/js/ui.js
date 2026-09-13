@@ -25,11 +25,27 @@
   function enhanceFields(root) {
     root.querySelectorAll('label:not([for])').forEach(label => {
       if (label.querySelector('input, select, textarea')) return;
-      const field = label.nextElementSibling;
+      let field = label.nextElementSibling;
+      while (field?.matches('.hint')) field = field.nextElementSibling;
       if (!field?.matches('input:not([type=hidden]), select, textarea')) return;
       if (!field.id) field.id = `ui-field-${++fieldNumber}`;
       label.htmlFor = field.id;
     });
+  }
+
+  function validationGuidance(field) {
+    const validity = field.validity;
+    if (validity.customError) return field.validationMessage;
+    if (validity.valueMissing) {
+      if (field.type === 'file') return '写真を1枚以上選んでください。';
+      if (field.tagName === 'SELECT' || ['radio', 'checkbox'].includes(field.type)) return '項目を選んでください。';
+      return 'この項目を入力してください。';
+    }
+    if (validity.typeMismatch && field.type === 'email') return 'メールアドレスを確認してください。例：name@example.com';
+    if (validity.rangeUnderflow) return `${field.min}以上で入力してください。`;
+    if (validity.rangeOverflow) return `${field.max}以下で入力してください。`;
+    if (validity.tooLong) return `${field.maxLength}文字以内で入力してください。`;
+    return '入力内容を確認してください。';
   }
 
   function clearError(field) {
@@ -41,18 +57,32 @@
     delete field.dataset.errorId;
   }
 
+  let focusingError = false;
   document.addEventListener('invalid', event => {
     const field = event.target;
+    event.preventDefault();
     clearError(field);
-    field.closest('details')?.setAttribute('open', '');
+    let disclosure = field.closest('details');
+    while (disclosure) {
+      disclosure.open = true;
+      disclosure = disclosure.parentElement?.closest('details');
+    }
     const error = document.createElement('p');
     error.id = `field-error-${++fieldNumber}`;
     error.className = 'field-error';
-    error.textContent = field.validationMessage || '入力内容を確認してください。';
+    error.textContent = validationGuidance(field);
     field.insertAdjacentElement('afterend', error);
     field.dataset.errorId = error.id;
     field.setAttribute('aria-invalid', 'true');
     field.setAttribute('aria-describedby', `${field.getAttribute('aria-describedby') || ''} ${error.id}`.trim());
+    if (!focusingError) {
+      focusingError = true;
+      queueMicrotask(() => {
+        field.focus();
+        field.scrollIntoView({block: 'center'});
+        focusingError = false;
+      });
+    }
   }, true);
   document.addEventListener('input', event => clearError(event.target));
   document.addEventListener('change', event => clearError(event.target));
@@ -66,7 +96,7 @@
     note.className = 'draft-note';
     note.setAttribute('aria-live', 'polite');
     const text = document.createElement('p');
-    text.textContent = '入力内容はこのタブに一時保存されます（24時間）。写真は再選択が必要です。';
+    text.textContent = '入力途中の内容を、この画面に一時保存します。まだ公開されません。';
     note.append(text);
     form.prepend(note);
 
@@ -75,7 +105,7 @@
       try {
         const values = draftFields(form).map(field => ({name: fieldKey(field), value: field.value, checked: field.checked}));
         sessionStorage.setItem(key, JSON.stringify({savedAt: Date.now(), values}));
-        text.textContent = '下書きを一時保存しました。写真は画面を開き直すと再選択が必要です。';
+        text.textContent = '入力途中の内容を保存しました（未公開）。画面を閉じると写真は選び直しになります。';
       } catch (_) {
         text.textContent = 'このブラウザーでは下書きを保存できません。入力中は画面を閉じないでください。';
       }
@@ -86,7 +116,7 @@
         text.textContent = '前回の下書きがあります。復元した後、写真を選び直してください。';
         const restore = document.createElement('button');
         restore.type = 'button';
-        restore.textContent = '下書きを復元';
+        restore.textContent = '前回の続きを入力する';
         restore.className = 'secondary-button';
         const discard = document.createElement('button');
         discard.type = 'button';

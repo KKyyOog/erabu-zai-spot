@@ -10,7 +10,7 @@
   </div>
 
   <div id="user-registration-check-status" class="registration-skeleton skeleton-screen" role="status">
-    <span class="visually-hidden">ユーザー情報を確認しています</span>
+    <p class="loading-message">登録情報を確認しています。少しお待ちください。</p>
     <div class="skeleton-card" aria-hidden="true">
       <div class="skeleton-line skeleton-line--medium"></div>
       <div class="skeleton-field"></div>
@@ -27,17 +27,17 @@
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="user_id" id="user_id">
 
-    <label>登録者 *</label>
+    <label>登録者 <span class="required-label">必須</span></label>
     <select name="registrant_type" required>
       {% for option in ('家主', '解体業者', '管理者・代理人', 'その他') %}
         <option value="{{ option }}" {{ 'selected' if property_record.registrant_type == option else '' }}>{{ option }}</option>
       {% endfor %}
     </select>
 
-    <label>物件名 *</label>
+    <label>物件名 <span class="required-label">必須</span></label>
     <input type="text" name="property_name" value="{{ property_record.property_name }}" required>
 
-    <label>所在地（詳しい住所は非公開） *</label>
+    <label>所在地（詳しい住所は非公開） <span class="required-label">必須</span></label>
     <p class="hint">公開する場所は町名までです。詳しい住所は見学相手と個別に共有してください。</p>
     <input type="text" name="location" value="{{ property_record.location }}" required>
 
