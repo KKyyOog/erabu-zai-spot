@@ -56,5 +56,16 @@ def drain_notifications(limit=100):
         ).order_by(notification_outbox.c.next_attempt_at).limit(limit)).scalars().all()
     delivered = sum(deliver_notification(notification_id) for notification_id in ids)
     with _engine().begin() as conn:
-        record_operation(conn, "notification_job", detail=f"処理 {len(ids)}件 / 受付 {delivered}件")
+        # One durable heartbeat, including empty runs; concurrent runners upsert
+        # the same key instead of accumulating an event on every invocation.
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+        from app.services.db_service import operations
+        insert = pg_insert if conn.dialect.name == "postgresql" else sqlite_insert
+        stmt = insert(operations).values(event_id="notification_job_latest",
+            kind="notification_job", created_at=int(time.time()),
+            detail=f"処理 {len(ids)}件 / 受付 {delivered}件")
+        conn.execute(stmt.on_conflict_do_update(index_elements=[operations.c.event_id],
+            set_={"created_at": stmt.excluded.created_at, "detail": stmt.excluded.detail},
+            where=operations.c.created_at <= stmt.excluded.created_at))
     return delivered

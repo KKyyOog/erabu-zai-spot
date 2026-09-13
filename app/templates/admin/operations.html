@@ -4,7 +4,7 @@
   <h2>運用状況</h2>
   <p>通知：送信待ち {{ counts.get('pending', 0) }}件 ／ 失敗 {{ counts.get('failed', 0) }}件 ／ API受付済み {{ counts.get('sent', 0) }}件</p>
   <p>最も古い送信待ち：{{ oldest_minutes }}分前 ／ 再送ジョブの最終完了：{{ heartbeat }}</p>
-  {% if job_stale %}<p class="field-error" role="alert">再送ジョブの実行を確認してください。5分以上、正常完了が記録されていません。</p>{% endif %}
+  {% if job_stale %}<p class="field-error" role="alert">再送ジョブの実行を確認してください。{{ job_stale_minutes }}分以上、正常完了が記録されていません。</p>{% endif %}
   {% if stale_uploads %}<p class="field-error">画像回収待ち：{{ stale_uploads }}件。画像回収ジョブの実行を確認してください。</p>{% endif %}
   <p class="hint">API受付済みは、利用者の受信・既読を保証しません。失敗通知は理由を確認し、当事者へ対応を案内してください。</p>
   {% for notification in notifications %}<details><summary>{{ notification.status }} · {{ notification.notification_id }}（{{ notification.attempts }}回）</summary><p>{{ notification.reason }}</p></details>{% endfor %}

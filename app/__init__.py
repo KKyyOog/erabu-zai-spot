@@ -77,7 +77,7 @@ def create_app():
 
     @app.cli.command("send-notifications")
     def send_notifications():
-        """Deliver up to 100 due notifications; schedule every minute."""
+        """Deliver up to 100 due notifications; schedule every five minutes."""
         from app.services.notification_service import drain_notifications
         print(f"Delivered: {drain_notifications()}")
 
@@ -85,7 +85,15 @@ def create_app():
     def clean_upload_jobs_command():
         """Reconcile tracked uploads older than 24 hours; schedule daily."""
         from app.routes.materials import clean_upload_jobs
+        from app.services.maintenance_service import clean_operational_data
         print(f"Reconciled: {clean_upload_jobs()}")
+        print(f"Operational cleanup: {clean_operational_data()}")
+
+    @app.cli.command("clean-operational-data")
+    def clean_operational_data_command():
+        """Remove a bounded batch of expired operational data."""
+        from app.services.maintenance_service import clean_operational_data
+        print(clean_operational_data())
 
     @app.errorhandler(413)
     def upload_too_large(error):

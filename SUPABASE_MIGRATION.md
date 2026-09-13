@@ -49,6 +49,7 @@ protection.
 Keep the existing Google Sheets environment variables available, then run:
 
 ```bash
+pip install -r requirements-migration.txt
 python scripts/migrate_sheets_to_db.py
 ```
 

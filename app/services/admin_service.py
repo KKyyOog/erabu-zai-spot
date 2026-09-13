@@ -1,5 +1,6 @@
 """Bounded database queries for operational visibility and moderation."""
 import time
+from flask import current_app
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, func, or_, update
 from app.services import db_service as db
@@ -65,7 +66,9 @@ def dashboard(kind, query, page, status=""):
     return dict(entries=entries, has_next=len(rows) > 25, counts=counts,
         oldest_minutes=(now - oldest) // 60 if oldest else 0,
         heartbeat=format_time(heartbeat) if heartbeat else "未実行",
-        job_stale=not heartbeat or now - heartbeat > 300, notifications=notifications,
+        job_stale=not heartbeat or now - heartbeat >= max(60, current_app.config["NOTIFICATION_JOB_STALE_SECONDS"]),
+        job_stale_minutes=(max(60, current_app.config["NOTIFICATION_JOB_STALE_SECONDS"]) + 59) // 60,
+        notifications=notifications,
         events=events, reports=reports, stale_uploads=uploads)
 
 

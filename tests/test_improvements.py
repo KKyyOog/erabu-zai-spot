@@ -132,7 +132,7 @@ class ImprovementsTestCase(unittest.TestCase):
         self.authenticate('admin')
         response = self.client.get('/admin/')
         self.assertIn('個人情報が公開されている', response.get_data(as_text=True))
-        self.assertNotIn('5分以上', response.get_data(as_text=True))
+        self.assertNotIn('再送ジョブの実行を確認してください', response.get_data(as_text=True))
 
     def test_operational_migration_is_repeatable_and_retains_existing_data(self):
         engine = create_engine('sqlite://')
