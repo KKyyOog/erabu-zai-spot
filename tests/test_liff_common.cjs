@@ -104,7 +104,7 @@ test('posting form authentication recovers from 503 without redirect or losing i
   let status = 503, retry, initCount = 0;
   const states = [];
   const context = vm.createContext({
-    Date, performance, LIFF_TRACE_ID: 'trace-test', console: {log() {}, warn() {}, error: (...args) => {throw args.at(-1);}},
+    Date, performance, URLSearchParams, LIFF_TRACE_ID: 'trace-test', console: {log() {}, warn() {}, error: (...args) => {throw args.at(-1);}},
     window: {LINE_LOGIN_ENABLED: true, LIFF_ID: 'id', dispatchEvent() {}},
     liff: {init: async () => {initCount++;}, isLoggedIn: () => true,
       getProfile: async () => ({userId: 'user'}), getIDToken: () => 'fresh',
@@ -131,4 +131,38 @@ test('posting form authentication recovers from 503 without redirect or losing i
   assert.equal(states.at(-1), true);
   assert.equal(context.window.LINE_SESSION_AUTHENTICATED, true);
   assert.equal(initCount, 1);
+});
+
+for (const callback of [false, true]) {
+  test(`posting session shortcut respects pending LIFF callback: ${callback}`, async () => {
+    const source = fs.readFileSync(path.join(__dirname, '../app/static/js/liff.js'), 'utf8');
+    const start = source.indexOf('async function initializeLiff()');
+    const calls = [];
+    const context = vm.createContext({
+      URLSearchParams, performance, console: {log() {}},
+      window: {LINE_LOGIN_ENABLED: true, LIFF_ID: 'id',
+        location: {search: callback ? '?liff.state=%2Fmaterials%2Fregister%2Fmaterial' : ''},
+        liff: {init: () => { calls.push('SDK redirect'); return new Promise(() => {}); }}},
+      getLiffDebugContext: () => ({}), logToServer() {},
+      installLineAuthSubmitGuard() {}, installImagePreviews() {}, setLineAuthControls() {},
+      restoreLineSession: async () => { calls.push('saved session'); return true; },
+    });
+    vm.runInContext(common, context);
+    context.window.LineAuth.clearRetry = () => {};
+    vm.runInContext(source.slice(start, source.indexOf('\n}', start) + 2), context);
+    context.initializeLiff();
+    await settle();
+    assert.deepEqual(calls, [callback ? 'SDK redirect' : 'saved session']);
+  });
+}
+
+test('callback detection handles token fragments without mistaking ordinary tabs for callbacks', () => {
+  const context = vm.createContext({URLSearchParams, window: {location: {}}});
+  vm.runInContext(common, context);
+  for (const hash of ['#access_token=test&token_type=Bearer', '#id_token=test']) {
+    context.window.location.hash = hash;
+    assert.equal(context.window.LineAuth.needsCallbackInitialization(), true);
+  }
+  context.window.location = {search: '?tab=materials&match=123', hash: '#profile'};
+  assert.equal(context.window.LineAuth.needsCallbackInitialization(), false);
 });

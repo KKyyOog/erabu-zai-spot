@@ -18,6 +18,14 @@
     return `${window.location.origin}${window.location.pathname}${safe.size ? `?${safe}` : ''}`;
   };
   window.LineAuth = {
+    needsCallbackInitialization() {
+      const query = new URLSearchParams(window.location?.search || '');
+      const hash = new URLSearchParams((window.location?.hash || '').replace(/^#/, ''));
+      // The SDK must consume callback parameters and perform the secondary
+      // redirect even when the application already has a valid session.
+      return ['liff.state', 'liffClientId', 'liffRedirectUri', 'code', 'error'].some(key => query.has(key))
+        || hash.has('access_token') || hash.has('id_token');
+    },
     recentlyAttempted,
     rememberAttempt: () => storage('setItem', String(Date.now())),
     clearAttempt: () => storage('removeItem'),

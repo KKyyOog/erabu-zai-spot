@@ -5,6 +5,42 @@ const vm = require('node:vm');
 const path = require('node:path');
 const read = name => fs.readFileSync(path.join(__dirname, '../app/static/js', name), 'utf8');
 
+for (const scenario of [
+  {name: 'registered', status: 200, body: {exists: true}, ready: true, state: 'registered'},
+  {name: 'unregistered', status: 200, body: {exists: false}, state: 'unregistered', redirect: true},
+  {name: 'missing registration result', status: 200, body: {}, state: 'error'},
+  {name: 'invalid registration result', status: 200, body: {exists: 'false'}, state: 'error'},
+  {name: 'authentication rejected', status: 401, body: {exists: false}, restart: true},
+  {name: 'server error', status: 500, body: {exists: false}, state: 'error'},
+  {name: 'temporary outage', status: 503, retry: true},
+  {name: 'network error', networkError: true, state: 'error'},
+]) {
+  test(`posting redirects to My Page only for confirmed missing registration: ${scenario.name}`, async () => {
+    const source = read('liff.js');
+    const start = source.indexOf('async function confirmUserRegistration(');
+    const redirects = [], states = [], actions = [];
+    const context = vm.createContext({
+      console: {warn() {}}, LIFF_TRACE_ID: 'test',
+      window: {REQUIRE_USER_REGISTRATION: true, USER_REGISTRATION_URL: '/users/me?tab=profile',
+        location: {replace: url => redirects.push(url)},
+        LineAuth: {showRetry: () => actions.push('retry')}},
+      document: {querySelector: () => null},
+      setUserRegistrationState: state => states.push(state), setLineAuthControls() {},
+      notifyUserRegistrationConfirmed() {}, logToServer() {},
+      restartLineAuthentication: () => actions.push('restart'),
+      fetch: async () => {
+        if (scenario.networkError) throw new Error('offline');
+        return {ok: scenario.status === 200, status: scenario.status, json: async () => scenario.body};
+      },
+    });
+    vm.runInContext(source.slice(start, source.indexOf('\n}', start) + 2), context);
+    assert.equal(await context.confirmUserRegistration('owner'), scenario.ready === true);
+    assert.deepEqual(redirects, scenario.redirect ? ['/users/me?tab=profile'] : []);
+    assert.deepEqual(states, scenario.state ? [scenario.state] : []);
+    assert.deepEqual(actions, scenario.restart ? ['restart'] : scenario.retry ? ['retry'] : []);
+  });
+}
+
 test('registration check delivers location in the same authenticated response', async () => {
   const text = read('liff.js');
   const start = text.indexOf('async function confirmUserRegistration(');

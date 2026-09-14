@@ -180,10 +180,13 @@ async function confirmUserRegistration(userId, idToken = "") {
       });
       return true;
     }
-    if (response.ok) {
+    if (response.ok && body.exists === false) {
       window.clearCachedUserRegistration?.(userId);
       setUserRegistrationState("unregistered");
       setLineAuthControls(false, "マイページ登録が必要です");
+      if (window.USER_REGISTRATION_URL) {
+        window.location.replace(window.USER_REGISTRATION_URL);
+      }
       return false;
     }
     if (response.status === 401) {
@@ -450,7 +453,7 @@ async function initializeLiff() {
   }
 
   setLineAuthControls(false, "LINE確認中...");
-  if (await restoreLineSession()) {
+  if (!window.LineAuth.needsCallbackInitialization() && await restoreLineSession()) {
     return;
   }
 

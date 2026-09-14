@@ -100,7 +100,8 @@
   window.FILL_DISPLAY_NAME_FROM_LIFF = true;
   window.REQUIRE_LIFF_LOGIN = true;
   window.REQUIRE_USER_REGISTRATION = true;
+  window.USER_REGISTRATION_URL = {{ url_for('users.me', tab='profile') | tojson }};
   window.LIFF_ID = {{ LIFF_ID|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/liff.js', v='20260911-registration') }}"></script>
+<script src="{{ url_for('static', filename='js/liff.js', v='20260914-callback') }}"></script>
 {% endblock %}

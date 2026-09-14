@@ -56,6 +56,25 @@ function setup({ token = 'expired', inClient = false, loggedIn = true, status = 
   return { context, calls, storage };
 }
 
+for (const search of [
+  '?liff.state=%2Fmaterials%2Fregister%2Fmaterial&state=test&liffClientId=test&liffRedirectUri=test&code=test',
+  '?liff.state=%2Fmaterials%2Fregister%2Frequest',
+  '?code=test&state=test',
+]) {
+  test(`callback initializes SDK before a saved session can show My Page: ${search}`, async () => {
+    const {context, calls} = setup({token: 'fresh'});
+    context.window.location.pathname = '/';
+    context.window.location.search = search;
+    context.restoreCachedLineIdentity = async () => { calls.push('cached profile'); return true; };
+    // Primary redirect initialization remains pending while the SDK navigates.
+    context.initializeLiffClient = () => { calls.push('SDK redirect'); return new Promise(() => {}); };
+    context.connectLineIdentity(true);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(calls, ['SDK redirect']);
+    assert.equal(context.window.location.search, search);
+  });
+}
+
 for (const token of ['expired', '']) {
   test(`unavailable token (${token}) restarts login without sending stale credentials`, async () => {
     const { context, calls } = setup({ token });
