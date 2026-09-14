@@ -41,6 +41,9 @@ class WorkflowTestCase(unittest.TestCase):
         self.app.config.update(TESTING=True)
         self.client = self.app.test_client()
         self.csrf_token = "test-csrf-token"
+        line_sender = patch("app.services.notification_service.send_line_message", return_value=True)
+        line_sender.start()
+        self.addCleanup(line_sender.stop)
 
     def tearDown(self):
         user_cache_service.clear_user_profile_cache()
@@ -1178,6 +1181,7 @@ class WorkflowTestCase(unittest.TestCase):
                 "/materials/submit",
                 {
                     "line_user_id": "offer-owner",
+                    "title": "  杉の角材 10本  ",
                     "material_type": "木材",
                     "quantity_level": "少量",
                     "location": "和泊町",
@@ -1196,7 +1200,7 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertEqual(records[0]["status"], "active")
         self.assertEqual(records[0]["effective_status"], "active")
         self.assertEqual(records[0]["quantity_level"], "少量")
-        self.assertEqual(records[0]["title"], "木材があります")
+        self.assertEqual(records[0]["title"], "杉の角材 10本")
         self.assertEqual(records[0]["image_urls"], uploaded_urls)
         self.assertTrue(records[0]["expires_at"])
 
@@ -1212,6 +1216,7 @@ class WorkflowTestCase(unittest.TestCase):
                 "/materials/submit",
                 {
                     "line_user_id": "profile-location-owner",
+                    "title": "杉の板材",
                     "material_type": "木材",
                     "quantity_level": "少量",
                     "location_source": "profile",
@@ -1261,6 +1266,7 @@ class WorkflowTestCase(unittest.TestCase):
             "/materials/submit",
             {
                 "line_user_id": "offer-without-photo",
+                "title": "杉の角材",
                 "material_type": "木材",
                 "quantity_level": "少量",
                 "location": "和泊町",
@@ -1318,6 +1324,7 @@ class WorkflowTestCase(unittest.TestCase):
             "/materials/requests/submit",
             {
                 "line_user_id": "request-owner",
+                "title": "修繕用の木製建具を探しています",
                 "material_type": "建具",
                 "description": "古い木製建具を探しています",
                 "quantity": "2枚",
@@ -1332,9 +1339,28 @@ class WorkflowTestCase(unittest.TestCase):
             records = db_service.get_materials_by_line_user_id("request-owner")
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["post_type"], "request")
-        self.assertEqual(records[0]["title"], "建具を探しています")
+        self.assertEqual(records[0]["title"], "修繕用の木製建具を探しています")
         self.assertEqual(records[0]["image_urls"], [])
         self.assertEqual(records[0]["usage_purpose"], "修繕")
+
+    def test_material_registration_requires_nonblank_title_before_upload(self):
+        self.add_user("title-owner", "登録者")
+        self.authenticate("title-owner")
+        for path in ("/materials/submit", "/materials/requests/submit"):
+            for title in (None, "", "　 \t", "あ" * 201):
+                with self.subTest(path=path, title=title), patch("app.routes.materials._upload_images") as upload:
+                    data = {
+                        "line_user_id": "title-owner", "material_type": "木材",
+                        "quantity_level": "少量", "location": "和泊町", "description": "棚用の板",
+                        "image_files": [(BytesIO(b"image"), "image.jpg")],
+                    }
+                    if title is not None:
+                        data["title"] = title
+                    response = self.post_form(path, data)
+                    self.assertEqual(response.status_code, 302)
+                    upload.assert_not_called()
+        with self.app.app_context():
+            self.assertEqual(db_service.get_materials_by_line_user_id("title-owner"), [])
 
     def test_offer_and_request_list_filters(self):
         with self.app.app_context():

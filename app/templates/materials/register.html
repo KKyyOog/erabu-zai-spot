@@ -4,7 +4,7 @@
 <section class="card post-form-card offer-form-card">
   <p class="entry-badge offer">材があります</p>
   <h2>余っている材を知らせる</h2>
-  <p class="hint">写真・材種・量・受け渡し場所だけで投稿できます。</p>
+  <p class="hint">タイトル・写真・材種・量・受け渡し場所を入力して投稿できます。</p>
 
   {% include "materials/_post_steps.html" %}
 
@@ -25,6 +25,10 @@
   <form method="post" action="{{ url_for('materials.submit') }}" enctype="multipart/form-data" data-draft-kind="offer" data-requires-user-registration hidden>
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="display_name" id="display_name">
+
+    <label for="post-title">タイトル（品名・特徴） <span class="required-label">必須</span></label>
+    <input id="post-title" type="text" name="title" required maxlength="200" placeholder="例：杉の角材 10本、取り外した木製ドア" aria-describedby="post-title-hint">
+    <p id="post-title-hint" class="hint">何の材か分かる名前を入力してください。一覧にこのタイトルが表示されます。</p>
 
     <label>写真を撮る・保存した写真を選ぶ <span class="required-label">必須</span></label>
     <input type="file" name="image_files" accept="image/*" multiple required data-max-files="6">

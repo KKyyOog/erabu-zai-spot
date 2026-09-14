@@ -548,10 +548,7 @@
     const imageUrls = getMaterialImageUrls(material);
     const card = document.getElementById(`material-card-${materialId}`);
     const isRequest = material.post_type === 'request';
-    const generatedTitleSuffix = isRequest ? 'を探しています' : 'があります';
-    const customTitle = String(material.title || '').endsWith(generatedTitleSuffix)
-      ? ''
-      : (material.title || '');
+    const customTitle = material.title || '';
     const existingImageControls = imageUrls.length
       ? `
         <fieldset class="form-fieldset edit-grid__full">
@@ -640,8 +637,8 @@
             </select>
           </div>
           <div>
-            <label>投稿タイトル（任意）</label>
-            <input type="text" name="title" value="${escapeHtml(customTitle)}" placeholder="空欄の場合は材種から自動作成">
+            <label>タイトル（品名・特徴） <span class="required-label">必須</span></label>
+            <input type="text" name="title" required maxlength="200" value="${escapeHtml(customTitle)}" placeholder="例：杉の角材 10本">
           </div>
           ${typeSpecificFields}
           ${existingImageControls}

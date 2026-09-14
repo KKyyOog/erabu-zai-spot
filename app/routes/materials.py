@@ -671,6 +671,10 @@ def submit():
         return redirect(url_for("materials.register_material"))
     final_image_urls = input_image_urls
 
+    form["title"] = (form.get("title") or "").strip()
+    if not form["title"]:
+        flash("タイトル（品名・特徴）を入力してください。")
+        return redirect(url_for("materials.register_material"))
     required_fields = ["material_type", "quantity_level", "location"]
     missing = [field for field in required_fields if not form.get(field)]
 
@@ -698,7 +702,6 @@ def submit():
     form["post_type"] = POST_TYPE_OFFER
     form.pop("status", None)
     form.pop("expires_at", None)
-    form["title"] = (form.get("title") or f"{form.get('material_type', '材')}があります").strip()
     form["image_url"] = final_image_urls[0] if final_image_urls else ""
     form["image_urls"] = json.dumps(final_image_urls, ensure_ascii=False)
     current_app.logger.info(
@@ -742,6 +745,10 @@ def submit_request():
         or profile.get("display_name", "")
     )
 
+    form["title"] = (form.get("title") or "").strip()
+    if not form["title"]:
+        flash("タイトル（品名・特徴）を入力してください。")
+        return redirect(url_for("materials.register_request"))
     required_fields = ["material_type", "description"]
     if any(not (form.get(field) or "").strip() for field in required_fields):
         flash("必須項目が入力されていません。")
@@ -774,7 +781,6 @@ def submit_request():
     form["post_type"] = POST_TYPE_REQUEST
     form.pop("status", None)
     form.pop("expires_at", None)
-    form["title"] = (form.get("title") or f"{form.get('material_type', '材')}を探しています").strip()
     form["image_url"] = final_image_urls[0] if final_image_urls else ""
     form["image_urls"] = json.dumps(final_image_urls, ensure_ascii=False)
     append_material(form)

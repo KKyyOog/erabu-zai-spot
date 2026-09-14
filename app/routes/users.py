@@ -19,6 +19,7 @@ from app.services.db_service import (
 )
 from app.services.line_service import send_line_message
 from app.services.notification_service import deliver_notification
+from app.services.onboarding_service import send_welcome_once
 from app.services.line_auth_service import LineAuthError, require_verified_line_user_id
 from app.services.user_cache_service import (
     get_user_profile_snapshot,
@@ -148,10 +149,13 @@ def submit():
     form["user_id"] = line_user_id
     form["userid"] = line_user_id
 
+    exists = get_user_by_line_user_id(line_user_id) is not None
     line_user_id = append_user(form)
     _save_contact_card_if_present(line_user_id, form)
     _clear_me_data_cache(line_user_id)
     refresh_user_profile_cache(line_user_id)
+    if line_user_id and not exists:
+        send_welcome_once(line_user_id)
     flash("ユーザー情報を登録しました。")
     return redirect(url_for("users.me"))
 
@@ -215,6 +219,8 @@ def update_profile(line_user_id):
         _save_contact_card_if_present(resolved_user_id, form)
         _clear_me_data_cache(resolved_user_id)
         refresh_user_profile_cache(resolved_user_id)
+        if not exists:
+            send_welcome_once(resolved_user_id)
     flash("ユーザー情報を更新しました。" if exists else "ユーザー情報を登録しました。")
 
     if result:
@@ -345,6 +351,8 @@ def me_save():
         _save_contact_card_if_present(resolved_user_id, form)
         _clear_me_data_cache(resolved_user_id)
         refresh_user_profile_cache(resolved_user_id)
+        if not exists:
+            send_welcome_once(resolved_user_id)
 
     if result:
         flash("ユーザー情報を更新しました。" if exists else "ユーザー情報を登録しました。")

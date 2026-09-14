@@ -26,6 +26,10 @@
     <input type="hidden" name="line_user_id" id="line_user_id">
     <input type="hidden" name="display_name" id="display_name">
 
+    <label for="post-title">タイトル（品名・特徴） <span class="required-label">必須</span></label>
+    <input id="post-title" type="text" name="title" required maxlength="200" placeholder="例：棚づくり用の杉板を探しています" aria-describedby="post-title-hint">
+    <p id="post-title-hint" class="hint">探している材が分かる名前を入力してください。一覧にこのタイトルが表示されます。</p>
+
     <label>探している材の種類 <span class="required-label">必須</span></label>
     <select name="material_type" required>
       <option value="">選択してください</option>
